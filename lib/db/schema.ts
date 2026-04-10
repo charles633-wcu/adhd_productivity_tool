@@ -1,3 +1,6 @@
+// Database schema — Drizzle ORM table definitions and inferred TypeScript types.
+// Single source of truth for all DB column shapes; consumed by lib/db/client.ts,
+// lib/db/triggers.ts, and all API route and service functions.
 import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
 import { createId } from '@paralleldrive/cuid2'
 import { sql } from 'drizzle-orm'
@@ -30,6 +33,8 @@ export const categories = sqliteTable('categories', {
 export type SummaryStatus = 'pending' | 'generated' | 'manual'
 // Trigger lifecycle status enum values
 export type TriggerStatus = 'active' | 'snoozed' | 'archived'
+// Notification channel enum — null means in-app only (MVP default)
+export type NotifyChannel = 'email' | 'sms' | 'push' | null
 
 // Triggers — core entity (each reminder/alarm item)
 export const triggers = sqliteTable('triggers', {
@@ -56,7 +61,7 @@ export const triggers = sqliteTable('triggers', {
   status: text('status').$type<TriggerStatus>().notNull().default('active'),
 
   // Agent hook fields (not active in MVP)
-  notifyChannel: text('notify_channel').$type<'email' | 'sms' | 'push'>(),
+  notifyChannel: text('notify_channel').$type<NonNullable<NotifyChannel>>(),
   // shape: { lastAgentRun?: string (ISO), agentNotes?: string }
   agentMetadata: text('agent_metadata', { mode: 'json' }).$type<{
     lastAgentRun?: string
