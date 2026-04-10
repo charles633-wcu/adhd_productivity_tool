@@ -5,7 +5,8 @@ import { z } from 'zod'
 import { getDb } from '@/lib/db/client'
 import { triggers } from '@/lib/db/schema'
 import { summarizeTrigger } from '@/lib/services/summarizer'
-import { eq } from 'drizzle-orm'
+import { getCurrentUser } from '@/lib/auth'
+import { eq, and } from 'drizzle-orm'
 
 // Request body schema
 const SummarizeSchema = z.object({
@@ -20,6 +21,7 @@ const SummarizeSchema = z.object({
  */
 export async function POST(request: Request) {
   try {
+    const user = await getCurrentUser()
     const body = await request.json()
     const parsed = SummarizeSchema.safeParse(body)
     if (!parsed.success) {
@@ -30,9 +32,9 @@ export async function POST(request: Request) {
     // Call Gemini via the summarizer service (AGENT HOOK 1)
     const summary = await summarizeTrigger(content)
 
-    // Patch the trigger row directly — no round-trip to client needed
+    // Patch the trigger row — ownership check ensures users can only update their own triggers
     const db = getDb()
-    await db.update(triggers).set({ summary, summaryStatus: 'generated' }).where(eq(triggers.id, triggerId))
+    await db.update(triggers).set({ summary, summaryStatus: 'generated' }).where(and(eq(triggers.id, triggerId), eq(triggers.userId, user.id)))
 
     return NextResponse.json({ summary })
   } catch (error) {

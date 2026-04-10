@@ -34,7 +34,10 @@ export async function PATCH(
     const db = getDb()
 
     // Acknowledge is a special action — delegates to acknowledgeTrigger() for clock reset
+    // Ownership check: verify the trigger belongs to the current user before acknowledging
     if (parsed.data.acknowledge) {
+      const [owned] = await db.select().from(triggers).where(and(eq(triggers.id, id), eq(triggers.userId, user.id))).limit(1)
+      if (!owned) return NextResponse.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 })
       const trigger = await acknowledgeTrigger(db, id)
       return NextResponse.json(trigger)
     }
