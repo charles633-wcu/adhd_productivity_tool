@@ -22,9 +22,11 @@ export async function createTrigger(db: DrizzleDb, data: NewTrigger): Promise<Tr
 /**
  * Marks a trigger as acknowledged by the user.
  * Resets last_reviewed_at = now and recalculates next_review_at = now + interval.
+ * Note: two queries by design — Drizzle cannot reference existing column values in .set().
+ * updatedAt is handled automatically by the .$onUpdate() hook defined in schema.ts.
  */
 export async function acknowledgeTrigger(db: DrizzleDb, triggerId: string): Promise<Trigger> {
-  // Fetch current trigger to get review_interval_days
+  // Fetch current trigger to read review_interval_days before updating
   const [trigger] = await db
     .select()
     .from(triggers)

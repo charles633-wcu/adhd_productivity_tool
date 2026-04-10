@@ -1,3 +1,5 @@
+// Trigger CRUD tests — uses an in-memory SQLite DB with real migrations applied.
+// Each test gets a fresh DB, user, and category via beforeEach to ensure isolation.
 import { describe, it, expect, beforeEach } from 'vitest'
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
@@ -53,7 +55,7 @@ describe('createTrigger', () => {
         reviewIntervalDays: 7,
         nextReviewAt: new Date(),
       })
-    ).rejects.toThrow()
+    ).rejects.toThrow('Trigger title must not be empty')
   })
 })
 
