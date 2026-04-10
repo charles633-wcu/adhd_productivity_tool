@@ -1,8 +1,9 @@
 'use client'
 
 // CategoryBubble — clickable tile representing one category on the Home screen.
-// Displays icon, name, and item count. Background color sourced from category.color.
+// Displays icon, name, and active trigger count. Background color sourced from category.color.
 // Renders as <a> when href is provided (server navigation), <button> when onClick is provided.
+
 interface CategoryBubbleBaseProps {
   id: string
   name: string
@@ -27,29 +28,47 @@ export function CategoryBubble({ id, name, icon, color, count, href, onClick }: 
   const bg = color ?? '#6366f1'
   const ariaLabel = `${name}, ${count} ${count !== 1 ? 'items' : 'item'}`
 
-  // Inner content is the same regardless of the root element
+  // Derive a subtle glow from the bubble color
+  const style = {
+    backgroundColor: bg,
+    boxShadow: `0 4px 24px ${bg}35, 0 1px 2px ${bg}20`,
+  }
+
+  const className = [
+    'group relative flex flex-col items-start gap-2.5 p-4 rounded-xl',
+    'hover:scale-[1.02] active:scale-[0.98]',
+    'transition-all duration-200 ease-out',
+    'overflow-hidden w-full text-left',
+    // Subtle shine overlay on hover
+    'before:absolute before:inset-0 before:bg-white/0 hover:before:bg-white/5 before:transition-colors before:duration-200',
+  ].join(' ')
+
   const inner = (
     <>
-      <div className="flex items-center justify-between w-full">
-        <span className="text-2xl" aria-hidden="true">{icon ?? '📌'}</span>
-        <span className="text-xs font-semibold bg-white/20 text-white px-2 py-0.5 rounded-full">
+      {/* Top row: icon + count badge */}
+      <div className="relative z-10 flex items-center justify-between w-full">
+        <span className="text-2xl drop-shadow-sm" aria-hidden="true">{icon ?? '📌'}</span>
+        <span className="text-xs font-mono font-bold bg-black/20 text-white/90 px-2 py-0.5 rounded-full backdrop-blur-sm">
           {count}
         </span>
       </div>
-      <span className="text-sm font-semibold text-white">{name}</span>
+
+      {/* Category name */}
+      <span className="relative z-10 text-sm font-semibold text-white leading-tight">
+        {name}
+      </span>
+
+      {/* Decorative corner gradient */}
+      <div
+        className="absolute -bottom-4 -right-4 w-20 h-20 rounded-full bg-white/10 blur-xl pointer-events-none"
+        aria-hidden="true"
+      />
     </>
   )
 
-  const className = "flex flex-col items-start gap-2 p-4 rounded-xl border border-white/10 hover:opacity-90 transition-opacity w-full text-left"
-
   if (href) {
     return (
-      <a
-        href={href}
-        aria-label={ariaLabel}
-        className={className}
-        style={{ backgroundColor: bg }}
-      >
+      <a href={href} aria-label={ariaLabel} className={className} style={style}>
         {inner}
       </a>
     )
@@ -61,7 +80,7 @@ export function CategoryBubble({ id, name, icon, color, count, href, onClick }: 
       aria-label={ariaLabel}
       onClick={() => onClick!(id)}
       className={className}
-      style={{ backgroundColor: bg }}
+      style={style}
     >
       {inner}
     </button>

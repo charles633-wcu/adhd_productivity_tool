@@ -59,29 +59,36 @@ export function CategoryViewClient({
   return (
     <div className="space-y-4">
       {/* Filter bar */}
-      <div className="flex items-center gap-2 text-xs">
-        <span className="text-muted-foreground">Filter:</span>
-        <a
-          href={`/category/${categoryId}?filter=all`}
-          className={`rounded-md px-2 py-1 transition-colors ${currentFilter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
-        >
-          All
-        </a>
-        <a
-          href={`/category/${categoryId}?filter=due_soon`}
-          className={`rounded-md px-2 py-1 transition-colors ${currentFilter === 'due_soon' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
-        >
-          Due Soon
-        </a>
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs font-mono text-muted-foreground mr-1">filter:</span>
+        {[
+          { value: 'all', label: 'All' },
+          { value: 'due_soon', label: 'Due Soon' },
+        ].map(f => (
+          <a
+            key={f.value}
+            href={`/category/${categoryId}?filter=${f.value}`}
+            className={[
+              'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+              currentFilter === f.value
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-muted-foreground hover:text-foreground',
+            ].join(' ')}
+          >
+            {f.label}
+          </a>
+        ))}
       </div>
 
       {/* Trigger list */}
       {triggers.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-8 text-center">No triggers found.</p>
+        <div className="py-16 text-center border border-dashed border-border rounded-xl">
+          <p className="text-sm text-muted-foreground">No triggers here.</p>
+        </div>
       ) : (
-        <ul className="space-y-3">
-          {triggers.map(trigger => (
-            <li key={trigger.id}>
+        <ul className="space-y-2">
+          {triggers.map((trigger, i) => (
+            <li key={trigger.id} className="animate-in" style={{ animationDelay: `${i * 30}ms` }}>
               <TriggerCard
                 trigger={trigger}
                 categoryName={categoryName}

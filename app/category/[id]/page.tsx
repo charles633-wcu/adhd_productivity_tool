@@ -41,19 +41,31 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
     .orderBy(asc(triggers.priority), asc(triggers.nextReviewAt))
 
   return (
-    <main className="max-w-2xl mx-auto p-4 space-y-4">
-      <div className="flex items-center gap-3">
-        <a href="/" className="text-muted-foreground hover:text-foreground text-sm">← Back</a>
-        <span className="text-xl" aria-hidden="true">{category.icon ?? '📌'}</span>
-        <h1 className="text-xl font-bold">{category.name}</h1>
-      </div>
-      <CategoryViewClient
-        categoryId={id}
-        currentSort={sort ?? 'priority'}
-        currentFilter={filter ?? 'all'}
-        triggers={rows}
-        categoryName={category.name}
-      />
-    </main>
+    <div className="min-h-screen flex flex-col">
+      {/* Sticky header */}
+      <header className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur-md">
+        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
+          <a
+            href="/"
+            className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors"
+          >
+            ← back
+          </a>
+          <span className="text-muted-foreground/30">/</span>
+          <span className="text-xl" aria-hidden="true">{category.icon ?? '📌'}</span>
+          <h1 className="text-lg font-bold leading-none">{category.name}</h1>
+        </div>
+      </header>
+
+      <main className="max-w-2xl mx-auto w-full px-4 py-6">
+        <CategoryViewClient
+          categoryId={id}
+          currentSort={sort ?? 'priority'}
+          currentFilter={filter ?? 'all'}
+          triggers={rows}
+          categoryName={category.name}
+        />
+      </main>
+    </div>
   )
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, ChevronRight } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 
 // ReviewBanner — shown at the top of Home when triggers are due for review.
 // Copy: "You have {N} item{s} that need{s} review soon"
@@ -13,7 +13,6 @@ interface ReviewBannerProps {
 export function ReviewBanner({ count }: ReviewBannerProps) {
   const router = useRouter()
 
-  // Hide banner when nothing is due
   if (count === 0) return null
 
   const noun = count === 1 ? 'item' : 'items'
@@ -23,15 +22,22 @@ export function ReviewBanner({ count }: ReviewBannerProps) {
     <button
       type="button"
       onClick={() => router.push('/review')}
-      className="w-full flex items-center justify-between px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 hover:bg-amber-100 transition-colors"
+      className="group w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 transition-all duration-200 text-left"
     >
-      <div className="flex items-center gap-2">
-        <AlertTriangle className="h-4 w-4 text-amber-500" aria-hidden="true" />
-        <span className="text-sm font-medium">
-          You have {count} {noun} that {verb} review soon
-        </span>
-      </div>
-      <ChevronRight className="h-4 w-4 text-amber-500" aria-hidden="true" />
+      {/* Pulsing signal dot */}
+      <span className="relative flex-shrink-0 flex h-2.5 w-2.5">
+        <span className="sentinel-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-60" />
+        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+      </span>
+
+      <span className="flex-1 text-sm font-medium text-amber-400">
+        You have {count} {noun} that {verb} review soon
+      </span>
+
+      <ChevronRight
+        className="h-4 w-4 text-amber-500/50 group-hover:text-amber-400 group-hover:translate-x-0.5 transition-all"
+        aria-hidden="true"
+      />
     </button>
   )
 }

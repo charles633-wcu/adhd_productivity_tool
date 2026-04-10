@@ -4,29 +4,52 @@ import { useState } from 'react'
 import { CheckCircle, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
 import type { Trigger } from '@/lib/db/schema'
 
-// TriggerCard — displays a single trigger with priority badge, summary/title,
-// Acknowledge button, and expandable Details section with full content.
+// TriggerCard — displays a single trigger with a priority-colored left border,
+// summary/title display, Acknowledge button, and expandable Details section.
 // Shows a Retry button inside the expander when summaryStatus is 'pending'.
 
-// Maps numeric priority to display label and Tailwind colour classes
-const PRIORITY_BADGE: Record<number, { label: string; className: string }> = {
-  0: { label: 'P0', className: 'bg-red-100 text-red-700' },
-  1: { label: 'P1', className: 'bg-orange-100 text-orange-700' },
-  2: { label: 'P2', className: 'bg-yellow-100 text-yellow-700' },
-  3: { label: 'P3', className: 'bg-gray-100 text-gray-600' },
+const PRIORITY_CONFIG: Record<number, {
+  label: string
+  borderClass: string
+  badgeClass: string
+}> = {
+  0: {
+    label: 'P0',
+    borderClass: 'border-l-red-500',
+    badgeClass: 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20',
+  },
+  1: {
+    label: 'P1',
+    borderClass: 'border-l-orange-500',
+    badgeClass: 'bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/20',
+  },
+  2: {
+    label: 'P2',
+    borderClass: 'border-l-yellow-500',
+    badgeClass: 'bg-yellow-500/10 text-yellow-400 ring-1 ring-yellow-500/20',
+  },
+  3: {
+    label: 'P3',
+    borderClass: 'border-l-zinc-600',
+    badgeClass: 'bg-zinc-800 text-zinc-500 ring-1 ring-zinc-700/50',
+  },
 }
 
 interface TriggerCardProps {
   trigger: Trigger
   categoryName: string
   onAcknowledge: (triggerId: string) => void
-  // Optional: called when the user clicks Retry to re-trigger summarization
   onRetry?: (triggerId: string) => void
-  // When true, disables action buttons to prevent double-submission
   isProcessing?: boolean
 }
 
-export function TriggerCard({ trigger, categoryName, onAcknowledge, onRetry, isProcessing = false }: TriggerCardProps) {
+export function TriggerCard({
+  trigger,
+  categoryName,
+  onAcknowledge,
+  onRetry,
+  isProcessing = false,
+}: TriggerCardProps) {
   const [expanded, setExpanded] = useState(false)
 
   // Show AI summary when available, fall back to raw title
@@ -35,31 +58,48 @@ export function TriggerCard({ trigger, categoryName, onAcknowledge, onRetry, isP
       ? trigger.summary
       : trigger.title
 
-  const badge = PRIORITY_BADGE[trigger.priority] ?? PRIORITY_BADGE[3]
+  const config = PRIORITY_CONFIG[trigger.priority] ?? PRIORITY_CONFIG[3]
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-      {/* Header row: priority badge + display text + category */}
-      <div className="flex items-start gap-3">
-        <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold ${badge.className}`}>
-          {badge.label}
-        </span>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium leading-snug">{displayText}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">{categoryName}</p>
+    <div
+      className={`rounded-lg border-l-2 border border-border bg-card hover:bg-card/80 transition-colors ${config.borderClass} overflow-hidden`}
+    >
+      {/* Main row */}
+      <div className="px-4 py-3 space-y-2.5">
+        {/* Header: badge + text */}
+        <div className="flex items-start gap-2.5">
+          <span
+            className={`shrink-0 mt-0.5 rounded px-1.5 py-0.5 text-[10px] font-mono font-bold ${config.badgeClass}`}
+          >
+            {config.label}
+          </span>
+          <p className="flex-1 text-sm font-medium leading-snug text-foreground">
+            {displayText}
+          </p>
+        </div>
+
+        {/* Meta: category + summary status */}
+        <div className="flex items-center gap-2 pl-0.5">
+          <span className="text-xs text-muted-foreground">{categoryName}</span>
+          {trigger.summaryStatus === 'pending' && (
+            <span className="text-[10px] font-mono text-amber-500/70">· pending summary</span>
+          )}
+          {trigger.summaryStatus === 'generated' && (
+            <span className="text-[10px] font-mono text-emerald-500/60">· ai summary</span>
+          )}
         </div>
       </div>
 
       {/* Action row */}
-      <div className="flex items-center gap-2">
+      <div className="px-4 pb-3 flex items-center gap-2">
         <button
           type="button"
           aria-label="Acknowledge"
           disabled={isProcessing}
           onClick={() => onAcknowledge(trigger.id)}
-          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-50 transition-colors"
+          className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20 hover:bg-emerald-500/20 disabled:opacity-40 transition-colors"
         >
-          <CheckCircle className="h-3.5 w-3.5" aria-hidden="true" />
+          <CheckCircle className="h-3 w-3" aria-hidden="true" />
           Acknowledge
         </button>
 
@@ -68,32 +108,37 @@ export function TriggerCard({ trigger, categoryName, onAcknowledge, onRetry, isP
           aria-label="Details"
           aria-expanded={expanded}
           onClick={() => setExpanded(prev => !prev)}
-          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+          className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         >
-          {expanded ? (
-            <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
-          ) : (
-            <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-          )}
+          {expanded
+            ? <ChevronUp className="h-3 w-3" aria-hidden="true" />
+            : <ChevronDown className="h-3 w-3" aria-hidden="true" />
+          }
           Details
         </button>
       </div>
 
-      {/* Expandable section — shows full content and optional Retry button */}
+      {/* Expandable section */}
       {expanded && (
-        <div className="pt-2 border-t border-border space-y-2">
-          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{trigger.fullContent}</p>
-          {/* Retry button is shown when summary has not yet been generated */}
+        <div className="border-t border-border px-4 py-3 space-y-3 bg-background/40 animate-in">
+          {trigger.fullContent ? (
+            <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap font-mono">
+              {trigger.fullContent}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground/50 italic">No additional content.</p>
+          )}
+
           {trigger.summaryStatus === 'pending' && (
             <button
               type="button"
               aria-label="Retry"
               disabled={isProcessing}
               onClick={() => onRetry?.(trigger.id)}
-              className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 transition-colors"
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20 hover:bg-amber-500/20 disabled:opacity-40 transition-colors"
             >
-              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-              Retry
+              <RefreshCw className="h-3 w-3" aria-hidden="true" />
+              Retry summary
             </button>
           )}
         </div>

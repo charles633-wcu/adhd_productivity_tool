@@ -2,10 +2,17 @@
 
 import { useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import { Plus, FolderPlus } from 'lucide-react'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { QuickAddForm } from '@/components/QuickAddForm'
 
 // HomeClient — client-side header actions for the Home page.
-// Manages open state for QuickAddForm and New Category inline form.
+// Manages open state for QuickAddForm and New Category Sheet.
 // Calls router.refresh() after mutations so the server component re-fetches data.
 interface HomeClientProps {
   categories: Array<{ id: string; name: string; color: string | null; icon: string | null }>
@@ -29,7 +36,12 @@ export function HomeClient({ categories }: HomeClientProps) {
       const res = await fetch('/api/categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: catName, color: catColor, icon: catIcon || null }),
+        body: JSON.stringify({
+          name: catName,
+          color: catColor,
+          // Only include icon if the user entered one — avoids sending null to Zod
+          ...(catIcon ? { icon: catIcon } : {}),
+        }),
       })
       if (!res.ok) throw new Error('Failed to create category')
       setCatName('')
@@ -46,77 +58,109 @@ export function HomeClient({ categories }: HomeClientProps) {
 
   return (
     <div className="flex items-center gap-2">
-      {/* New Category inline form trigger */}
+      {/* New Category button */}
       <button
         type="button"
-        onClick={() => setNewCatOpen(prev => !prev)}
-        className="rounded-md border border-dashed border-muted-foreground/40 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:border-muted-foreground/70 transition-colors"
+        onClick={() => setNewCatOpen(true)}
+        className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
       >
-        + Category
+        <FolderPlus className="h-3.5 w-3.5" aria-hidden="true" />
+        Category
       </button>
 
       {/* Add Trigger button */}
       <button
         type="button"
         onClick={() => setAddOpen(true)}
-        className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 transition-colors"
+        className="flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-semibold hover:bg-primary/90 transition-colors"
       >
-        + Add
+        <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+        Add
       </button>
 
-      {/* New Category inline form */}
-      {newCatOpen && (
-        <div className="absolute top-16 right-4 z-10 w-72 rounded-lg border border-border bg-card p-4 shadow-lg space-y-3">
-          <h3 className="text-sm font-semibold">New Category</h3>
-          <form onSubmit={handleNewCategory} className="space-y-3">
-            <input
-              type="text"
-              required
-              maxLength={50}
-              placeholder="Name"
-              value={catName}
-              onChange={e => setCatName(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-            />
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-muted-foreground">Color</label>
+      {/* New Category — Sheet (same pattern as QuickAddForm, no absolute positioning) */}
+      <Sheet open={newCatOpen} onOpenChange={(open) => { setNewCatOpen(open); if (!open) setCatError(null) }}>
+        <SheetContent side="right" className="w-full sm:max-w-sm">
+          <SheetHeader>
+            <SheetTitle>New Category</SheetTitle>
+          </SheetHeader>
+          <form onSubmit={handleNewCategory} className="mt-6 space-y-5">
+            {/* Name */}
+            <div className="space-y-1.5">
+              <label htmlFor="cat-name" className="text-sm font-medium">Name <span className="text-muted-foreground">*</span></label>
               <input
-                type="color"
-                value={catColor}
-                onChange={e => setCatColor(e.target.value)}
-                className="h-7 w-10 cursor-pointer rounded border border-input bg-background"
-              />
-              <label className="text-xs text-muted-foreground">Icon</label>
-              <input
+                id="cat-name"
                 type="text"
-                maxLength={4}
-                placeholder="📌"
-                value={catIcon}
-                onChange={e => setCatIcon(e.target.value)}
-                className="w-14 rounded-md border border-input bg-background px-2 py-1.5 text-sm text-center"
+                required
+                maxLength={50}
+                placeholder="e.g. CS Projects"
+                value={catName}
+                onChange={e => setCatName(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
-            {catError && <p className="text-xs text-red-600" role="alert">{catError}</p>}
-            <div className="flex gap-2">
+
+            {/* Color + Icon row */}
+            <div className="flex items-end gap-4">
+              <div className="space-y-1.5">
+                <label htmlFor="cat-color" className="text-sm font-medium">Color</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="cat-color"
+                    type="color"
+                    value={catColor}
+                    onChange={e => setCatColor(e.target.value)}
+                    className="h-9 w-12 cursor-pointer rounded-md border border-input bg-background p-0.5"
+                  />
+                  <span className="text-xs font-mono text-muted-foreground">{catColor}</span>
+                </div>
+              </div>
+
+              <div className="flex-1 space-y-1.5">
+                <label htmlFor="cat-icon" className="text-sm font-medium">Icon <span className="text-muted-foreground text-xs">(emoji)</span></label>
+                <input
+                  id="cat-icon"
+                  type="text"
+                  maxLength={4}
+                  placeholder="📌"
+                  value={catIcon}
+                  onChange={e => setCatIcon(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </div>
+
+            {/* Preview */}
+            {catName && (
+              <div className="rounded-lg p-3 flex items-center gap-3" style={{ backgroundColor: catColor }}>
+                <span className="text-xl">{catIcon || '📌'}</span>
+                <span className="text-sm font-semibold text-white">{catName}</span>
+              </div>
+            )}
+
+            {catError && <p className="text-xs text-red-400" role="alert">{catError}</p>}
+
+            <div className="flex gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => { setNewCatOpen(false); setCatError(null) }}
-                className="flex-1 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+                className="flex-1 rounded-md border border-border px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={newCatLoading}
-                className="flex-1 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                className="flex-1 rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors"
               >
-                {newCatLoading ? 'Saving…' : 'Save'}
+                {newCatLoading ? 'Creating…' : 'Create'}
               </button>
             </div>
           </form>
-        </div>
-      )}
+        </SheetContent>
+      </Sheet>
 
+      {/* Add Trigger — QuickAddForm Sheet */}
       <QuickAddForm
         categories={categories}
         open={addOpen}
