@@ -23,7 +23,10 @@
       "Bash(cp -r /c/Users/czw53/Downloads/projects/_scaffold_temp/.superpowers /c/Users/czw53/Downloads/projects/reminders_tool/)",
       "Bash(npm install:*)",
       "Bash(npm audit:*)",
-      "Bash(npx shadcn@latest:*)"
+      "Bash(npx shadcn@latest:*)",
+      "Bash(git init:*)",
+      "Bash(git -C /c/Users/czw53/Downloads/projects/reminders_tool status)",
+      "Bash(git:*)"
     ]
   }
 }
