@@ -18,12 +18,12 @@ export function ReviewQueueClient({ grouped }: ReviewQueueClientProps) {
   async function handleAcknowledge(triggerId: string) {
     setProcessingId(triggerId)
     try {
-      await fetch(`/api/triggers/${triggerId}`, {
+      const res = await fetch(`/api/triggers/${triggerId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ acknowledge: true }),
       })
-      router.refresh()
+      if (res.ok) router.refresh()
     } finally {
       setProcessingId(null)
     }
@@ -34,12 +34,12 @@ export function ReviewQueueClient({ grouped }: ReviewQueueClientProps) {
     if (!trigger) return
     setProcessingId(triggerId)
     try {
-      await fetch('/api/summarize', {
+      const res = await fetch('/api/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ triggerId, content: trigger.fullContent || trigger.title }),
       })
-      router.refresh()
+      if (res.ok) router.refresh()
     } finally {
       setProcessingId(null)
     }
@@ -70,6 +70,7 @@ export function ReviewQueueClient({ grouped }: ReviewQueueClientProps) {
                   categoryName={category.name}
                   onAcknowledge={handleAcknowledge}
                   onRetry={(id) => handleRetry(id, triggers)}
+                  isProcessing={processingId === trigger.id}
                 />
               </li>
             ))}

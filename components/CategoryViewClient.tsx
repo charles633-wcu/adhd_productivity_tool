@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { TriggerCard } from '@/components/TriggerCard'
 import type { Trigger } from '@/lib/db/schema'
 
-// CategoryViewClient — client-side trigger list with sort/filter controls.
+// CategoryViewClient — client-side trigger list with filter controls.
 // Handles acknowledge (PATCH /api/triggers/[id]) and retry summarization (POST /api/summarize).
 interface CategoryViewClientProps {
   categoryId: string
@@ -17,7 +17,6 @@ interface CategoryViewClientProps {
 
 export function CategoryViewClient({
   categoryId,
-  currentSort,
   currentFilter,
   triggers,
   categoryName,
@@ -29,12 +28,12 @@ export function CategoryViewClient({
   async function handleAcknowledge(triggerId: string) {
     setProcessingId(triggerId)
     try {
-      await fetch(`/api/triggers/${triggerId}`, {
+      const res = await fetch(`/api/triggers/${triggerId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ acknowledge: true }),
       })
-      router.refresh()
+      if (res.ok) router.refresh()
     } finally {
       setProcessingId(null)
     }
@@ -46,12 +45,12 @@ export function CategoryViewClient({
     if (!trigger) return
     setProcessingId(triggerId)
     try {
-      await fetch('/api/summarize', {
+      const res = await fetch('/api/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ triggerId, content: trigger.fullContent || trigger.title }),
       })
-      router.refresh()
+      if (res.ok) router.refresh()
     } finally {
       setProcessingId(null)
     }
@@ -59,17 +58,17 @@ export function CategoryViewClient({
 
   return (
     <div className="space-y-4">
-      {/* Sort/filter bar */}
+      {/* Filter bar */}
       <div className="flex items-center gap-2 text-xs">
         <span className="text-muted-foreground">Filter:</span>
         <a
-          href={`/category/${categoryId}?sort=${currentSort}&filter=all`}
+          href={`/category/${categoryId}?filter=all`}
           className={`rounded-md px-2 py-1 transition-colors ${currentFilter === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
         >
           All
         </a>
         <a
-          href={`/category/${categoryId}?sort=${currentSort}&filter=due_soon`}
+          href={`/category/${categoryId}?filter=due_soon`}
           className={`rounded-md px-2 py-1 transition-colors ${currentFilter === 'due_soon' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
         >
           Due Soon
@@ -88,6 +87,7 @@ export function CategoryViewClient({
                 categoryName={categoryName}
                 onAcknowledge={handleAcknowledge}
                 onRetry={handleRetry}
+                isProcessing={processingId === trigger.id}
               />
             </li>
           ))}

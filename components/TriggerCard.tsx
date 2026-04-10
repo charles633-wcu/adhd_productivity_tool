@@ -22,9 +22,11 @@ interface TriggerCardProps {
   onAcknowledge: (triggerId: string) => void
   // Optional: called when the user clicks Retry to re-trigger summarization
   onRetry?: (triggerId: string) => void
+  // When true, disables action buttons to prevent double-submission
+  isProcessing?: boolean
 }
 
-export function TriggerCard({ trigger, categoryName, onAcknowledge, onRetry }: TriggerCardProps) {
+export function TriggerCard({ trigger, categoryName, onAcknowledge, onRetry, isProcessing = false }: TriggerCardProps) {
   const [expanded, setExpanded] = useState(false)
 
   // Show AI summary when available, fall back to raw title
@@ -53,8 +55,9 @@ export function TriggerCard({ trigger, categoryName, onAcknowledge, onRetry }: T
         <button
           type="button"
           aria-label="Acknowledge"
+          disabled={isProcessing}
           onClick={() => onAcknowledge(trigger.id)}
-          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
+          className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-50 transition-colors"
         >
           <CheckCircle className="h-3.5 w-3.5" aria-hidden="true" />
           Acknowledge
@@ -85,8 +88,9 @@ export function TriggerCard({ trigger, categoryName, onAcknowledge, onRetry }: T
             <button
               type="button"
               aria-label="Retry"
+              disabled={isProcessing}
               onClick={() => onRetry?.(trigger.id)}
-              className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
+              className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50 transition-colors"
             >
               <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
               Retry
