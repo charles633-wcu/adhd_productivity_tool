@@ -20,9 +20,11 @@ interface TriggerCardProps {
   trigger: Trigger
   categoryName: string
   onAcknowledge: (triggerId: string) => void
+  // Optional: called when the user clicks Retry to re-trigger summarization
+  onRetry?: (triggerId: string) => void
 }
 
-export function TriggerCard({ trigger, categoryName, onAcknowledge }: TriggerCardProps) {
+export function TriggerCard({ trigger, categoryName, onAcknowledge, onRetry }: TriggerCardProps) {
   const [expanded, setExpanded] = useState(false)
 
   // Show AI summary when available, fall back to raw title
@@ -61,6 +63,7 @@ export function TriggerCard({ trigger, categoryName, onAcknowledge }: TriggerCar
         <button
           type="button"
           aria-label="Details"
+          aria-expanded={expanded}
           onClick={() => setExpanded(prev => !prev)}
           className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
         >
@@ -82,6 +85,7 @@ export function TriggerCard({ trigger, categoryName, onAcknowledge }: TriggerCar
             <button
               type="button"
               aria-label="Retry"
+              onClick={() => onRetry?.(trigger.id)}
               className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors"
             >
               <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />

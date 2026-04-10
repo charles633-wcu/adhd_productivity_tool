@@ -65,4 +65,20 @@ describe('TriggerCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /details/i }))
     expect(screen.getByRole('button', { name: /retry/i })).toBeTruthy()
   })
+
+  it('collapses and hides full_content when Details is toggled a second time', () => {
+    const trigger = makeTrigger()
+    render(<TriggerCard trigger={trigger} categoryName="Work" onAcknowledge={mockAcknowledge} />)
+    const detailsBtn = screen.getByRole('button', { name: /details/i })
+    fireEvent.click(detailsBtn)
+    expect(screen.getByText('Full content body here')).toBeTruthy()
+    fireEvent.click(detailsBtn)
+    expect(screen.queryByText('Full content body here')).toBeNull()
+  })
+
+  it('falls back to title when summaryStatus is "generated" but summary is null', () => {
+    const trigger = makeTrigger({ summary: null, summaryStatus: 'generated' })
+    render(<TriggerCard trigger={trigger} categoryName="Work" onAcknowledge={mockAcknowledge} />)
+    expect(screen.getByText('Raw title text')).toBeTruthy()
+  })
 })
