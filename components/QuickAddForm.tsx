@@ -20,6 +20,7 @@ interface QuickAddFormProps {
 
 export function QuickAddForm({ categories, open, onOpenChange, onSuccess }: QuickAddFormProps) {
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [categoryId, setCategoryId] = useState(categories[0]?.id ?? '')
   const [priority, setPriority] = useState(2)
@@ -29,6 +30,7 @@ export function QuickAddForm({ categories, open, onOpenChange, onSuccess }: Quic
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setLoading(true)
+    setError(null)
     try {
       const res = await fetch('/api/triggers', {
         method: 'POST',
@@ -60,10 +62,11 @@ export function QuickAddForm({ categories, open, onOpenChange, onSuccess }: Quic
       setFullContent('')
       setPriority(2)
       setIntervalDays(7)
+      setCategoryId(categories[0]?.id ?? '')
       onOpenChange(false)
       onSuccess()
-    } catch {
-      // Keep form open on error so user can retry
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
       setLoading(false)
     }
@@ -156,6 +159,11 @@ export function QuickAddForm({ categories, open, onOpenChange, onSuccess }: Quic
               placeholder="Optional — detailed notes for this trigger"
             />
           </div>
+
+          {/* Submission error */}
+          {error && (
+            <p className="text-sm text-red-600" role="alert">{error}</p>
+          )}
 
           {/* Submit */}
           <button

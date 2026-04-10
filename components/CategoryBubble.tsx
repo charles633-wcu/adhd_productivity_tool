@@ -17,6 +17,7 @@ export function CategoryBubble({ id, name, icon, color, count, onClick }: Catego
   return (
     <button
       type="button"
+      aria-label={`${name}, ${count} ${count !== 1 ? 'items' : 'item'}`}
       onClick={() => onClick(id)}
       className="flex flex-col items-start gap-2 p-4 rounded-xl border border-white/10 hover:opacity-90 transition-opacity w-full text-left"
       style={{ backgroundColor: bg }}
