@@ -24,12 +24,13 @@ export default async function HomePage() {
 
   // Fetch categories with trigger counts
   const categoryList = await db.select().from(categories).where(eq(categories.userId, user.id))
+  // Only count active triggers so archived/snoozed items don't inflate the badge
   const triggerCounts = await Promise.all(
     categoryList.map(async (cat) => {
       const [{ value }] = await db
         .select({ value: drizzleCount() })
         .from(triggers)
-        .where(eq(triggers.categoryId, cat.id))
+        .where(and(eq(triggers.categoryId, cat.id), eq(triggers.status, 'active')))
       return { categoryId: cat.id, count: Number(value) }
     })
   )
@@ -52,16 +53,15 @@ export default async function HomePage() {
         </h2>
         <div className="grid grid-cols-2 gap-3">
           {categoriesWithCounts.map(cat => (
-            <a key={cat.id} href={`/category/${cat.id}`}>
-              <CategoryBubble
-                id={cat.id}
-                name={cat.name}
-                icon={cat.icon}
-                color={cat.color}
-                count={cat.count}
-                onClick={() => {}}
-              />
-            </a>
+            <CategoryBubble
+              key={cat.id}
+              id={cat.id}
+              name={cat.name}
+              icon={cat.icon}
+              color={cat.color}
+              count={cat.count}
+              href={`/category/${cat.id}`}
+            />
           ))}
         </div>
       </section>
