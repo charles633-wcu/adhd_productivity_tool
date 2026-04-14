@@ -222,7 +222,7 @@ export function ScheduleCalendar({ triggers: initialTriggers }: ScheduleCalendar
                 return (
                   <button
                     key={t.id}
-                    onClick={() => setSelectedId(isSelected ? null : t.id)}
+                    onClick={() => { setError(null); setSelectedId(isSelected ? null : t.id) }}
                     className={[
                       'w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs transition-colors',
                       isSelected
