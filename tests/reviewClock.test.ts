@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isDueSoon, daysElapsed } from '@/lib/services/reviewClock'
+import { isDueSoon, daysElapsed, snapToDate } from '@/lib/services/reviewClock'
 
 // Helper to build a minimal trigger-like object for testing
 function makeTrigger(overrides: {
@@ -47,5 +47,37 @@ describe('daysElapsed', () => {
     const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
     const trigger = makeTrigger({ lastReviewedAt: null, createdAt: threeDaysAgo })
     expect(daysElapsed(trigger)).toBe(3)
+  })
+})
+
+describe('snapToDate', () => {
+  it('sets the time to 12:00:00.000 UTC regardless of input time', () => {
+    const input = new Date('2026-05-10T03:00:00.000Z')
+    const result = snapToDate(input)
+    expect(result.getUTCHours()).toBe(12)
+    expect(result.getUTCMinutes()).toBe(0)
+    expect(result.getUTCSeconds()).toBe(0)
+    expect(result.getUTCMilliseconds()).toBe(0)
+  })
+
+  it('preserves the calendar date (UTC year/month/day) of the input', () => {
+    const input = new Date('2026-05-10T23:59:00.000Z')
+    const result = snapToDate(input)
+    expect(result.getUTCFullYear()).toBe(2026)
+    expect(result.getUTCMonth()).toBe(4)
+    expect(result.getUTCDate()).toBe(10)
+  })
+
+  it('does not mutate the input date', () => {
+    const input = new Date('2026-05-10T08:00:00.000Z')
+    const original = input.getTime()
+    snapToDate(input)
+    expect(input.getTime()).toBe(original)
+  })
+
+  it('two dates on the same calendar day produce equal results', () => {
+    const a = new Date('2026-06-15T01:00:00.000Z')
+    const b = new Date('2026-06-15T23:00:00.000Z')
+    expect(snapToDate(a).getTime()).toBe(snapToDate(b).getTime())
   })
 })

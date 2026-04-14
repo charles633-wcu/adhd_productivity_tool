@@ -27,3 +27,15 @@ export function daysElapsed(trigger: ClockTrigger): number {
   const msElapsed = Date.now() - baseline.getTime()
   return Math.floor(msElapsed / (24 * 60 * 60 * 1000))
 }
+
+/**
+ * Normalises a user-selected date to noon UTC to avoid timezone edge cases
+ * where a day-boundary selection could land on the wrong calendar day.
+ * This is a one-time override utility — it does not affect acknowledgeTrigger logic.
+ * Returns a new Date; does not mutate the input.
+ */
+export function snapToDate(date: Date): Date {
+  const d = new Date(date)
+  d.setUTCHours(12, 0, 0, 0)
+  return d
+}
