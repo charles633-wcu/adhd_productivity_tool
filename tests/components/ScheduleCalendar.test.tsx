@@ -55,8 +55,9 @@ describe('ScheduleCalendar', () => {
     tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
     tomorrow.setUTCHours(12, 0, 0, 0)
     render(<ScheduleCalendar triggers={[makeTrigger({ nextReviewAt: tomorrow.toISOString() })]} />)
-    const badge = screen.getByText('1')
+    const badge = screen.getByTestId('count-badge')
     expect(badge.className).toContain('green')
+    expect(badge.textContent).toBe('1')
   })
 
   it('shows a yellow badge for 2 triggers due on the same day', () => {
@@ -66,8 +67,9 @@ describe('ScheduleCalendar', () => {
     const t1 = makeTrigger({ id: 'trig-1', title: 'T1', nextReviewAt: tomorrow.toISOString() })
     const t2 = makeTrigger({ id: 'trig-2', title: 'T2', nextReviewAt: tomorrow.toISOString() })
     render(<ScheduleCalendar triggers={[t1, t2]} />)
-    const badge = screen.getByText('2')
+    const badge = screen.getByTestId('count-badge')
     expect(badge.className).toContain('yellow')
+    expect(badge.textContent).toBe('2')
   })
 
   it('shows a red badge for 4 triggers due on the same day', () => {
@@ -78,21 +80,25 @@ describe('ScheduleCalendar', () => {
       makeTrigger({ id: `trig-${i}`, title: `T${i}`, nextReviewAt: tomorrow.toISOString() })
     )
     render(<ScheduleCalendar triggers={triggers} />)
-    const badge = screen.getByText('4')
+    const badge = screen.getByTestId('count-badge')
     expect(badge.className).toContain('red')
+    expect(badge.textContent).toBe('4')
   })
 
   it('selecting a trigger shows reschedule hint text', () => {
     render(<ScheduleCalendar triggers={[makeTrigger()]} />)
-    fireEvent.click(screen.getByText('Test trigger'))
+    // Target the list-item button specifically to avoid matching the hint span
+    fireEvent.click(screen.getByRole('button', { name: /Test trigger/i }))
     expect(screen.getByText(/tap a day to reschedule/i)).toBeTruthy()
   })
 
   it('deselects a trigger when clicked a second time', () => {
     render(<ScheduleCalendar triggers={[makeTrigger()]} />)
-    fireEvent.click(screen.getByText('Test trigger'))
+    // First click — hint span not yet visible, only one button with this name
+    fireEvent.click(screen.getByRole('button', { name: /Test trigger/i }))
     expect(screen.getByText(/tap a day to reschedule/i)).toBeTruthy()
-    fireEvent.click(screen.getByText('Test trigger'))
+    // Second click — hint span is now also visible, but getByRole targets only the button
+    fireEvent.click(screen.getByRole('button', { name: /Test trigger/i }))
     expect(screen.queryByText(/tap a day to reschedule/i)).toBeNull()
   })
 
@@ -102,15 +108,15 @@ describe('ScheduleCalendar', () => {
     inFuture.setUTCHours(12, 0, 0, 0)
     render(<ScheduleCalendar triggers={[makeTrigger({ nextReviewAt: inFuture.toISOString() })]} />)
 
-    fireEvent.click(screen.getByText('Test trigger'))
+    fireEvent.click(screen.getByRole('button', { name: /Test trigger/i }))
     const futureDay = new Date()
     futureDay.setDate(futureDay.getDate() + 14)
-    const dayLabel = String(futureDay.getDate())
-    const dayButtons = screen.getAllByRole('button')
-    const targetButton = dayButtons.find(
-      b => b.textContent?.includes(dayLabel) && !b.hasAttribute('disabled')
-    )
-    if (targetButton) fireEvent.click(targetButton)
+    const y = futureDay.getFullYear()
+    const m = String(futureDay.getMonth() + 1).padStart(2, '0')
+    const d = String(futureDay.getDate()).padStart(2, '0')
+    const dayKey = `${y}-${m}-${d}`
+    const targetButton = screen.getByTestId(`day-${dayKey}`)
+    fireEvent.click(targetButton)
 
     await waitFor(() => {
       expect(vi.mocked(fetch)).toHaveBeenCalledWith(
@@ -128,14 +134,15 @@ describe('ScheduleCalendar', () => {
     inFuture.setUTCHours(12, 0, 0, 0)
     render(<ScheduleCalendar triggers={[makeTrigger({ nextReviewAt: inFuture.toISOString() })]} />)
 
-    fireEvent.click(screen.getByText('Test trigger'))
-    const dayButtons = screen.getAllByRole('button')
+    fireEvent.click(screen.getByRole('button', { name: /Test trigger/i }))
     const futureDay = new Date()
     futureDay.setDate(futureDay.getDate() + 7)
-    const targetButton = dayButtons.find(
-      b => b.textContent?.includes(String(futureDay.getDate())) && !b.hasAttribute('disabled')
-    )
-    if (targetButton) fireEvent.click(targetButton)
+    const y = futureDay.getFullYear()
+    const m = String(futureDay.getMonth() + 1).padStart(2, '0')
+    const d = String(futureDay.getDate()).padStart(2, '0')
+    const dayKey = `${y}-${m}-${d}`
+    const targetButton = screen.getByTestId(`day-${dayKey}`)
+    fireEvent.click(targetButton)
 
     await waitFor(() => {
       expect(screen.getByText(/failed to reschedule/i)).toBeTruthy()

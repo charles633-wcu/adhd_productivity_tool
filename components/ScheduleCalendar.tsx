@@ -40,16 +40,6 @@ function toLocalDateKey(date: Date): string {
   return `${y}-${m}-${d}`
 }
 
-/** Get 42 calendar days starting from today */
-function getCalendarDays(): Date[] {
-  const today = startOfLocalToday()
-  return Array.from({ length: 42 }, (_, i) => {
-    const d = new Date(today)
-    d.setDate(today.getDate() + i)
-    return d
-  })
-}
-
 /** Count badge Tailwind color class */
 function badgeColor(count: number): string {
   if (count === 1) return 'bg-green-500'
@@ -67,13 +57,21 @@ export function ScheduleCalendar({ triggers: initialTriggers }: ScheduleCalendar
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const today = startOfLocalToday()
+  // Anchor today at mount time so calendarDays, todayKey, and todayDow
+  // all stay consistent even if the component re-renders after midnight
+  const [today] = useState(() => startOfLocalToday())
   const todayKey = toLocalDateKey(today)
   // Monday-indexed day offset for today (to pad the first calendar row)
   const todayDow = (today.getDay() + 6) % 7 // JS Sun=0 → Mon-indexed 0
 
-  // 42 calendar days — stable reference (doesn't change during session)
-  const calendarDays = useMemo(() => getCalendarDays(), [])
+  // 42 calendar days — stable because today is stable state (not recomputed each render)
+  const calendarDays = useMemo(() => {
+    return Array.from({ length: 42 }, (_, i) => {
+      const d = new Date(today)
+      d.setDate(today.getDate() + i)
+      return d
+    })
+  }, [today])
 
   // Group triggers by their nextReviewAt local date key
   const triggersByDate = useMemo(() => {
@@ -155,8 +153,7 @@ export function ScheduleCalendar({ triggers: initialTriggers }: ScheduleCalendar
           {selectedTrigger && (
             <p className="text-xs text-muted-foreground pt-2">
               Tap a day to reschedule{' '}
-              {/* ZWS suffix prevents getByText(title) from matching this hint span — list item remains the unique match */}
-              <span className="text-foreground font-medium">{selectedTrigger.title}{'\u200B'}</span>
+              <span data-testid="hint-trigger-title" className="text-foreground font-medium">{selectedTrigger.title}</span>
               {' '}— or tap the trigger again to cancel
             </p>
           )}
@@ -183,6 +180,7 @@ export function ScheduleCalendar({ triggers: initialTriggers }: ScheduleCalendar
               return (
                 <button
                   key={key}
+                  data-testid={`day-${key}`}
                   disabled={isPast}
                   onClick={() => handleDayClick(day)}
                   className={[
@@ -195,12 +193,12 @@ export function ScheduleCalendar({ triggers: initialTriggers }: ScheduleCalendar
                     isToday ? 'ring-1 ring-primary' : '',
                   ].filter(Boolean).join(' ')}
                 >
-                  {/* ZWS appended so getByText('N') matches only the badge, not the day number */}
                   <span className={isToday ? 'font-bold text-primary' : 'text-foreground'}>
-                    {day.getDate()}{'\u200B'}
+                    {day.getDate()}
                   </span>
                   {dayTriggers.length > 0 && (
                     <span
+                      data-testid="count-badge"
                       className={`mt-0.5 w-4 h-4 rounded-full text-[9px] font-bold text-white flex items-center justify-center ${badgeColor(dayTriggers.length)}`}
                     >
                       {dayTriggers.length}
