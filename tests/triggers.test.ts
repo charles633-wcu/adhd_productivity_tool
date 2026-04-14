@@ -4,8 +4,9 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
+import { eq } from 'drizzle-orm'
 import * as schema from '@/lib/db/schema'
-import { createTrigger, acknowledgeTrigger, getTriggersForCategory } from '@/lib/db/triggers'
+import { createTrigger, acknowledgeTrigger, getTriggersForCategory, rescheduleTrigger } from '@/lib/db/triggers'
 import type { NewTrigger } from '@/lib/db/schema'
 
 // Use an in-memory SQLite DB for tests — no file on disk, fast and isolated
@@ -78,8 +79,9 @@ describe('acknowledgeTrigger', () => {
     expect(updated.lastReviewedAt!.getTime()).toBeGreaterThanOrEqual(before - 5000)
     expect(updated.lastReviewedAt!.getTime()).toBeLessThanOrEqual(after + 5000)
 
-    // next_review_at should be ~now + 7 days
-    const expectedNextReview = before + 7 * 24 * 60 * 60 * 1000
+    // next_review_at should be ~now + 7 days + 65-min grace (see acknowledgeTrigger)
+    const graceMs = 65 * 60 * 1000
+    const expectedNextReview = before + 7 * 24 * 60 * 60 * 1000 + graceMs
     expect(updated.nextReviewAt.getTime()).toBeGreaterThanOrEqual(expectedNextReview - 5000)
     expect(updated.nextReviewAt.getTime()).toBeLessThanOrEqual(expectedNextReview + 5000)
   })
@@ -108,5 +110,60 @@ describe('getTriggersForCategory', () => {
     expect(results[0].title).toBe('Critical')
     expect(results[1].title).toBe('High')
     expect(results[2].title).toBe('Medium')
+  })
+})
+
+describe('rescheduleTrigger', () => {
+  it('sets nextReviewAt to the given date', async () => {
+    const [trigger] = await db.insert(schema.triggers).values({
+      userId,
+      categoryId,
+      title: 'Reschedule test',
+      reviewIntervalDays: 7,
+      nextReviewAt: new Date(),
+    }).returning()
+
+    const newDate = new Date('2026-06-01T12:00:00.000Z')
+    const updated = await rescheduleTrigger(db, trigger.id, newDate)
+
+    expect(updated.nextReviewAt.getTime()).toBe(newDate.getTime())
+  })
+
+  it('does NOT change lastReviewedAt', async () => {
+    const originalLastReview = new Date('2026-04-01T12:00:00.000Z')
+    const [trigger] = await db.insert(schema.triggers).values({
+      userId,
+      categoryId,
+      title: 'No touch lastReviewedAt',
+      reviewIntervalDays: 7,
+      nextReviewAt: new Date(),
+      lastReviewedAt: originalLastReview,
+    }).returning()
+
+    await rescheduleTrigger(db, trigger.id, new Date('2026-06-15T12:00:00.000Z'))
+    const [row] = await db.select().from(schema.triggers).where(eq(schema.triggers.id, trigger.id))
+
+    expect(row.lastReviewedAt?.getTime()).toBe(originalLastReview.getTime())
+  })
+
+  it('does NOT change reviewIntervalDays', async () => {
+    const [trigger] = await db.insert(schema.triggers).values({
+      userId,
+      categoryId,
+      title: 'No touch interval',
+      reviewIntervalDays: 14,
+      nextReviewAt: new Date(),
+    }).returning()
+
+    await rescheduleTrigger(db, trigger.id, new Date('2026-06-15T12:00:00.000Z'))
+    const [row] = await db.select().from(schema.triggers).where(eq(schema.triggers.id, trigger.id))
+
+    expect(row.reviewIntervalDays).toBe(14)
+  })
+
+  it('throws when trigger id does not exist', async () => {
+    await expect(
+      rescheduleTrigger(db, 'nonexistent-id', new Date())
+    ).rejects.toThrow('not found')
   })
 })

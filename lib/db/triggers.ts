@@ -36,7 +36,12 @@ export async function acknowledgeTrigger(db: DrizzleDb, triggerId: string): Prom
   if (!trigger) throw new Error(`Trigger ${triggerId} not found`)
 
   const now = new Date()
-  const nextReviewAt = new Date(now.getTime() + trigger.reviewIntervalDays * 24 * 60 * 60 * 1000)
+  // Add a 65-minute grace on top of the interval so the trigger always escapes the
+  // "due within 24h" review window after being acknowledged. Without this, a 1-day
+  // trigger lands exactly ON the boundary and stays visible in the banner forever.
+  const intervalMs = trigger.reviewIntervalDays * 24 * 60 * 60 * 1000
+  const graceMs    = 65 * 60 * 1000  // 65 minutes
+  const nextReviewAt = new Date(now.getTime() + intervalMs + graceMs)
 
   // Write last_reviewed_at, next_review_at, and updated_at
   const [updated] = await db
@@ -58,4 +63,24 @@ export async function getTriggersForCategory(db: DrizzleDb, categoryId: string):
     .from(triggers)
     .where(eq(triggers.categoryId, categoryId))
     .orderBy(asc(triggers.priority), asc(triggers.nextReviewAt))
+}
+
+/**
+ * Directly overrides nextReviewAt for a trigger (one-time anchor override).
+ * Does NOT touch lastReviewedAt or reviewIntervalDays — this is not an acknowledgement.
+ * Subsequent acknowledgeTrigger calls will compute from the new anchor as normal.
+ */
+export async function rescheduleTrigger(
+  db: DrizzleDb,
+  triggerId: string,
+  date: Date
+): Promise<Trigger> {
+  const [updated] = await db
+    .update(triggers)
+    .set({ nextReviewAt: date })
+    .where(eq(triggers.id, triggerId))
+    .returning()
+
+  if (!updated) throw new Error(`Trigger ${triggerId} not found`)
+  return updated
 }
