@@ -1,10 +1,15 @@
+// Force dynamic rendering so the ReviewBanner count is never served from cache
+export const dynamic = 'force-dynamic'
+
 import { getDb } from '@/lib/db/client'
 import { categories, triggers } from '@/lib/db/schema'
 import { eq, and, lte, count as drizzleCount } from 'drizzle-orm'
 import { getCurrentUser } from '@/lib/auth'
 import { ReviewBanner } from '@/components/ReviewBanner'
-import { CategoryBubble } from '@/components/CategoryBubble'
+import { CategoryCanvas } from '@/components/CategoryCanvas'
 import { HomeClient } from '@/components/HomeClient'
+import { TriggerStatusSummary } from '@/components/TriggerStatusSummary'
+import { ScheduleCalendar } from '@/components/ScheduleCalendar'
 
 // Home page — server component that fetches category list and due-count, then passes to client
 export default async function HomePage() {
@@ -21,6 +26,31 @@ export default async function HomePage() {
       eq(triggers.status, 'active'),
       lte(triggers.nextReviewAt, oneDayFromNow)
     ))
+
+  const statusRows = await db
+    .select({
+      status: triggers.status,
+      value: drizzleCount(),
+    })
+    .from(triggers)
+    .where(eq(triggers.userId, user.id))
+    .groupBy(triggers.status)
+
+  const statusCounts = {
+    active: 0,
+    snoozed: 0,
+    archived: 0,
+  }
+
+  for (const row of statusRows) {
+    statusCounts[row.status] = Number(row.value)
+  }
+
+  // Fetch all active triggers for the home-page scheduling calendar
+  const allActiveTriggers = await db
+    .select()
+    .from(triggers)
+    .where(and(eq(triggers.userId, user.id), eq(triggers.status, 'active')))
 
   // Fetch categories with active trigger counts
   const categoryList = await db.select().from(categories).where(eq(categories.userId, user.id))
@@ -39,6 +69,15 @@ export default async function HomePage() {
     count: triggerCounts.find(t => t.categoryId === cat.id)?.count ?? 0,
   }))
 
+  // Serialize Date fields so they survive the server→client boundary as strings
+  const serializedTriggers = allActiveTriggers.map(t => ({
+    ...t,
+    nextReviewAt: t.nextReviewAt.toISOString(),
+    lastReviewedAt: t.lastReviewedAt?.toISOString() ?? null,
+    createdAt: t.createdAt.toISOString(),
+    updatedAt: t.updatedAt.toISOString(),
+  }))
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Sticky header */}
@@ -52,37 +91,37 @@ export default async function HomePage() {
         </div>
       </header>
 
-      {/* Main content */}
-      <main className="max-w-2xl mx-auto w-full px-4 py-6 space-y-6 flex-1">
-        {/* ReviewBanner — only shown when items are due */}
-        <ReviewBanner count={Number(dueCount)} />
+      {/* Main content — narrow for banner, full-width for canvas */}
+      <main className="flex-1 flex flex-col">
+        <div className="max-w-2xl mx-auto w-full px-4 pt-6">
+          {/* ReviewBanner — only shown when items are due */}
+          <ReviewBanner count={Number(dueCount)} />
 
-        {/* Categories grid */}
-        <section>
-          <h2 className="text-xs font-mono font-medium text-muted-foreground uppercase tracking-widest mb-3">
+          {/* Scheduling calendar — spread triggers across the next 6 weeks */}
+          <ScheduleCalendar triggers={serializedTriggers} />
+        </div>
+
+        {/* Categories — full-width hex canvas */}
+        <section className="relative flex-1 px-4 pt-4 pb-6">
+          <h2 className="max-w-2xl mx-auto text-xs font-mono font-medium text-muted-foreground uppercase tracking-widest mb-4">
             Categories
           </h2>
+          <div className="pointer-events-none absolute inset-x-4 top-11 z-10">
+            <TriggerStatusSummary
+              active={statusCounts.active}
+              snoozed={statusCounts.snoozed}
+              archived={statusCounts.archived}
+              className="mx-auto max-w-2xl"
+            />
+          </div>
           {categoriesWithCounts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed border-border rounded-xl">
+            <div className="max-w-2xl mx-auto flex flex-col items-center justify-center py-16 text-center border border-dashed border-border rounded-xl">
               <p className="text-2xl mb-2">📡</p>
               <p className="text-sm font-medium text-foreground">No categories yet</p>
               <p className="text-xs text-muted-foreground mt-1">Click <span className="font-mono text-primary">+ Category</span> to get started</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
-              {categoriesWithCounts.map((cat, i) => (
-                <div key={cat.id} className="animate-in" style={{ animationDelay: `${i * 40}ms` }}>
-                  <CategoryBubble
-                    id={cat.id}
-                    name={cat.name}
-                    icon={cat.icon}
-                    color={cat.color}
-                    count={cat.count}
-                    href={`/category/${cat.id}`}
-                  />
-                </div>
-              ))}
-            </div>
+            <CategoryCanvas categories={categoriesWithCounts} />
           )}
         </section>
       </main>
