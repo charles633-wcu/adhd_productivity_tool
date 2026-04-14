@@ -156,6 +156,36 @@ describe('PATCH rescheduleDate', () => {
     expect(rescheduleTrigger).not.toHaveBeenCalled()
   })
 
+  it('returns 400 when rescheduleDate is in the past', async () => {
+    getCurrentUser.mockResolvedValue({ id: 'user-1' })
+
+    // Ownership check returns the trigger (so the guard is actually reached)
+    const ownershipQuery = {
+      limit: vi.fn().mockResolvedValue([
+        { id: 'trigger-1', userId: 'user-1', categoryId: 'cat-1' },
+      ]),
+    }
+    getDb.mockReturnValue({
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ownershipQuery),
+        })),
+      })),
+    })
+
+    const res = await PATCH(
+      new Request('http://localhost/api/triggers/trigger-1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rescheduleDate: '2020-01-01T12:00:00.000Z' }),
+      }),
+      { params: Promise.resolve({ id: 'trigger-1' }) }
+    )
+
+    expect(res.status).toBe(400)
+    expect(rescheduleTrigger).not.toHaveBeenCalled()
+  })
+
   it('returns 400 when rescheduleDate is not a valid ISO datetime', async () => {
     getCurrentUser.mockResolvedValue({ id: 'user-1' })
     getDb.mockReturnValue({})

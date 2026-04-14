@@ -19,7 +19,7 @@ const UpdateTriggerSchema = z.object({
   reviewIntervalDays: z.number().int().min(0).optional(),
   // Special field: when true, calls acknowledgeTrigger() to reset the review clock
   acknowledge: z.boolean().optional(),
-  // Special field: when provided (ISO datetime), directly overrides nextReviewAt
+  // Special field: when provided (ISO datetime), overrides nextReviewAt (snapped to noon UTC)
   rescheduleDate: z.string().datetime().optional(),
 }).refine(data => Object.keys(data).length > 0, { message: 'At least one field required' })
 
@@ -30,7 +30,7 @@ function revalidateTriggerViews(categoryId: string) {
 }
 
 /**
- * PATCH /api/triggers/[id] — update summary, priority, or acknowledge the trigger
+ * PATCH /api/triggers/[id] — update summary, priority, acknowledge, or reschedule the trigger
  */
 export async function PATCH(
   request: Request,
