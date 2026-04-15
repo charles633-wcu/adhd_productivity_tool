@@ -39,7 +39,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       max_tokens: 10,
     })
     const raw = response.choices[0]?.message?.content?.trim() ?? ''
-    const emoji = raw.length > 0 ? raw : FALLBACK
+    // Guard: only accept if the response is exactly one grapheme cluster (one emoji)
+    const segments = [...new Intl.Segmenter().segment(raw)]
+    const emoji = segments.length === 1 ? raw : FALLBACK
     return NextResponse.json({ emoji })
   } catch {
     return NextResponse.json({ emoji: FALLBACK })

@@ -1,19 +1,24 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { POST } from '@/app/api/emoji/suggest/route'
 import { NextRequest } from 'next/server'
 
 // Mock OpenAI
-vi.mock('openai', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    chat: {
-      completions: {
-        create: vi.fn().mockResolvedValue({
-          choices: [{ message: { content: '💻' } }],
-        }),
+vi.mock('openai', () => {
+  const MockOpenAI = vi.fn(function() {
+    return {
+      chat: {
+        completions: {
+          create: vi.fn().mockResolvedValue({
+            choices: [{ message: { content: '💻' } }],
+          }),
+        },
       },
-    },
-  })),
-}))
+    }
+  })
+  return {
+    default: MockOpenAI,
+  }
+})
 
 describe('POST /api/emoji/suggest', () => {
   it('returns an emoji for a valid name', async () => {
@@ -28,6 +33,7 @@ describe('POST /api/emoji/suggest', () => {
     expect(json).toHaveProperty('emoji')
     expect(typeof json.emoji).toBe('string')
     expect(json.emoji.length).toBeGreaterThan(0)
+    expect(json.emoji).toBe('💻')
   })
 
   it('returns fallback emoji when name is empty', async () => {
@@ -56,8 +62,16 @@ describe('POST /api/emoji/suggest', () => {
 
   it('returns fallback emoji when OpenAI throws', async () => {
     const { default: OpenAI } = await import('openai')
-    const mockInstance = { chat: { completions: { create: vi.fn().mockRejectedValue(new Error('API error')) } } }
-    vi.mocked(OpenAI).mockImplementationOnce(() => mockInstance as unknown as InstanceType<typeof OpenAI>)
+    const MockOpenAIClass = OpenAI as any
+    MockOpenAIClass.mockImplementationOnce(function() {
+      return {
+        chat: {
+          completions: {
+            create: vi.fn().mockRejectedValue(new Error('API error')),
+          },
+        },
+      }
+    })
 
     const req = new NextRequest('http://localhost/api/emoji/suggest', {
       method: 'POST',
