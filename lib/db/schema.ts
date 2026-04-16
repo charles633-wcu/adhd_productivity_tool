@@ -10,6 +10,8 @@ export const users = sqliteTable('users', {
   id: text('id').primaryKey().$defaultFn(() => createId()),
   email: text('email').notNull().unique(),
   name: text('name'),
+  // JSON: Record<categoryId, "q,r"> — hex grid layout persisted server-side
+  hexLayout: text('hex_layout'),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .default(sql`(unixepoch())`),
@@ -62,10 +64,12 @@ export const triggers = sqliteTable('triggers', {
 
   // Agent hook fields (not active in MVP)
   notifyChannel: text('notify_channel').$type<NonNullable<NotifyChannel>>(),
-  // shape: { lastAgentRun?: string (ISO), agentNotes?: string }
+  // shape: { notes?: ..., condensedHistory?: string, autoCompact?: boolean, lastAgentRun?: string (ISO) }
   agentMetadata: text('agent_metadata', { mode: 'json' }).$type<{
+    notes?: { id: string; date: string; text: string }[]
+    condensedHistory?: string
+    autoCompact?: boolean
     lastAgentRun?: string
-    agentNotes?: string
   }>(),
 
   createdAt: integer('created_at', { mode: 'timestamp' })
