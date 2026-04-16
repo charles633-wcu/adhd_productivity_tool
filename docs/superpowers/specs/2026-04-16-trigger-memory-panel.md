@@ -36,7 +36,7 @@ agentMetadata: {
 
 - `notes` — append-only in normal use; each note gets a `cuid` ID for stable edit/delete
 - `condensedHistory` — agent-written compression of old notes; read-only in UI
-- `autoCompact` — user preference; when `true`, compact runs automatically when `notes.length >= 8`
+- `autoCompact` — user preference; when `true`, compact runs automatically when `notes.length >= 8` **after** a note is appended
 - `lastAgentRun` — ISO timestamp of last summarize or compact run
 
 `fullContent` (the original trigger content) is never modified. It is the permanent anchor for all summarization.
@@ -57,14 +57,20 @@ autoCompact: z.boolean().optional()         // persisted to agentMetadata.autoCo
 When `acknowledge: true` and `note` is provided:
 1. Call `acknowledgeTrigger()` (existing)
 2. Append `{ id: cuid(), date: now.toISOString(), text: note }` to `agentMetadata.notes`
-3. If `autoCompact === true` and `notes.length >= 8`, run compaction before returning
+3. Check `notes.length >= 8` **after** appending; if `autoCompact === true` at that point, run compaction before returning
+
+> **JSON merge rule:** All `agentMetadata` writes must shallow-merge with the existing JSON blob — never overwrite the full object. Pattern: `{ ...existing.agentMetadata, [changedKey]: newValue }`. A naive `set({ agentMetadata: { autoCompact: true } })` would silently wipe `notes`, `condensedHistory`, and `lastAgentRun`. This applies to every route that touches `agentMetadata`.
+
+When `autoCompact` field is provided (without acknowledge):
+1. Read existing `agentMetadata` from trigger row
+2. Write `{ ...existing, autoCompact: value }` — all other fields preserved
 
 ### New routes under `app/api/triggers/[id]/`
 
 | Method | Path | Body | Action |
 |---|---|---|---|
 | `POST` | `notes/route.ts` | `{ text: string }` | Append note with generated ID + current date |
-| `PATCH` | `notes/[noteId]/route.ts` | `{ text: string }` | Update note text by ID |
+| `PATCH` | `notes/[noteId]/route.ts` | `{ text: string (max 500) }` | Update note text by ID |
 | `DELETE` | `notes/[noteId]/route.ts` | — | Remove note by ID |
 | `POST` | `summarize/route.ts` | — | Re-summarize using fullContent + condensedHistory + notes |
 | `POST` | `compact/route.ts` | — | Compact notes into condensedHistory |
@@ -74,8 +80,10 @@ When `acknowledge: true` and `note` is provided:
 - Return 404 if trigger not found or not owned
 - Return updated trigger on success
 
+**Hard cap:** `notes` may never exceed 50 entries regardless of `autoCompact` setting. `POST .../notes` and the acknowledge note append both enforce this — if `notes.length` is already 50, return `400 { error: 'Note limit reached', code: 'NOTE_LIMIT' }`.
+
 **Auto-compact trigger** (shared logic, extracted to helper):
-After any note append (manual or via acknowledge), if `agentMetadata.autoCompact === true` and `notes.length >= 8`, run `compactNotes()` and write result to `condensedHistory`, clearing compacted notes.
+After any note append (manual or via acknowledge), check `notes.length >= 8` **post-append**. If `autoCompact === true` (read from the stored `agentMetadata`, not the request body), run `compactNotes()` and write result to `condensedHistory`, clearing compacted notes. The response always reflects the **post-compaction** state (notes cleared, condensedHistory updated).
 
 **Compact behavior:** All current notes are compacted. After compaction, `agentMetadata.notes` is reset to `[]`. The condensed result is written to `agentMetadata.condensedHistory`. `lastAgentRun` is updated.
 
@@ -120,9 +128,11 @@ export async function compactNotes(
 ): Promise<string>
 ```
 
-Prompt:
+Prompt (notes serialized as `- [date]: [text]` per line, same format as `summarizeTrigger`):
 ```
-You have these review notes: [notes]
+You have these review notes:
+- [date]: [text]
+...
 Existing condensed history (if any): [existingHistory]
 
 Compress into 2-3 sentences of condensed history.
@@ -184,7 +194,7 @@ interface MemoryPanelProps {
    - `+ Add note` button at bottom of list
 3. **Settings row:** "Auto-compact after 8 notes" label + toggle switch
 4. **Compact now** button — disabled if `notes.length < 2`; shows note count
-5. **Condensed History** — collapsible accordion (collapsed by default), shows `condensedHistory` text + date compacted
+5. **Condensed History** — collapsible accordion (collapsed by default), shows `condensedHistory` text + "compacted [date]" where date is read from `lastAgentRun` (compact always updates `lastAgentRun`, so this is accurate)
 6. **AI Summary** section
    - Read-only summary text (or "No summary yet." if absent)
    - `↻ Re-summarize` button beside section label; disabled while loading
@@ -207,7 +217,7 @@ interface MemoryPanelProps {
 - Add `acknowledgeOpen: boolean` state, default `false`
 - Acknowledge button sets `acknowledgeOpen: true` instead of calling `onAcknowledge` directly
 - Render `<AcknowledgeSheet trigger={trigger} open={acknowledgeOpen} onOpenChange={setAcknowledgeOpen} onSuccess={onSuccess} />`
-- Remove direct `onAcknowledge` prop (or keep for backwards compat and wire through AcknowledgeSheet)
+- Remove the `onAcknowledge` prop entirely; `TriggerCard` owns the full acknowledge flow through `AcknowledgeSheet`
 
 ---
 
@@ -240,7 +250,7 @@ interface MemoryPanelProps {
 **New `tests/api/trigger-compact.test.ts`**:
 - `POST .../compact` — calls compactor, writes condensedHistory, clears notes, updates lastAgentRun
 
-**Existing `tests/api.trigger-route.test.ts`** — extend:
+**Existing `tests/api.create-trigger-route.test.ts`** — extend:
 - `PATCH` with `{ acknowledge: true, note }` — acknowledges + appends note
 - `PATCH` with `{ autoCompact: true }` — persists preference to agentMetadata
 
