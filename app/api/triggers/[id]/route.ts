@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { getDb } from '@/lib/db/client'
 import { triggers } from '@/lib/db/schema'
 import { acknowledgeTrigger, rescheduleTrigger } from '@/lib/db/triggers'
+import { makeNote, mergeMetadata, maybeAutoCompact, NOTE_LIMIT } from '@/lib/db/notes'
 import { snapToDate } from '@/lib/services/reviewClock'
 import { getCurrentUser } from '@/lib/auth'
 import { eq, and } from 'drizzle-orm'
@@ -19,6 +20,10 @@ const UpdateTriggerSchema = z.object({
   reviewIntervalDays: z.number().int().min(0).optional(),
   // Special field: when true, calls acknowledgeTrigger() to reset the review clock
   acknowledge: z.boolean().optional(),
+  // Optional note to append to agentMetadata when acknowledging
+  note: z.string().max(500).optional(),
+  // When provided, shallow-merges autoCompact preference into agentMetadata
+  autoCompact: z.boolean().optional(),
   // Special field: when provided (ISO datetime), overrides nextReviewAt (snapped to noon UTC)
   rescheduleDate: z.string().datetime().optional(),
 }).refine(data => Object.keys(data).length > 0, { message: 'At least one field required' })
@@ -51,9 +56,30 @@ export async function PATCH(
     if (parsed.data.acknowledge) {
       const [owned] = await db.select().from(triggers).where(and(eq(triggers.id, id), eq(triggers.userId, user.id))).limit(1)
       if (!owned) return NextResponse.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 })
-      const trigger = await acknowledgeTrigger(db, id)
-      revalidateTriggerViews(trigger.categoryId)
-      return NextResponse.json(trigger)
+
+      let result = await acknowledgeTrigger(db, id)
+
+      // Append note if provided and non-empty
+      const noteText = parsed.data.note?.trim()
+      if (noteText) {
+        const currentNotes = (owned.agentMetadata?.notes ?? [])
+        if (currentNotes.length >= NOTE_LIMIT) {
+          return NextResponse.json({ error: 'Note limit reached', code: 'NOTE_LIMIT' }, { status: 400 })
+        }
+        let newMeta = mergeMetadata(owned.agentMetadata, {
+          notes: [...currentNotes, makeNote(noteText)],
+        })
+        newMeta = await maybeAutoCompact(newMeta)
+        const [updated] = await db
+          .update(triggers)
+          .set({ agentMetadata: newMeta })
+          .where(and(eq(triggers.id, id), eq(triggers.userId, user.id)))
+          .returning()
+        result = updated
+      }
+
+      revalidateTriggerViews(result.categoryId)
+      return NextResponse.json(result)
     }
 
     // Reschedule branch — ownership check, past-date validation, then override nextReviewAt
@@ -81,8 +107,23 @@ export async function PATCH(
       return NextResponse.json(trigger)
     }
 
-    // General field update — remove the acknowledge and rescheduleDate keys before passing to DB
-    const { acknowledge: _, rescheduleDate: __, ...fields } = parsed.data
+    // autoCompact — shallow merge into existing agentMetadata; preserves notes, condensedHistory, etc.
+    if (parsed.data.autoCompact !== undefined) {
+      const [owned] = await db.select().from(triggers).where(and(eq(triggers.id, id), eq(triggers.userId, user.id))).limit(1)
+      if (!owned) return NextResponse.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 })
+      const newMeta = mergeMetadata(owned.agentMetadata, { autoCompact: parsed.data.autoCompact })
+      const [updated] = await db
+        .update(triggers)
+        .set({ agentMetadata: newMeta })
+        .where(and(eq(triggers.id, id), eq(triggers.userId, user.id)))
+        .returning()
+      if (!updated) return NextResponse.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 })
+      revalidateTriggerViews(updated.categoryId)
+      return NextResponse.json(updated)
+    }
+
+    // General field update — remove special keys before passing to DB
+    const { acknowledge: _, rescheduleDate: __, note: ___, autoCompact: ____, ...fields } = parsed.data
     const [updated] = await db
       .update(triggers)
       .set(fields)
