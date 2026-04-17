@@ -62,7 +62,7 @@ export async function PATCH(
       // Append note if provided and non-empty
       const noteText = parsed.data.note?.trim()
       if (noteText) {
-        const currentNotes = (owned.agentMetadata?.notes ?? [])
+        const currentNotes = (result.agentMetadata?.notes ?? [])
         if (currentNotes.length >= NOTE_LIMIT) {
           return NextResponse.json({ error: 'Note limit reached', code: 'NOTE_LIMIT' }, { status: 400 })
         }
