@@ -13,7 +13,7 @@ describe('ChatSheet', () => {
 
   it('renders greeting when no messages', () => {
     render(<ChatSheet open={true} onOpenChange={onOpenChange} />)
-    expect(screen.getByText(/Hi, I'm Sentinel AI/i)).toBeInTheDocument()
+    expect(screen.getByText(/Hi I'm Your Sentinel/i)).toBeInTheDocument()
   })
 
   it('save button is disabled with fewer than 2 turns', () => {

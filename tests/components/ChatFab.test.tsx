@@ -30,7 +30,7 @@ describe('ChatFab', () => {
     const btn = screen.getByRole('button', { name: /open chat/i })
     fireEvent.pointerDown(btn, { clientX: 100, clientY: 100 })
     fireEvent.pointerUp(btn, { clientX: 100, clientY: 100 })
-    expect(await screen.findByText(/Hi, I'm Sentinel AI/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Hi I'm Your Sentinel/i)).toBeInTheDocument()
   })
 
   it('does not open sheet when dragged beyond threshold', () => {
@@ -39,6 +39,6 @@ describe('ChatFab', () => {
     fireEvent.pointerDown(btn, { clientX: 100, clientY: 100 })
     fireEvent.pointerMove(btn, { clientX: 120, clientY: 120 })
     fireEvent.pointerUp(btn, { clientX: 120, clientY: 120 })
-    expect(screen.queryByText(/Hi, I'm Sentinel AI/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Hi I'm Your Sentinel/i)).not.toBeInTheDocument()
   })
 })

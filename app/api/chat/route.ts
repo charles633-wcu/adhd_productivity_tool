@@ -47,39 +47,44 @@ export async function POST(req: Request) {
   // Mutable message history for the tool loop
   const messages: ChatMessage[] = body.messages as ChatMessage[]
 
-  for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-    const response = await chatProvider.chat(messages, toolDefinitions)
+  try {
+    for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
+      const response = await chatProvider.chat(messages, toolDefinitions)
 
-    if (response.type === 'text') {
-      return NextResponse.json({ reply: response.text })
-    }
+      if (response.type === 'text') {
+        return NextResponse.json({ reply: response.text })
+      }
 
-    // Execute all tool calls in parallel
-    const toolResults = await Promise.all(
-      response.toolCalls.map(async tc => {
-        try {
-          const handler = toolMap[tc.name]
-          if (!handler) {
-            return { tool_call_id: tc.id, name: tc.name, result: { error: `Unknown tool: ${tc.name}` } }
+      // Execute all tool calls in parallel
+      const toolResults = await Promise.all(
+        response.toolCalls.map(async tc => {
+          try {
+            const handler = toolMap[tc.name]
+            if (!handler) {
+              return { tool_call_id: tc.id, name: tc.name, result: { error: `Unknown tool: ${tc.name}` } }
+            }
+            const result = await handler(tc.arguments, user.id, db)
+            return { tool_call_id: tc.id, name: tc.name, result }
+          } catch (err) {
+            return { tool_call_id: tc.id, name: tc.name, result: { error: `Tool failed: ${String(err)}` } }
           }
-          const result = await handler(tc.arguments, user.id, db)
-          return { tool_call_id: tc.id, name: tc.name, result }
-        } catch (err) {
-          return { tool_call_id: tc.id, name: tc.name, result: { error: `Tool failed: ${String(err)}` } }
-        }
-      })
-    )
+        })
+      )
 
-    // Append assistant tool_calls message + one tool result message per call
-    messages.push({ role: 'assistant', content: JSON.stringify(response.toolCalls) })
-    for (const tr of toolResults) {
-      messages.push({
-        role: 'tool',
-        tool_call_id: tr.tool_call_id,
-        name: tr.name,
-        content: JSON.stringify(tr.result),
-      })
+      // Append assistant tool_calls message + one tool result message per call
+      messages.push({ role: 'assistant', content: JSON.stringify(response.toolCalls) })
+      for (const tr of toolResults) {
+        messages.push({
+          role: 'tool',
+          tool_call_id: tr.tool_call_id,
+          name: tr.name,
+          content: JSON.stringify(tr.result),
+        })
+      }
     }
+  } catch (err) {
+    console.error('[chat] provider error:', err)
+    return NextResponse.json({ error: 'AI service error' }, { status: 502 })
   }
 
   // Loop cap hit
