@@ -1,22 +1,22 @@
-// Force dynamic rendering so the ReviewBanner count is never served from cache
+// Force dynamic rendering so the home due-count badge is never served from cache.
 export const dynamic = 'force-dynamic'
 
+import Link from 'next/link'
+import { eq, and, lte, count as drizzleCount, inArray } from 'drizzle-orm'
+import { HomePill } from '@/components/HomePill'
+import { CategoryCanvas } from '@/components/CategoryCanvas'
+import { TriggerStatusSummary } from '@/components/TriggerStatusSummary'
+import { ChatFab } from '@/components/ChatFab'
+import { getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db/client'
 import { categories, triggers } from '@/lib/db/schema'
-import { eq, and, lte, count as drizzleCount } from 'drizzle-orm'
-import { getCurrentUser } from '@/lib/auth'
-import { ReviewBanner } from '@/components/ReviewBanner'
-import { CategoryCanvas } from '@/components/CategoryCanvas'
-import { HomeClient } from '@/components/HomeClient'
-import { TriggerStatusSummary } from '@/components/TriggerStatusSummary'
-import { ScheduleCalendar } from '@/components/ScheduleCalendar'
 
-// Home page — server component that fetches category list and due-count, then passes to client
+// Home page server component. Fetches counts and category state, then renders the
+// canvas as the fixed app surface with overlay controls above it.
 export default async function HomePage() {
   const user = await getCurrentUser()
   const db = getDb()
 
-  // Count triggers due within 1 day
   const oneDayFromNow = new Date(Date.now() + 24 * 60 * 60 * 1000)
   const [{ value: dueCount }] = await db
     .select({ value: drizzleCount() })
@@ -46,85 +46,83 @@ export default async function HomePage() {
     statusCounts[row.status] = Number(row.value)
   }
 
-  // Fetch all active triggers for the home-page scheduling calendar
   const allActiveTriggers = await db
     .select()
     .from(triggers)
     .where(and(eq(triggers.userId, user.id), eq(triggers.status, 'active')))
 
-  // Fetch categories with active trigger counts
-  const categoryList = await db.select().from(categories).where(eq(categories.userId, user.id))
-  const triggerCounts = await Promise.all(
-    categoryList.map(async (cat) => {
-      const [{ value }] = await db
-        .select({ value: drizzleCount() })
-        .from(triggers)
-        .where(and(eq(triggers.categoryId, cat.id), eq(triggers.status, 'active')))
-      return { categoryId: cat.id, count: Number(value) }
-    })
-  )
+  const categoryList = await db
+    .select()
+    .from(categories)
+    .where(eq(categories.userId, user.id))
 
+  // Single grouped query replaces the previous N per-category queries
+  const countRows = categoryList.length > 0
+    ? await db
+        .select({ categoryId: triggers.categoryId, count: drizzleCount() })
+        .from(triggers)
+        .where(and(
+          inArray(triggers.categoryId, categoryList.map(c => c.id)),
+          eq(triggers.status, 'active'),
+        ))
+        .groupBy(triggers.categoryId)
+    : []
+
+  const countMap = Object.fromEntries(countRows.map(r => [r.categoryId, Number(r.count)]))
   const categoriesWithCounts = categoryList.map(cat => ({
     ...cat,
-    count: triggerCounts.find(t => t.categoryId === cat.id)?.count ?? 0,
+    count: countMap[cat.id] ?? 0,
   }))
 
-  // Serialize Date fields so they survive the server→client boundary as strings
-  const serializedTriggers = allActiveTriggers.map(t => ({
-    ...t,
-    nextReviewAt: t.nextReviewAt.toISOString(),
-    lastReviewedAt: t.lastReviewedAt?.toISOString() ?? null,
-    createdAt: t.createdAt.toISOString(),
-    updatedAt: t.updatedAt.toISOString(),
+  const serializedTriggers = allActiveTriggers.map(trigger => ({
+    ...trigger,
+    nextReviewAt: trigger.nextReviewAt.toISOString(),
+    lastReviewedAt: trigger.lastReviewedAt?.toISOString() ?? null,
+    createdAt: trigger.createdAt.toISOString(),
+    updatedAt: trigger.updatedAt.toISOString(),
   }))
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Sticky header */}
-      <header className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold tracking-tight leading-none">Sentinel</h1>
-            <p className="text-xs text-muted-foreground mt-0.5 font-mono">Intelligence Layer</p>
+    <div className="fixed inset-0 overflow-hidden bg-background">
+      {categoriesWithCounts.length > 0 && (
+        <CategoryCanvas categories={categoriesWithCounts} />
+      )}
+
+      <HomePill categories={categoriesWithCounts} triggers={serializedTriggers} />
+
+      {Number(dueCount) > 0 && (
+        <Link
+          href="/review"
+          className="fixed left-4 top-[70px] z-40 flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/12 px-4 min-h-[40px] text-sm font-semibold text-amber-400 backdrop-blur-sm hover:bg-amber-500/20 transition-colors"
+        >
+          <span aria-hidden="true">⚠</span>
+          {Number(dueCount)} due
+          <span className="text-amber-400/60">→ Review</span>
+        </Link>
+      )}
+
+      <div className="pointer-events-none absolute left-4 bottom-24 z-10">
+        <TriggerStatusSummary
+          active={statusCounts.active}
+          snoozed={statusCounts.snoozed}
+          archived={statusCounts.archived}
+          className="w-24"
+        />
+      </div>
+
+      <ChatFab />
+
+      {categoriesWithCounts.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center px-6">
+          <div className="w-full max-w-md rounded-[28px] border border-dashed border-border/70 bg-background/72 px-8 py-12 text-center shadow-[0_24px_80px_rgba(0,0,0,0.22)] backdrop-blur-xl">
+            <p className="text-4xl leading-none">📡</p>
+            <p className="mt-4 text-base font-semibold text-foreground">No categories yet</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Tap <span className="font-mono text-primary">Category</span> to create your first cluster.
+            </p>
           </div>
-          <HomeClient categories={categoriesWithCounts} />
         </div>
-      </header>
-
-      {/* Main content — narrow for banner, full-width for canvas */}
-      <main className="flex-1 flex flex-col">
-        <div className="max-w-2xl mx-auto w-full px-4 pt-6">
-          {/* ReviewBanner — only shown when items are due */}
-          <ReviewBanner count={Number(dueCount)} />
-
-          {/* Scheduling calendar — spread triggers across the next 6 weeks */}
-          <ScheduleCalendar triggers={serializedTriggers} />
-        </div>
-
-        {/* Categories — full-width hex canvas */}
-        <section className="relative flex-1 px-4 pt-4 pb-6">
-          <h2 className="max-w-2xl mx-auto text-xs font-mono font-medium text-muted-foreground uppercase tracking-widest mb-4">
-            Categories
-          </h2>
-          <div className="pointer-events-none absolute inset-x-4 top-11 z-10">
-            <TriggerStatusSummary
-              active={statusCounts.active}
-              snoozed={statusCounts.snoozed}
-              archived={statusCounts.archived}
-              className="mx-auto max-w-2xl"
-            />
-          </div>
-          {categoriesWithCounts.length === 0 ? (
-            <div className="max-w-2xl mx-auto flex flex-col items-center justify-center py-16 text-center border border-dashed border-border rounded-xl">
-              <p className="text-2xl mb-2">📡</p>
-              <p className="text-sm font-medium text-foreground">No categories yet</p>
-              <p className="text-xs text-muted-foreground mt-1">Click <span className="font-mono text-primary">+ Category</span> to get started</p>
-            </div>
-          ) : (
-            <CategoryCanvas categories={categoriesWithCounts} />
-          )}
-        </section>
-      </main>
+      )}
     </div>
   )
 }

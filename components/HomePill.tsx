@@ -13,7 +13,7 @@
 
 import { useState, useEffect, useRef, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { FileUp, CalendarDays, FolderPlus, Plus } from 'lucide-react'
+import { FileUp, CalendarDays, FolderPlus, Plus, MessageCircle } from 'lucide-react'
 import {
   Sheet,
   SheetContent,
@@ -213,7 +213,7 @@ export function HomePill({ categories, triggers }: HomePillProps) {
         {/* App switcher — Triggers (active). Future apps added here. */}
         <button
           type="button"
-          className="flex items-center gap-1.5 rounded-xl bg-primary text-primary-foreground px-4 min-h-[44px] text-[13px] font-semibold"
+          className="flex items-center gap-1.5 rounded-xl bg-primary text-primary-foreground px-4 min-h-[44px] text-[13px] font-semibold cursor-default"
           aria-current="page"
         >
           <span aria-hidden="true">🎯</span>
@@ -308,6 +308,15 @@ export function HomePill({ categories, triggers }: HomePillProps) {
               >
                 <FileUp className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
                 Import CSV
+              </a>
+
+              {/* Chat History row */}
+              <a
+                href="/chat/history"
+                className="w-full flex items-center gap-3 rounded-xl px-3 min-h-[44px] text-sm font-medium text-foreground hover:bg-muted/60 transition-colors"
+              >
+                <MessageCircle className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
+                Chat History
               </a>
             </div>
 
