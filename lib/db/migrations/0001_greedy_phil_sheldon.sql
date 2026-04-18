@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `hex_layout` text;

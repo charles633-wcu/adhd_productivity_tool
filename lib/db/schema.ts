@@ -82,6 +82,19 @@ export const triggers = sqliteTable('triggers', {
     .$onUpdate(() => new Date()),
 })
 
+// Saved chat conversations — user-scoped, messages stored as JSON
+export const conversations = sqliteTable('conversations', {
+  id: text('id').primaryKey().$defaultFn(() => createId()),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // Auto-generated from first user message, truncated to 60 chars
+  title: text('title').notNull(),
+  // JSON array of { role: 'user'|'assistant', content: string }
+  messages: text('messages', { mode: 'json' }).$type<{ role: string; content: string }[]>().notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+})
+
 // Infer TypeScript types from schema
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
@@ -89,3 +102,5 @@ export type Category = typeof categories.$inferSelect
 export type NewCategory = typeof categories.$inferInsert
 export type Trigger = typeof triggers.$inferSelect
 export type NewTrigger = typeof triggers.$inferInsert
+export type Conversation = typeof conversations.$inferSelect
+export type NewConversation = typeof conversations.$inferInsert

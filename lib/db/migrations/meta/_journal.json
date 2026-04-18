@@ -8,6 +8,20 @@
       "when": 1775816896252,
       "tag": "0000_lethal_the_anarchist",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1775904100387,
+      "tag": "0001_greedy_phil_sheldon",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1776507556378,
+      "tag": "0002_low_plazm",
+      "breakpoints": true
     }
   ]
 }
