@@ -71,8 +71,8 @@ export async function POST(req: Request) {
         })
       )
 
-      // Append assistant tool_calls message + one tool result message per call
-      messages.push({ role: 'assistant', content: JSON.stringify(response.toolCalls) })
+      // Append assistant message with tool_calls array (OpenAI requires exact replay of this shape)
+      messages.push({ role: 'assistant', content: null, tool_calls: response.toolCalls })
       for (const tr of toolResults) {
         messages.push({
           role: 'tool',

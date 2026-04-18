@@ -8,9 +8,11 @@ import OpenAI from 'openai'
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'tool'
-  content: string
+  content: string | null
   tool_call_id?: string  // required when role === 'tool'
   name?: string          // tool name, present when role === 'tool'
+  // Present on assistant messages that triggered tool calls — must be replayed verbatim to OpenAI
+  tool_calls?: ToolCall[]
 }
 
 export interface ToolDefinition {
@@ -43,9 +45,21 @@ function makeOpenAiProvider(): ChatProvider {
       // Map internal ChatMessage shape → OpenAI message shape
       const openAiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = messages.map(m => {
         if (m.role === 'tool') {
-          return { role: 'tool', content: m.content, tool_call_id: m.tool_call_id! }
+          return { role: 'tool', content: m.content ?? '', tool_call_id: m.tool_call_id! }
         }
-        return { role: m.role as 'user' | 'assistant', content: m.content }
+        // Assistant messages that triggered tool calls must be replayed with the tool_calls array
+        if (m.role === 'assistant' && m.tool_calls) {
+          return {
+            role: 'assistant',
+            content: null,
+            tool_calls: m.tool_calls.map(tc => ({
+              id: tc.id,
+              type: 'function' as const,
+              function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+            })),
+          }
+        }
+        return { role: m.role as 'user' | 'assistant', content: m.content ?? '' }
       })
 
       // Map tool definitions → OpenAI tool shape
