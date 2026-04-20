@@ -62,7 +62,7 @@ describe('POST /api/chat', () => {
 
   it('executes tool calls and re-calls provider', async () => {
     chatProvider.chat
-      .mockResolvedValueOnce({ type: 'tool_calls', toolCalls: [{ id: 'tc1', name: 'test_tool', arguments: {} }] })
+      .mockResolvedValueOnce({ type: 'tool_calls', toolCalls: [{ id: 'tc1', name: 'test_tool', arguments: {} }], text: null })
       .mockResolvedValueOnce({ type: 'text', text: 'Done with tools!' })
 
     const res = await POST(new Request('http://localhost/api/chat', {

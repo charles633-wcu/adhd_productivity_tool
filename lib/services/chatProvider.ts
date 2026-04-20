@@ -7,7 +7,7 @@ import OpenAI from 'openai'
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface ChatMessage {
-  role: 'user' | 'assistant' | 'tool'
+  role: 'user' | 'assistant' | 'tool' | 'system'
   content: string | null
   tool_call_id?: string  // required when role === 'tool'
   name?: string          // tool name, present when role === 'tool'
@@ -29,7 +29,7 @@ export interface ToolCall {
 
 export type ChatProviderResponse =
   | { type: 'text'; text: string }
-  | { type: 'tool_calls'; toolCalls: ToolCall[] }
+  | { type: 'tool_calls'; toolCalls: ToolCall[]; text: string | null }
 
 export interface ChatProvider {
   chat(messages: ChatMessage[], tools: ToolDefinition[]): Promise<ChatProviderResponse>
@@ -59,6 +59,10 @@ function makeOpenAiProvider(): ChatProvider {
             })),
           }
         }
+        // System messages must be mapped explicitly — falling through to the cast below would silently strip the role
+        if (m.role === 'system') {
+          return { role: 'system', content: m.content ?? '' }
+        }
         return { role: m.role as 'user' | 'assistant', content: m.content ?? '' }
       })
 
@@ -83,6 +87,7 @@ function makeOpenAiProvider(): ChatProvider {
       if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls) {
         return {
           type: 'tool_calls',
+          text: choice.message.content ?? null,
           toolCalls: choice.message.tool_calls
             .filter(tc => tc.type === 'function')
             .map(tc => {
