@@ -2,6 +2,9 @@ import { describe, it, expect, vi } from 'vitest'
 import { POST } from '@/app/api/emoji/suggest/route'
 import { NextRequest } from 'next/server'
 
+// Mock auth — route requires getCurrentUser() to prevent quota abuse
+vi.mock('@/lib/auth', () => ({ getCurrentUser: vi.fn().mockResolvedValue({ id: 'user-1' }) }))
+
 // Mock OpenAI
 vi.mock('openai', () => {
   const MockOpenAI = vi.fn(function() {
