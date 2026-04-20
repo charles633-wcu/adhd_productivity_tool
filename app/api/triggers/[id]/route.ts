@@ -6,7 +6,7 @@ import { getDb } from '@/lib/db/client'
 import { triggers } from '@/lib/db/schema'
 import { acknowledgeTrigger, rescheduleTrigger } from '@/lib/db/triggers'
 import { makeNote, mergeMetadata, maybeAutoCompact, NOTE_LIMIT } from '@/lib/db/notes'
-import { snapToDate } from '@/lib/services/reviewClock'
+import { deriveNextReviewAt, snapToDate } from '@/lib/services/reviewClock'
 import { getCurrentUser } from '@/lib/auth'
 import { eq, and } from 'drizzle-orm'
 
@@ -124,9 +124,22 @@ export async function PATCH(
 
     // General field update — remove special keys before passing to DB
     const { acknowledge: _, rescheduleDate: __, note: ___, autoCompact: ____, ...fields } = parsed.data
+    let updateFields = { ...fields }
+    if (parsed.data.reviewIntervalDays !== undefined) {
+      const [owned] = await db.select().from(triggers).where(and(eq(triggers.id, id), eq(triggers.userId, user.id))).limit(1)
+      if (!owned) return NextResponse.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 })
+      updateFields = {
+        ...updateFields,
+        nextReviewAt: deriveNextReviewAt({
+          createdAt: owned.createdAt,
+          lastReviewedAt: owned.lastReviewedAt,
+          reviewIntervalDays: parsed.data.reviewIntervalDays,
+        }),
+      }
+    }
     const [updated] = await db
       .update(triggers)
-      .set(fields)
+      .set(updateFields)
       .where(and(eq(triggers.id, id), eq(triggers.userId, user.id)))
       .returning()
 

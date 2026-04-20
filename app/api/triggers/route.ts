@@ -6,6 +6,7 @@ import { triggers } from '@/lib/db/schema'
 import { createTrigger } from '@/lib/db/triggers'
 import { getCurrentUser } from '@/lib/auth'
 import { eq, and } from 'drizzle-orm'
+import { deriveNextReviewAt } from '@/lib/services/reviewClock'
 
 // Zod schema for creating a trigger
 const CreateTriggerSchema = z.object({
@@ -49,10 +50,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.message, code: 'VALIDATION_ERROR' }, { status: 400 })
     }
     const db = getDb()
-    // Compute next_review_at at creation time
-    const now = new Date()
-    const nextReviewAt = new Date(now.getTime() + parsed.data.reviewIntervalDays * 24 * 60 * 60 * 1000)
-    const trigger = await createTrigger(db, { ...parsed.data, userId: user.id, nextReviewAt })
+    const createdAt = new Date()
+    const nextReviewAt = deriveNextReviewAt({
+      createdAt,
+      lastReviewedAt: null,
+      reviewIntervalDays: parsed.data.reviewIntervalDays,
+    })
+    const trigger = await createTrigger(db, { ...parsed.data, userId: user.id, createdAt, nextReviewAt })
     return NextResponse.json(trigger, { status: 201 })
   } catch (error) {
     return NextResponse.json({ error: String(error), code: 'DB_ERROR' }, { status: 500 })
