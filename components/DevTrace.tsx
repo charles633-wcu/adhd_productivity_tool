@@ -72,10 +72,11 @@ export function DevTrace({ trace, toolDefs, showToolsStrip }: DevTraceProps) {
                       <span className="text-muted-foreground/60"> {JSON.stringify(step.args)}</span>
                     </div>
                   )}
-                  {/* Tool result step — shows item count (or raw truncated value) and duration */}
+                  {/* Tool result step — shows tool name, item count (or raw truncated value) and duration */}
                   {step.type === 'tool_result' && (
                     <div>
                       <span className="text-green-500">result › </span>
+                      <span className="text-foreground/90">{step.toolName} </span>
                       <span className="text-foreground/80">
                         {Array.isArray(step.result)
                           ? `(${step.result.length} item${step.result.length !== 1 ? 's' : ''})`

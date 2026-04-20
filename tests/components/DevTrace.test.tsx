@@ -25,7 +25,8 @@ describe('DevTrace', () => {
   it('expands to show tool call steps on click', () => {
     render(<DevTrace trace={mockTrace} toolDefs={mockDefs} showToolsStrip={false} />)
     fireEvent.click(screen.getByRole('button', { name: /trace/i }))
-    expect(screen.getByText('search_triggers')).toBeInTheDocument()
+    // toolName appears twice: once in the tool_call row, once in the tool_result row
+    expect(screen.getAllByText('search_triggers')).toHaveLength(2)
     expect(screen.getByText(/work/i)).toBeInTheDocument()
     expect(screen.getByText(/42ms/)).toBeInTheDocument()
   })
