@@ -17,6 +17,7 @@ vi.mock('@/lib/services/chatTools', () => ({
     },
   ],
 }))
+vi.mock('@/lib/services/chatSystemPrompt', () => ({ SYSTEM_PROMPT: 'You are Sentinel.' }))
 
 import { POST } from '@/app/api/chat/route'
 
@@ -84,5 +85,68 @@ describe('POST /api/chat', () => {
       headers: { 'Content-Type': 'application/json' },
     }))
     expect(res.status).toBe(400)
+  })
+
+  it('prepends system message as first message sent to provider', async () => {
+    chatProvider.chat.mockResolvedValue({ type: 'text', text: 'Hi!' })
+    await POST(new Request('http://localhost/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'hello' }] }),
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    const sentMessages = chatProvider.chat.mock.calls[0][0]
+    expect(sentMessages[0]).toEqual({ role: 'system', content: 'You are Sentinel.' })
+  })
+
+  it('appends verbose reasoning line to system message in debug mode', async () => {
+    chatProvider.chat.mockResolvedValue({ type: 'text', text: 'Hi!' })
+    await POST(new Request('http://localhost/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'hello' }], debug: true }),
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    const sentMessages = chatProvider.chat.mock.calls[0][0]
+    expect(sentMessages[0].content).toContain('Before calling any tool')
+  })
+
+  it('returns trace array when debug is true', async () => {
+    // Include text: null on tool_calls mock — route reads response.text for the reasoning step
+    chatProvider.chat
+      .mockResolvedValueOnce({ type: 'tool_calls', toolCalls: [{ id: 'tc1', name: 'test_tool', arguments: { q: 'x' } }], text: null })
+      .mockResolvedValueOnce({ type: 'text', text: 'Done!' })
+
+    const res = await POST(new Request('http://localhost/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'search' }], debug: true }),
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    const body = await res.json()
+    expect(body.trace).toBeDefined()
+    expect(body.trace.length).toBeGreaterThan(0)
+    const toolCallStep = body.trace.find((s: { type: string }) => s.type === 'tool_call')
+    expect(toolCallStep?.toolName).toBe('test_tool')
+  })
+
+  it('omits trace when debug is false or absent', async () => {
+    chatProvider.chat.mockResolvedValue({ type: 'text', text: 'Hi!' })
+    const res = await POST(new Request('http://localhost/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'hello' }] }),
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    const body = await res.json()
+    expect(body.trace).toBeUndefined()
+  })
+
+  it('returns 502 without trace when provider throws with debug true', async () => {
+    chatProvider.chat.mockRejectedValue(new Error('OpenAI down'))
+    const res = await POST(new Request('http://localhost/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'hello' }], debug: true }),
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    expect(res.status).toBe(502)
+    const body = await res.json()
+    expect(body.trace).toBeUndefined()
   })
 })
