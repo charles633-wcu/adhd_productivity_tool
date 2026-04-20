@@ -172,9 +172,9 @@ export function ChatSheet({ open, onOpenChange }: ChatSheetProps) {
               {msg.content}
             </div>
             {/* Dev trace below assistant reply */}
-            {devMode && msg.role === 'assistant' && msg.trace !== undefined && (
+            {devMode && msg.role === 'assistant' && (
               <DevTrace
-                trace={msg.trace}
+                trace={msg.trace ?? []}
                 toolDefs={CHAT_TOOL_DEFS}
                 showToolsStrip={devMode && i === firstAssistantIdx}
               />
