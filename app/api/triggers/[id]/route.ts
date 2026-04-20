@@ -130,7 +130,7 @@ export async function PATCH(
 
     // General field update — remove special keys before passing to DB
     const { acknowledge: _, rescheduleDate: __, note: ___, autoCompact: ____, ...fields } = parsed.data
-    let updateFields = { ...fields }
+    let updateFields: Record<string, unknown> = { ...fields }
     if (parsed.data.reviewIntervalDays !== undefined) {
       const [owned] = await db.select().from(triggers).where(and(eq(triggers.id, id), eq(triggers.userId, user.id))).limit(1)
       if (!owned) return NextResponse.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 })
