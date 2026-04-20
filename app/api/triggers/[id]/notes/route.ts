@@ -8,6 +8,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { makeNote, mergeMetadata, maybeAutoCompact, NOTE_LIMIT } from '@/lib/db/notes'
 import { eq, and } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
+import { logTriggerAction } from '@/lib/dev/triggerActionLogger'
 
 const NoteSchema = z.object({
   text: z.string().trim().min(1, 'Note text required').max(500),
@@ -48,6 +49,7 @@ export async function POST(
       .where(and(eq(triggers.id, id), eq(triggers.userId, user.id)))
       .returning()
 
+    await logTriggerAction('add_note', updated)
     revalidatePath('/')
     revalidatePath('/review')
     revalidatePath(`/category/${updated.categoryId}`)

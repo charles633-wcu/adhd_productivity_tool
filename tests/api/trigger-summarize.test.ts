@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { getCurrentUser, getDb, summarizeTrigger, mergeMetadata } = vi.hoisted(() => ({
+const { getCurrentUser, getDb, summarizeTrigger, mergeMetadata, logTriggerAction } = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   getDb: vi.fn(),
   summarizeTrigger: vi.fn(),
   mergeMetadata: vi.fn((existing: unknown, patch: unknown) => ({ ...(existing as object ?? {}), ...(patch as object) })),
+  logTriggerAction: vi.fn(),
 }))
 
 vi.mock('@/lib/auth', () => ({ getCurrentUser }))
@@ -12,6 +13,7 @@ vi.mock('@/lib/db/client', () => ({ getDb }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/services/summarizer', () => ({ summarizeTrigger }))
 vi.mock('@/lib/db/notes', () => ({ mergeMetadata }))
+vi.mock('@/lib/dev/triggerActionLogger', () => ({ logTriggerAction }))
 
 import { POST } from '@/app/api/triggers/[id]/summarize/route'
 
@@ -50,6 +52,9 @@ describe('POST /api/triggers/[id]/summarize', () => {
       'Original content here with enough extra detail to pass the shared summary eligibility threshold for this route test.',
       { condensedHistory: 'old history', notes: [{ date: '2026-04-01', text: 'a note' }] }
     )
+    expect(logTriggerAction).toHaveBeenCalledWith('summarize', expect.objectContaining({
+      id: 'trig-1',
+    }))
   })
 
   it('returns 404 when trigger not owned', async () => {
@@ -61,6 +66,7 @@ describe('POST /api/triggers/[id]/summarize', () => {
       { params: Promise.resolve({ id: 'ghost' }) }
     )
     expect(res.status).toBe(404)
+    expect(logTriggerAction).not.toHaveBeenCalled()
   })
 
   it('updates summaryStatus to "generated" and lastAgentRun on success', async () => {
@@ -85,6 +91,9 @@ describe('POST /api/triggers/[id]/summarize', () => {
 
     expect((capturedSet as { summaryStatus: string }).summaryStatus).toBe('generated')
     expect((capturedSet as { summary: string }).summary).toBe('Updated summary.')
+    expect(logTriggerAction).toHaveBeenCalledWith('summarize', expect.objectContaining({
+      id: 'trig-1',
+    }))
   })
 
   it('uses title fallback when notes and history make a short trigger summarizable', async () => {
@@ -113,6 +122,9 @@ describe('POST /api/triggers/[id]/summarize', () => {
         notes: [{ date: '2026-04-01', text: trigger.agentMetadata.notes[0].text }],
       }
     )
+    expect(logTriggerAction).toHaveBeenCalledWith('summarize', expect.objectContaining({
+      id: 'trig-1',
+    }))
   })
 
   it('returns 400 when combined content is still too thin to summarize', async () => {
@@ -135,5 +147,6 @@ describe('POST /api/triggers/[id]/summarize', () => {
     expect(payload.code).toBe('INSUFFICIENT_CONTENT')
     expect(String(payload.error)).toContain('Not enough detail')
     expect(summarizeTrigger).not.toHaveBeenCalled()
+    expect(logTriggerAction).not.toHaveBeenCalled()
   })
 })

@@ -9,6 +9,7 @@ import { makeNote, mergeMetadata, maybeAutoCompact, NOTE_LIMIT } from '@/lib/db/
 import { deriveNextReviewAt, snapToDate } from '@/lib/services/reviewClock'
 import { getCurrentUser } from '@/lib/auth'
 import { eq, and } from 'drizzle-orm'
+import { logTriggerAction } from '@/lib/dev/triggerActionLogger'
 
 // Zod schema for partial trigger updates
 const UpdateTriggerSchema = z.object({
@@ -76,6 +77,9 @@ export async function PATCH(
           .where(and(eq(triggers.id, id), eq(triggers.userId, user.id)))
           .returning()
         result = updated
+        await logTriggerAction('acknowledge_note', result)
+      } else {
+        await logTriggerAction('acknowledge', result)
       }
 
       revalidateTriggerViews(result.categoryId)
@@ -103,6 +107,7 @@ export async function PATCH(
       }
 
       const trigger = await rescheduleTrigger(db, id, snapped)
+      await logTriggerAction('reschedule', trigger)
       revalidateTriggerViews(trigger.categoryId)
       return NextResponse.json(trigger)
     }
@@ -118,6 +123,7 @@ export async function PATCH(
         .where(and(eq(triggers.id, id), eq(triggers.userId, user.id)))
         .returning()
       if (!updated) return NextResponse.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 })
+      await logTriggerAction('toggle_auto_compact', updated)
       revalidateTriggerViews(updated.categoryId)
       return NextResponse.json(updated)
     }
@@ -144,6 +150,7 @@ export async function PATCH(
       .returning()
 
     if (!updated) return NextResponse.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 })
+    await logTriggerAction('edit', updated)
     revalidateTriggerViews(updated.categoryId)
     return NextResponse.json(updated)
   } catch (error) {
@@ -165,6 +172,7 @@ export async function DELETE(
     const [owned] = await db.select().from(triggers).where(and(eq(triggers.id, id), eq(triggers.userId, user.id))).limit(1)
     if (!owned) return new NextResponse(null, { status: 204 })
     await db.delete(triggers).where(and(eq(triggers.id, id), eq(triggers.userId, user.id)))
+    await logTriggerAction('delete', { ...owned, deleted: true })
     revalidateTriggerViews(owned.categoryId)
     return new NextResponse(null, { status: 204 })
   } catch (error) {

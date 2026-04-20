@@ -6,12 +6,14 @@ const {
   getDb,
   acknowledgeTrigger,
   rescheduleTrigger,
+  logTriggerAction,
 } = vi.hoisted(() => ({
   revalidatePath: vi.fn(),
   getCurrentUser: vi.fn(),
   getDb: vi.fn(),
   acknowledgeTrigger: vi.fn(),
   rescheduleTrigger: vi.fn(),
+  logTriggerAction: vi.fn(),
 }))
 
 vi.mock('next/cache', () => ({
@@ -31,7 +33,11 @@ vi.mock('@/lib/db/triggers', () => ({
   rescheduleTrigger,
 }))
 
-import { PATCH } from '@/app/api/triggers/[id]/route'
+vi.mock('@/lib/dev/triggerActionLogger', () => ({
+  logTriggerAction,
+}))
+
+import { PATCH, DELETE } from '@/app/api/triggers/[id]/route'
 
 describe('trigger detail route cache invalidation', () => {
   beforeEach(() => {
@@ -79,6 +85,9 @@ describe('trigger detail route cache invalidation', () => {
     expect(revalidatePath).toHaveBeenCalledWith('/')
     expect(revalidatePath).toHaveBeenCalledWith('/review')
     expect(revalidatePath).toHaveBeenCalledWith('/category/cat-1')
+    expect(logTriggerAction).toHaveBeenCalledWith('acknowledge', expect.objectContaining({
+      id: 'trigger-1',
+    }))
   })
 })
 
@@ -127,6 +136,9 @@ describe('PATCH rescheduleDate', () => {
       'trigger-1',
       expect.any(Date)
     )
+    expect(logTriggerAction).toHaveBeenCalledWith('reschedule', expect.objectContaining({
+      id: 'trigger-1',
+    }))
   })
 
   it('returns 404 and does NOT call rescheduleTrigger when trigger belongs to a different user', async () => {
@@ -154,6 +166,7 @@ describe('PATCH rescheduleDate', () => {
 
     expect(res.status).toBe(404)
     expect(rescheduleTrigger).not.toHaveBeenCalled()
+    expect(logTriggerAction).not.toHaveBeenCalled()
   })
 
   it('returns 400 when rescheduleDate is in the past', async () => {
@@ -184,6 +197,7 @@ describe('PATCH rescheduleDate', () => {
 
     expect(res.status).toBe(400)
     expect(rescheduleTrigger).not.toHaveBeenCalled()
+    expect(logTriggerAction).not.toHaveBeenCalled()
   })
 
   it('returns 400 when rescheduleDate is not a valid ISO datetime', async () => {
@@ -200,6 +214,7 @@ describe('PATCH rescheduleDate', () => {
     )
 
     expect(res.status).toBe(400)
+    expect(logTriggerAction).not.toHaveBeenCalled()
   })
 })
 
@@ -260,5 +275,49 @@ describe('PATCH reviewIntervalDays', () => {
       reviewIntervalDays: 3,
       nextReviewAt: new Date('2026-04-18T12:00:00.000Z'),
     })
+    expect(logTriggerAction).toHaveBeenCalledWith('edit', expect.objectContaining({
+      id: 'trigger-1',
+    }))
+  })
+})
+
+describe('DELETE /api/triggers/[id]', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('logs the deleted trigger snapshot before removing it', async () => {
+    getCurrentUser.mockResolvedValue({ id: 'user-1' })
+
+    const owned = {
+      id: 'trigger-1',
+      userId: 'user-1',
+      categoryId: 'cat-1',
+      title: 'Delete me',
+    }
+
+    getDb.mockReturnValue({
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn().mockResolvedValue([owned]),
+          })),
+        })),
+      })),
+      delete: vi.fn(() => ({
+        where: vi.fn().mockResolvedValue(undefined),
+      })),
+    })
+
+    const res = await DELETE(
+      new Request('http://localhost/api/triggers/trigger-1', { method: 'DELETE' }),
+      { params: Promise.resolve({ id: 'trigger-1' }) }
+    )
+
+    expect(res.status).toBe(204)
+    expect(logTriggerAction).toHaveBeenCalledWith('delete', expect.objectContaining({
+      id: 'trigger-1',
+      title: 'Delete me',
+    }))
   })
 })

@@ -8,6 +8,7 @@ const {
   maybeAutoCompact,
   makeNote,
   revalidatePath,
+  logTriggerAction,
 } = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   getDb: vi.fn(),
@@ -16,6 +17,7 @@ const {
   maybeAutoCompact: vi.fn(),
   makeNote: vi.fn(),
   revalidatePath: vi.fn(),
+  logTriggerAction: vi.fn(),
 }))
 
 vi.mock('next/cache', () => ({
@@ -41,6 +43,10 @@ vi.mock('@/lib/db/notes', () => ({
   mergeMetadata: vi.fn((existing: Record<string, unknown> | null, patch: Record<string, unknown>) => ({ ...(existing ?? {}), ...patch })),
   maybeAutoCompact,
   NOTE_LIMIT: 50,
+}))
+
+vi.mock('@/lib/dev/triggerActionLogger', () => ({
+  logTriggerAction,
 }))
 
 import { POST } from '@/app/api/triggers/route'
@@ -92,6 +98,9 @@ describe('trigger create route scheduling', () => {
         nextReviewAt: new Date('2026-04-22T12:00:00.000Z'),
       })
     )
+    expect(logTriggerAction).toHaveBeenCalledWith('create', expect.objectContaining({
+      id: 'trigger-1',
+    }))
   })
 })
 
@@ -130,6 +139,9 @@ describe('PATCH /api/triggers/[id] — note on acknowledge', () => {
     )
     expect(res.status).toBe(200)
     expect(maybeAutoCompact).toHaveBeenCalled()
+    expect(logTriggerAction).toHaveBeenCalledWith('acknowledge_note', expect.objectContaining({
+      id: 'trig-1',
+    }))
   })
 
   it('does not append empty note on acknowledge', async () => {
@@ -152,6 +164,9 @@ describe('PATCH /api/triggers/[id] — note on acknowledge', () => {
     expect(res.status).toBe(200)
     // maybeAutoCompact not called because no note was appended
     expect(maybeAutoCompact).not.toHaveBeenCalled()
+    expect(logTriggerAction).toHaveBeenCalledWith('acknowledge', expect.objectContaining({
+      id: 'trig-1',
+    }))
   })
 
   it('persists autoCompact preference using shallow merge', async () => {
@@ -180,5 +195,8 @@ describe('PATCH /api/triggers/[id] — note on acknowledge', () => {
     expect(meta.autoCompact).toBe(true)
     expect(meta.notes).toHaveLength(1)
     expect(meta.condensedHistory).toBe('old history')
+    expect(logTriggerAction).toHaveBeenCalledWith('toggle_auto_compact', expect.objectContaining({
+      id: 'trig-1',
+    }))
   })
 })

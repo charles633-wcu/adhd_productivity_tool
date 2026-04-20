@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { getCurrentUser, getDb, makeNote, mergeMetadata, maybeAutoCompact } = vi.hoisted(() => ({
+const { getCurrentUser, getDb, makeNote, mergeMetadata, maybeAutoCompact, logTriggerAction } = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   getDb: vi.fn(),
   makeNote: vi.fn(),
   mergeMetadata: vi.fn((existing: unknown, patch: unknown) => ({ ...(existing as object ?? {}), ...(patch as object) })),
   maybeAutoCompact: vi.fn(async (meta: unknown) => meta),
+  logTriggerAction: vi.fn(),
 }))
 
 vi.mock('@/lib/auth', () => ({ getCurrentUser }))
@@ -17,6 +18,10 @@ vi.mock('@/lib/db/notes', () => ({
   maybeAutoCompact,
   NOTE_LIMIT: 50,
   AUTO_COMPACT_THRESHOLD: 8,
+}))
+
+vi.mock('@/lib/dev/triggerActionLogger', () => ({
+  logTriggerAction,
 }))
 
 import { POST } from '@/app/api/triggers/[id]/notes/route'
@@ -50,6 +55,9 @@ describe('POST /api/triggers/[id]/notes', () => {
     )
     expect(res.status).toBe(200)
     expect(makeNote).toHaveBeenCalledWith('new note')
+    expect(logTriggerAction).toHaveBeenCalledWith('add_note', expect.objectContaining({
+      id: 'trig-1',
+    }))
   })
 
   it('returns 404 when trigger not owned by user', async () => {
@@ -66,6 +74,7 @@ describe('POST /api/triggers/[id]/notes', () => {
       { params: Promise.resolve({ id: 'trig-1' }) }
     )
     expect(res.status).toBe(404)
+    expect(logTriggerAction).not.toHaveBeenCalled()
   })
 
   it('returns 400 NOTE_LIMIT when notes array is full', async () => {
@@ -84,6 +93,7 @@ describe('POST /api/triggers/[id]/notes', () => {
     expect(res.status).toBe(400)
     const body = await res.json()
     expect(body.code).toBe('NOTE_LIMIT')
+    expect(logTriggerAction).not.toHaveBeenCalled()
   })
 
   it('calls maybeAutoCompact after appending', async () => {
@@ -99,6 +109,9 @@ describe('POST /api/triggers/[id]/notes', () => {
       { params: Promise.resolve({ id: 'trig-1' }) }
     )
     expect(maybeAutoCompact).toHaveBeenCalled()
+    expect(logTriggerAction).toHaveBeenCalledWith('add_note', expect.objectContaining({
+      id: 'trig-1',
+    }))
   })
 
   it('returns 400 for empty text', async () => {
@@ -114,6 +127,7 @@ describe('POST /api/triggers/[id]/notes', () => {
       { params: Promise.resolve({ id: 'trig-1' }) }
     )
     expect(res.status).toBe(400)
+    expect(logTriggerAction).not.toHaveBeenCalled()
   })
 })
 
@@ -141,6 +155,9 @@ describe('PATCH /api/triggers/[id]/notes/[noteId]', () => {
     )
     expect(res.status).toBe(200)
     expect(mergeMetadata).toHaveBeenCalled()
+    expect(logTriggerAction).toHaveBeenCalledWith('edit_note', expect.objectContaining({
+      id: 'trig-1',
+    }))
   })
 
   it('returns 404 when noteId not found', async () => {
@@ -156,6 +173,7 @@ describe('PATCH /api/triggers/[id]/notes/[noteId]', () => {
       { params: Promise.resolve({ id: 'trig-1', noteId: 'ghost' }) }
     )
     expect(res.status).toBe(404)
+    expect(logTriggerAction).not.toHaveBeenCalled()
   })
 })
 
@@ -178,6 +196,9 @@ describe('DELETE /api/triggers/[id]/notes/[noteId]', () => {
       { params: Promise.resolve({ id: 'trig-1', noteId: 'note-1' }) }
     )
     expect(res.status).toBe(200)
+    expect(logTriggerAction).toHaveBeenCalledWith('delete_note', expect.objectContaining({
+      id: 'trig-1',
+    }))
   })
 
   it('returns 404 when noteId not found', async () => {
@@ -189,6 +210,7 @@ describe('DELETE /api/triggers/[id]/notes/[noteId]', () => {
       { params: Promise.resolve({ id: 'trig-1', noteId: 'ghost' }) }
     )
     expect(res.status).toBe(404)
+    expect(logTriggerAction).not.toHaveBeenCalled()
   })
 
   it('returns 404 for IDOR (wrong user)', async () => {
@@ -202,5 +224,6 @@ describe('DELETE /api/triggers/[id]/notes/[noteId]', () => {
       { params: Promise.resolve({ id: 'trig-1', noteId: 'note-1' }) }
     )
     expect(res.status).toBe(404)
+    expect(logTriggerAction).not.toHaveBeenCalled()
   })
 })

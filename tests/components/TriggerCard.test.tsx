@@ -3,17 +3,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { TriggerCard } from '@/components/TriggerCard'
 import type { Trigger } from '@/lib/db/schema'
 
-vi.mock('@/components/AcknowledgeSheet', () => ({
-  AcknowledgeSheet: ({ open }: { open: boolean }) =>
-    open ? <div>What happened during review…</div> : null,
-}))
-
 vi.mock('@/components/TriggerMemorySheet', () => ({
-  TriggerMemorySheet: ({ open }: { open: boolean }) =>
-    open ? <div>Memory sheet open</div> : null,
+  TriggerMemorySheet: ({ open, startInAddNoteMode }: { open: boolean; startInAddNoteMode?: boolean }) =>
+    open ? <div>{startInAddNoteMode ? 'Memory sheet add note open' : 'Memory sheet open'}</div> : null,
 }))
 
-// Minimal trigger factory for tests
 function makeTrigger(overrides: Partial<Trigger> = {}): Trigger {
   return {
     id: 'trig-1',
@@ -39,16 +33,24 @@ function makeTrigger(overrides: Partial<Trigger> = {}): Trigger {
 describe('TriggerCard', () => {
   const mockSuccess = vi.fn()
   const mockEdit = vi.fn()
+  const mockFetch = vi.fn()
 
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-19T12:00:00.000Z'))
     mockSuccess.mockReset()
     mockEdit.mockReset()
+    mockFetch.mockReset()
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    })
+    vi.stubGlobal('fetch', mockFetch)
   })
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.unstubAllGlobals()
   })
 
   it('renders the AI summary when summaryStatus is generated', () => {
@@ -83,17 +85,36 @@ describe('TriggerCard', () => {
     expect(screen.getByText(/next apr 20/i)).toBeTruthy()
   })
 
-  it('opens AcknowledgeSheet when Acknowledge button is clicked', () => {
+  it('acknowledges immediately when Acknowledge button is clicked', async () => {
+    vi.useRealTimers()
     const trigger = makeTrigger()
     render(<TriggerCard trigger={trigger} categoryName="Work" onSuccess={mockSuccess} onEdit={mockEdit} onDelete={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: /acknowledge/i }))
-    expect(screen.getByText(/what happened during review/i)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /^acknowledge$/i }))
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/triggers/trig-1',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ acknowledge: true }),
+      })
+    )
+    expect(mockSuccess).toHaveBeenCalled()
+    expect(screen.queryByText(/add note sheet open/i)).toBeNull()
   })
 
-  it('opens Memory from the trigger card', () => {
+  it('opens the note sheet when Add note is clicked', () => {
     const trigger = makeTrigger()
     render(<TriggerCard trigger={trigger} categoryName="Work" onSuccess={mockSuccess} onEdit={mockEdit} onDelete={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: /memory/i }))
+    fireEvent.click(screen.getByRole('button', { name: /add note/i }))
+    expect(screen.getByText(/memory sheet add note open/i)).toBeTruthy()
+  })
+
+  it('shows memory note count and opens memory from the trigger card', () => {
+    const trigger = makeTrigger()
+    render(<TriggerCard trigger={trigger} categoryName="Work" onSuccess={mockSuccess} onEdit={mockEdit} onDelete={vi.fn()} />)
+    expect(screen.getByRole('button', { name: /memory \(0\)/i })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /memory \(0\)/i }))
     expect(screen.getByText(/memory sheet open/i)).toBeTruthy()
   })
 
@@ -101,6 +122,7 @@ describe('TriggerCard', () => {
     const trigger = makeTrigger()
     render(<TriggerCard trigger={trigger} categoryName="Work" onSuccess={mockSuccess} onEdit={mockEdit} onDelete={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getByText(/^original$/i)).toBeTruthy()
     expect(screen.getByText('Full content body here')).toBeTruthy()
   })
 

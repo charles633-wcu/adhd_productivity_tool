@@ -1,0 +1,54 @@
+```mermaid
+  flowchart TD
+      U[User in Browser]
+
+      subgraph Frontend
+          UI[UI Components<br/>components/*]
+          Pages[Pages / Layouts<br/>app/*]
+      end
+
+      subgraph NextServer[Next.js Server]
+          ServerPages[Server-rendered pages<br/>app/page.tsx<br/>app/review/page.tsx<br/>app/category/[id]/page.tsx]
+          APIRoutes[API routes<br/>app/api/*]
+      end
+
+      subgraph Domain[App Logic]
+          Auth[Auth stub<br/>lib/auth.ts]
+          ReviewLogic[Review clock logic<br/>lib/services/reviewClock.ts]
+          TriggerLogic[Trigger DB logic<br/>lib/db/triggers.ts]
+          OtherServices[Other services<br/>summarizer / notifications / chat tools]
+      end
+
+      subgraph Data[Persistence]
+          DBClient[DB client<br/>lib/db/client.ts]
+          Schema[Schema<br/>lib/db/schema.ts]
+          SQLite[(SQLite DB<br/>sentinel.db)]
+      end
+
+      U --> UI
+      U --> Pages
+
+      Pages --> ServerPages
+      UI -->|fetch /api/...| APIRoutes
+
+      ServerPages --> Auth
+      ServerPages --> DBClient
+      ServerPages --> ReviewLogic
+
+      APIRoutes --> Auth
+      APIRoutes --> TriggerLogic
+      APIRoutes --> ReviewLogic
+      APIRoutes --> OtherServices
+      APIRoutes --> DBClient
+
+      TriggerLogic --> Schema
+      TriggerLogic --> DBClient
+      OtherServices --> DBClient
+      DBClient --> SQLite
+
+      ServerPages -->|HTML + props| UI
+      APIRoutes -->|JSON responses| UI
+
+```
+
+

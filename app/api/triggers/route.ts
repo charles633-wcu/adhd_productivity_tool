@@ -7,6 +7,7 @@ import { createTrigger } from '@/lib/db/triggers'
 import { getCurrentUser } from '@/lib/auth'
 import { eq, and } from 'drizzle-orm'
 import { deriveNextReviewAt } from '@/lib/services/reviewClock'
+import { logTriggerAction } from '@/lib/dev/triggerActionLogger'
 
 // Zod schema for creating a trigger
 const CreateTriggerSchema = z.object({
@@ -69,6 +70,7 @@ export async function POST(request: Request) {
       reviewIntervalDays: parsed.data.reviewIntervalDays,
     })
     const trigger = await createTrigger(db, { ...parsed.data, userId: user.id, createdAt, nextReviewAt })
+    await logTriggerAction('create', trigger)
     return NextResponse.json(trigger, { status: 201 })
   } catch (error) {
     return NextResponse.json({ error: String(error), code: 'DB_ERROR' }, { status: 500 })

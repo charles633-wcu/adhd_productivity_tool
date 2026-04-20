@@ -61,7 +61,7 @@ describe('createTrigger', () => {
 })
 
 describe('acknowledgeTrigger', () => {
-  it('updates last_reviewed_at and next_review_at within 5 seconds of expected values', async () => {
+  it('updates last_reviewed_at and resets next_review_at from the acknowledge time', async () => {
     const [trigger] = await db.insert(schema.triggers).values({
       userId,
       categoryId,
@@ -79,10 +79,36 @@ describe('acknowledgeTrigger', () => {
     expect(updated.lastReviewedAt!.getTime()).toBeGreaterThanOrEqual(before - 5000)
     expect(updated.lastReviewedAt!.getTime()).toBeLessThanOrEqual(after + 5000)
 
-    // next_review_at should be ~trigger.nextReviewAt + 7 days (schedules from original due date, not now)
-    const expectedNextReview = trigger.nextReviewAt.getTime() + 7 * 24 * 60 * 60 * 1000
-    expect(updated.nextReviewAt.getTime()).toBeGreaterThanOrEqual(expectedNextReview - 5000)
-    expect(updated.nextReviewAt.getTime()).toBeLessThanOrEqual(expectedNextReview + 5000)
+    // next_review_at should be ~now + 7 days for a 7-day trigger.
+    const expectedMin = before + 7 * 24 * 60 * 60 * 1000
+    const expectedMax = after + 7 * 24 * 60 * 60 * 1000
+    expect(updated.nextReviewAt.getTime()).toBeGreaterThanOrEqual(expectedMin - 5000)
+    expect(updated.nextReviewAt.getTime()).toBeLessThanOrEqual(expectedMax + 5000)
+  })
+
+  it('resets the next review from the acknowledge time when reviewed before it is due', async () => {
+    const futureDueAt = new Date(Date.now() + 4 * 24 * 60 * 60 * 1000)
+    const [trigger] = await db.insert(schema.triggers).values({
+      userId,
+      categoryId,
+      title: 'Early review trigger',
+      reviewIntervalDays: 7,
+      nextReviewAt: futureDueAt,
+    }).returning()
+
+    const before = Date.now()
+    const updated = await acknowledgeTrigger(db, trigger.id)
+    const after = Date.now()
+
+    const expectedMin = before + 7 * 24 * 60 * 60 * 1000
+    const expectedMax = after + 7 * 24 * 60 * 60 * 1000 + 65 * 60 * 1000
+
+    expect(updated.lastReviewedAt).toBeTruthy()
+    expect(updated.lastReviewedAt!.getTime()).toBeGreaterThanOrEqual(before - 5000)
+    expect(updated.lastReviewedAt!.getTime()).toBeLessThanOrEqual(after + 5000)
+    expect(updated.nextReviewAt.getTime()).toBeGreaterThanOrEqual(expectedMin - 5000)
+    expect(updated.nextReviewAt.getTime()).toBeLessThanOrEqual(expectedMax + 5000)
+    expect(updated.nextReviewAt.getTime()).toBeLessThan(futureDueAt.getTime() + 7 * 24 * 60 * 60 * 1000)
   })
 })
 

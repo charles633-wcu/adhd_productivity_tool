@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { getCurrentUser, getDb, compactNotes, mergeMetadata } = vi.hoisted(() => ({
+const { getCurrentUser, getDb, compactNotes, mergeMetadata, logTriggerAction } = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   getDb: vi.fn(),
   compactNotes: vi.fn(),
   mergeMetadata: vi.fn((existing: unknown, patch: unknown) => ({ ...(existing as object ?? {}), ...(patch as object) })),
+  logTriggerAction: vi.fn(),
 }))
 
 vi.mock('@/lib/auth', () => ({ getCurrentUser }))
@@ -12,6 +13,7 @@ vi.mock('@/lib/db/client', () => ({ getDb }))
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('@/lib/services/compactor', () => ({ compactNotes }))
 vi.mock('@/lib/db/notes', () => ({ mergeMetadata }))
+vi.mock('@/lib/dev/triggerActionLogger', () => ({ logTriggerAction }))
 
 import { POST } from '@/app/api/triggers/[id]/compact/route'
 
@@ -48,6 +50,9 @@ describe('POST /api/triggers/[id]/compact', () => {
       [{ date: '2026-04-01', text: 'first' }, { date: '2026-04-10', text: 'second' }],
       'old'
     )
+    expect(logTriggerAction).toHaveBeenCalledWith('compact_notes', expect.objectContaining({
+      id: 'trig-1',
+    }))
   })
 
   it('returns 400 when fewer than 2 notes', async () => {
@@ -67,6 +72,7 @@ describe('POST /api/triggers/[id]/compact', () => {
     expect(res.status).toBe(400)
     const body = await res.json()
     expect(body.code).toBe('INSUFFICIENT_NOTES')
+    expect(logTriggerAction).not.toHaveBeenCalled()
   })
 
   it('returns 404 when trigger not owned', async () => {
@@ -78,5 +84,6 @@ describe('POST /api/triggers/[id]/compact', () => {
       { params: Promise.resolve({ id: 'ghost' }) }
     )
     expect(res.status).toBe(404)
+    expect(logTriggerAction).not.toHaveBeenCalled()
   })
 })

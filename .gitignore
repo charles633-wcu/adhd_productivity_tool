@@ -59,3 +59,7 @@ doc/
 imports/
 sample_csv/
 .worktrees/
+
+# generated runtime logs
+docs/*.log
+docs/**/*.log

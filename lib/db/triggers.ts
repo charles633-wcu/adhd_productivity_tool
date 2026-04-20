@@ -22,7 +22,7 @@ export async function createTrigger(db: DrizzleDb, data: NewTrigger): Promise<Tr
 
 /**
  * Marks a trigger as acknowledged by the user.
- * Resets last_reviewed_at = now and recalculates next_review_at = now + interval.
+ * Resets last_reviewed_at = now and recalculates next_review_at from the acknowledge time.
  * Note: two queries by design — Drizzle cannot reference existing column values in .set().
  * updatedAt is handled automatically by the .$onUpdate() hook defined in schema.ts.
  */
@@ -40,13 +40,13 @@ export async function acknowledgeTrigger(db: DrizzleDb, triggerId: string): Prom
   const intervalMs = trigger.reviewIntervalDays * 24 * 60 * 60 * 1000
   const graceMs    = 65 * 60 * 1000  // 65 min — ensures trigger escapes the 24h review window
 
-  // Schedule from the original due date to preserve staggered cadence across late reviews.
-  // Example: trigger due Monday, reviewed Friday → next due following Monday (not Friday + 7).
-  // If the next slot is already past (very overdue), fall back to now + interval + grace.
-  const scheduledNext = new Date(trigger.nextReviewAt.getTime() + intervalMs)
-  const nextReviewAt = scheduledNext > now
-    ? scheduledNext
-    : new Date(now.getTime() + intervalMs + graceMs)
+  // Acknowledge should reset the cadence from when the user actually reviewed it.
+  // Add a small grace only when the new date would still sit inside the 24h due-soon window.
+  const scheduledNext = new Date(now.getTime() + intervalMs)
+  const dueSoonBoundary = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+  const nextReviewAt = scheduledNext <= dueSoonBoundary
+    ? new Date(scheduledNext.getTime() + graceMs)
+    : scheduledNext
 
   // Write last_reviewed_at, next_review_at, and updated_at
   const [updated] = await db

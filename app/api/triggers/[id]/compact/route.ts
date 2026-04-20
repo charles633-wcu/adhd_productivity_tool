@@ -8,6 +8,7 @@ import { compactNotes } from '@/lib/services/compactor'
 import { mergeMetadata } from '@/lib/db/notes'
 import { eq, and } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
+import { logTriggerAction } from '@/lib/dev/triggerActionLogger'
 
 const MIN_NOTES_FOR_COMPACT = 2
 
@@ -44,6 +45,7 @@ export async function POST(
       .where(and(eq(triggers.id, id), eq(triggers.userId, user.id)))
       .returning()
 
+    await logTriggerAction('compact_notes', updated)
     revalidatePath('/')
     revalidatePath('/review')
     revalidatePath(`/category/${updated.categoryId}`)

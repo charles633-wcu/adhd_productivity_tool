@@ -7,6 +7,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { mergeMetadata } from '@/lib/db/notes'
 import { eq, and } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
+import { logTriggerAction } from '@/lib/dev/triggerActionLogger'
 
 const EditNoteSchema = z.object({
   text: z.string().min(1).max(500).trim(),
@@ -56,6 +57,7 @@ export async function PATCH(
       .where(and(eq(triggers.id, id), eq(triggers.userId, user.id)))
       .returning()
 
+    await logTriggerAction('edit_note', updated)
     revalidate(updated.categoryId)
     return NextResponse.json(updated)
   } catch (error) {
@@ -90,6 +92,7 @@ export async function DELETE(
       .where(and(eq(triggers.id, id), eq(triggers.userId, user.id)))
       .returning()
 
+    await logTriggerAction('delete_note', updated)
     revalidate(updated.categoryId)
     return NextResponse.json(updated)
   } catch (error) {

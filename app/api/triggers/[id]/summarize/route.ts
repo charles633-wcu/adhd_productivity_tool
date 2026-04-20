@@ -9,6 +9,7 @@ import { mergeMetadata } from '@/lib/db/notes'
 import { buildSummarySource, INSUFFICIENT_SUMMARY_DETAIL_MESSAGE } from '@/lib/services/summarySource'
 import { eq, and } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
+import { logTriggerAction } from '@/lib/dev/triggerActionLogger'
 
 export async function POST(
   _request: Request,
@@ -43,6 +44,7 @@ export async function POST(
       .where(and(eq(triggers.id, id), eq(triggers.userId, user.id)))
       .returning()
 
+    await logTriggerAction('summarize', updated)
     revalidatePath('/')
     revalidatePath('/review')
     revalidatePath(`/category/${updated.categoryId}`)

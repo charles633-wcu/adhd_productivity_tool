@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, type CSSProperties } from 'react'
-import { CheckCircle, ChevronDown, ChevronUp, Pencil, RefreshCw, Trash2 } from 'lucide-react'
-import { AcknowledgeSheet } from '@/components/AcknowledgeSheet'
+import { CheckCircle, ChevronDown, ChevronUp, MessageSquarePlus, Pencil, RefreshCw, Trash2 } from 'lucide-react'
 import { TriggerMemorySheet } from '@/components/TriggerMemorySheet'
 import type { Trigger } from '@/lib/db/schema'
 const PRIORITY_CONFIG: Record<number, {
@@ -59,9 +58,11 @@ export function TriggerCard({
 }: TriggerCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [acknowledgeOpen, setAcknowledgeOpen] = useState(false)
   const [memoryOpen, setMemoryOpen] = useState(false)
+  const [memoryStartInAddNoteMode, setMemoryStartInAddNoteMode] = useState(false)
   const [retryFeedback, setRetryFeedback] = useState<string | null>(null)
+  const [acknowledging, setAcknowledging] = useState(false)
+  const noteCount = trigger.agentMetadata?.notes?.length ?? 0
 
   const displayText =
     trigger.summaryStatus === 'generated' && trigger.summary
@@ -75,6 +76,21 @@ export function TriggerCard({
     setRetryFeedback(null)
     const message = await onRetry(trigger.id)
     if (message) setRetryFeedback(message)
+  }
+
+  async function handleAcknowledgeClick() {
+    setAcknowledging(true)
+    try {
+      const res = await fetch(`/api/triggers/${trigger.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acknowledge: true }),
+      })
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`)
+      onSuccess()
+    } finally {
+      setAcknowledging(false)
+    }
   }
 
   return (
@@ -121,21 +137,38 @@ export function TriggerCard({
         <button
           type="button"
           aria-label="Acknowledge"
-          disabled={isProcessing}
-          onClick={() => setAcknowledgeOpen(true)}
+          disabled={isProcessing || acknowledging}
+          onClick={handleAcknowledgeClick}
           className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20 hover:bg-emerald-500/20 disabled:opacity-40 transition-colors"
         >
           <CheckCircle className="h-3 w-3" aria-hidden="true" />
-          Acknowledge
+          {acknowledging ? 'Saving...' : 'Acknowledge'}
         </button>
 
         <button
           type="button"
-          aria-label="Memory"
-          onClick={() => setMemoryOpen(true)}
+          aria-label="Add note"
+          disabled={isProcessing || acknowledging}
+          onClick={() => {
+            setMemoryStartInAddNoteMode(true)
+            setMemoryOpen(true)
+          }}
+          className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium bg-emerald-500/5 text-emerald-300 ring-1 ring-emerald-500/15 hover:bg-emerald-500/10 disabled:opacity-40 transition-colors"
+        >
+          <MessageSquarePlus className="h-3 w-3" aria-hidden="true" />
+          Add note
+        </button>
+
+        <button
+          type="button"
+          aria-label={`Memory (${noteCount})`}
+          onClick={() => {
+            setMemoryStartInAddNoteMode(false)
+            setMemoryOpen(true)
+          }}
           className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium bg-indigo-500/10 text-indigo-400 ring-1 ring-indigo-500/20 hover:bg-indigo-500/20 transition-colors"
         >
-          Memory
+          Memory ({noteCount})
         </button>
 
         <button
@@ -220,7 +253,7 @@ export function TriggerCard({
           </div>
 
           <div className="space-y-1">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Notes</p>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Original</p>
             {trigger.fullContent ? (
               <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap font-mono">
                 {trigger.fullContent}
@@ -231,18 +264,14 @@ export function TriggerCard({
           </div>
         </div>
       )}
-
-      <AcknowledgeSheet
-        trigger={trigger}
-        open={acknowledgeOpen}
-        onOpenChange={setAcknowledgeOpen}
-        onSuccess={onSuccess}
-      />
-
       <TriggerMemorySheet
         trigger={trigger}
         open={memoryOpen}
-        onOpenChange={setMemoryOpen}
+        onOpenChange={(open) => {
+          setMemoryOpen(open)
+          if (!open) setMemoryStartInAddNoteMode(false)
+        }}
+        startInAddNoteMode={memoryStartInAddNoteMode}
       />
     </div>
   )
