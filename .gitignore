@@ -46,3 +46,16 @@ sentinel.db-shm
 sentinel.db-wal
 context/
 .superpowers/
+
+# local agent/tooling config (not for public repo)
+.claude/
+CLAUDE.md
+
+# internal planning/audit docs (contains process + AI notes)
+docs/superpowers/
+doc/
+
+# local import/sample artifacts
+imports/
+sample_csv/
+.worktrees/
