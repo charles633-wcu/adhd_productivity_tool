@@ -46,4 +46,32 @@ describe('ChatSheet', () => {
 
     await waitFor(() => expect(screen.getByText(/something went wrong/i)).toBeInTheDocument())
   })
+
+  it('renders a dev toggle button', () => {
+    render(<ChatSheet open={true} onOpenChange={onOpenChange} />)
+    expect(screen.getByRole('button', { name: /dev/i })).toBeInTheDocument()
+  })
+
+  it('shows tools strip after enabling dev mode', () => {
+    render(<ChatSheet open={true} onOpenChange={onOpenChange} />)
+    fireEvent.click(screen.getByRole('button', { name: /dev/i }))
+    expect(screen.getByText('search_triggers')).toBeInTheDocument()
+  })
+
+  it('sends debug:true when dev mode is on', async () => {
+    ;(fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ reply: 'Got it.', trace: [] }),
+    })
+    render(<ChatSheet open={true} onOpenChange={onOpenChange} />)
+    fireEvent.click(screen.getByRole('button', { name: /dev/i }))
+
+    const input = screen.getByPlaceholderText(/ask anything/i)
+    fireEvent.change(input, { target: { value: 'search' } })
+    fireEvent.submit(input.closest('form')!)
+
+    await waitFor(() => expect(fetch).toHaveBeenCalled())
+    const body = JSON.parse((fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body)
+    expect(body.debug).toBe(true)
+  })
 })

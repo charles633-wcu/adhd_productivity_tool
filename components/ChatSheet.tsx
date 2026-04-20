@@ -3,14 +3,19 @@
 // ChatSheet — floating resizable chat panel, styled like a website chatbot widget.
 // Manages in-session message history in React state.
 // Sends messages to /api/chat and displays replies.
+// Dev mode: sends debug:true, renders DevTrace below each reply, shows tools strip.
 // Save button writes to /api/chat/conversations when there are 2+ turns.
 
 import { useState, useRef, useEffect, FormEvent } from 'react'
-import { X } from 'lucide-react'
+import { X, Code2 } from 'lucide-react'
+import { DevTrace } from '@/components/DevTrace'
+import { CHAT_TOOL_DEFS } from '@/lib/services/chatToolDefs'
+import type { TraceStep } from '@/app/api/chat/route'
 
 interface Message {
   role: 'user' | 'assistant'
   content: string
+  trace?: TraceStep[]  // only present on assistant messages in dev mode
 }
 
 interface ChatSheetProps {
@@ -24,6 +29,7 @@ export function ChatSheet({ open, onOpenChange }: ChatSheetProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [devMode, setDevMode] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   // Scroll to bottom on new messages or loading state change
@@ -56,11 +62,17 @@ export function ChatSheet({ open, onOpenChange }: ChatSheetProps) {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: newMessages }),
+        body: JSON.stringify({
+          messages: newMessages.map(m => ({ role: m.role, content: m.content })),
+          ...(devMode ? { debug: true } : {}),
+        }),
       })
       if (!res.ok) throw new Error('API error')
-      const data = await res.json() as { reply: string }
-      setMessages(prev => [...prev, { role: 'assistant', content: data.reply }])
+      const data = await res.json() as { reply: string; trace?: TraceStep[] }
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: data.reply, trace: data.trace },
+      ])
     } catch {
       setError('Something went wrong. Please try again.')
     } finally {
@@ -74,7 +86,9 @@ export function ChatSheet({ open, onOpenChange }: ChatSheetProps) {
       await fetch('/api/chat/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages }),
+        body: JSON.stringify({
+          messages: messages.map(m => ({ role: m.role, content: m.content })),
+        }),
       })
       setSaved(true)
     } catch {
@@ -83,11 +97,12 @@ export function ChatSheet({ open, onOpenChange }: ChatSheetProps) {
   }
 
   const canSave = messages.length >= 2 && !saved
+  // First assistant message index — used to show tools strip only once via DevTrace
+  const firstAssistantIdx = messages.findIndex(m => m.role === 'assistant')
 
   if (!open) return null
 
   return (
-    // Floating panel — fixed bottom-right, resizable via the browser's native resize handle
     <div
       style={{
         width: 380,
@@ -104,36 +119,69 @@ export function ChatSheet({ open, onOpenChange }: ChatSheetProps) {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
         <span className="text-sm font-semibold tracking-tight">Sentinel AI</span>
-        <button
-          type="button"
-          onClick={() => onOpenChange(false)}
-          className="rounded-lg p-1.5 hover:bg-muted transition-colors"
-          aria-label="Close chat"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          {/* Dev mode toggle */}
+          <button
+            type="button"
+            aria-label="dev"
+            onClick={() => setDevMode(v => !v)}
+            title="Toggle dev mode"
+            className={[
+              'rounded-lg p-1.5 transition-colors',
+              devMode ? 'bg-primary/10 text-primary' : 'hover:bg-muted text-muted-foreground',
+            ].join(' ')}
+          >
+            <Code2 className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            className="rounded-lg p-1.5 hover:bg-muted transition-colors"
+            aria-label="Close chat"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Message list */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
+        {/* Tools strip — shown standalone only before the first assistant reply.
+            Once replies arrive, the strip renders via DevTrace on the first reply
+            (showToolsStrip={i === firstAssistantIdx}) to avoid rendering it twice. */}
+        {devMode && firstAssistantIdx === -1 && (
+          <DevTrace trace={[]} toolDefs={CHAT_TOOL_DEFS} showToolsStrip={true} />
+        )}
+
         {messages.length === 0 && (
           <p className="text-sm text-muted-foreground text-center mt-6 px-2">
             Hi I&apos;m Your Sentinel, How can I help?
           </p>
         )}
+
         {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={[
-              'max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap leading-relaxed',
-              msg.role === 'user'
-                ? 'ml-auto bg-primary text-primary-foreground rounded-br-sm'
-                : 'mr-auto bg-muted text-foreground rounded-bl-sm',
-            ].join(' ')}
-          >
-            {msg.content}
+          <div key={i}>
+            <div
+              className={[
+                'max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap leading-relaxed',
+                msg.role === 'user'
+                  ? 'ml-auto bg-primary text-primary-foreground rounded-br-sm'
+                  : 'mr-auto bg-muted text-foreground rounded-bl-sm',
+              ].join(' ')}
+            >
+              {msg.content}
+            </div>
+            {/* Dev trace below assistant reply */}
+            {devMode && msg.role === 'assistant' && msg.trace !== undefined && (
+              <DevTrace
+                trace={msg.trace}
+                toolDefs={CHAT_TOOL_DEFS}
+                showToolsStrip={devMode && i === firstAssistantIdx}
+              />
+            )}
           </div>
         ))}
+
         {loading && (
           <div className="mr-auto bg-muted rounded-2xl rounded-bl-sm px-3 py-2 text-sm text-muted-foreground flex gap-1 items-center">
             <span className="animate-bounce inline-block" style={{ animationDelay: '0ms' }}>·</span>
