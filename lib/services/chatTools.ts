@@ -7,6 +7,7 @@ import { eq, and, lte, like, or, count as drizzleCount } from 'drizzle-orm'
 import { triggers, categories } from '@/lib/db/schema'
 import type { DrizzleDb } from '@/lib/db/client'
 import type { ToolDefinition } from './chatProvider'
+import { CHAT_TOOL_DEFS } from './chatToolDefs'
 
 export interface ChatTool {
   definition: ToolDefinition
@@ -18,7 +19,7 @@ export const CHAT_TOOLS: ChatTool[] = [
   {
     definition: {
       name: 'search_triggers',
-      description: "Search the user's triggers by keyword across title and content. Optionally filter by category.",
+      description: CHAT_TOOL_DEFS.find(d => d.name === 'search_triggers')!.description,
       parameters: {
         type: 'object',
         properties: {
@@ -59,7 +60,7 @@ export const CHAT_TOOLS: ChatTool[] = [
   {
     definition: {
       name: 'search_categories',
-      description: 'Return all categories for the user including trigger counts.',
+      description: CHAT_TOOL_DEFS.find(d => d.name === 'search_categories')!.description,
       parameters: { type: 'object', properties: {}, required: [] },
     },
     async handler(_args, userId, db) {
@@ -85,7 +86,7 @@ export const CHAT_TOOLS: ChatTool[] = [
   {
     definition: {
       name: 'get_due_triggers',
-      description: 'Return triggers due for review within the next N days (default 7, max 90).',
+      description: CHAT_TOOL_DEFS.find(d => d.name === 'get_due_triggers')!.description,
       parameters: {
         type: 'object',
         properties: {
@@ -117,7 +118,7 @@ export const CHAT_TOOLS: ChatTool[] = [
   {
     definition: {
       name: 'get_trigger_detail',
-      description: 'Return full details for a single trigger including notes, summary, and review history.',
+      description: CHAT_TOOL_DEFS.find(d => d.name === 'get_trigger_detail')!.description,
       parameters: {
         type: 'object',
         properties: {
