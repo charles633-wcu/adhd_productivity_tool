@@ -37,17 +37,16 @@ export async function acknowledgeTrigger(db: DrizzleDb, triggerId: string): Prom
   if (!trigger) throw new Error(`Trigger ${triggerId} not found`)
 
   const now = new Date()
-  // Add 65-min grace so a 1-day trigger always escapes the "due within 24h" window
-  // after acknowledge. Without it, nextReviewAt lands exactly ON the boundary and the
-  // trigger stays visible in the review banner immediately after being cleared.
-  const graceMs = 65 * 60 * 1000
-  const nextReviewAt = new Date(
-    deriveNextReviewAt({
-      createdAt: trigger.createdAt,
-      lastReviewedAt: now,
-      reviewIntervalDays: trigger.reviewIntervalDays,
-    }).getTime() + graceMs
-  )
+  const intervalMs = trigger.reviewIntervalDays * 24 * 60 * 60 * 1000
+  const graceMs    = 65 * 60 * 1000  // 65 min — ensures trigger escapes the 24h review window
+
+  // Schedule from the original due date to preserve staggered cadence across late reviews.
+  // Example: trigger due Monday, reviewed Friday → next due following Monday (not Friday + 7).
+  // If the next slot is already past (very overdue), fall back to now + interval + grace.
+  const scheduledNext = new Date(trigger.nextReviewAt.getTime() + intervalMs)
+  const nextReviewAt = scheduledNext > now
+    ? scheduledNext
+    : new Date(now.getTime() + intervalMs + graceMs)
 
   // Write last_reviewed_at, next_review_at, and updated_at
   const [updated] = await db

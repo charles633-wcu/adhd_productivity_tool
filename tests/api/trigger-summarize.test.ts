@@ -33,7 +33,8 @@ describe('POST /api/triggers/[id]/summarize', () => {
     const notes = [{ id: 'n1', date: '2026-04-01', text: 'a note' }]
     const trigger = {
       id: 'trig-1', userId: 'user-1', categoryId: 'cat-1',
-      fullContent: 'Original content here',
+      title: 'Original title',
+      fullContent: 'Original content here with enough extra detail to pass the shared summary eligibility threshold for this route test.',
       summary: null, summaryStatus: 'pending',
       agentMetadata: { notes, condensedHistory: 'old history' },
     }
@@ -46,7 +47,7 @@ describe('POST /api/triggers/[id]/summarize', () => {
 
     expect(res.status).toBe(200)
     expect(summarizeTrigger).toHaveBeenCalledWith(
-      'Original content here',
+      'Original content here with enough extra detail to pass the shared summary eligibility threshold for this route test.',
       { condensedHistory: 'old history', notes: [{ date: '2026-04-01', text: 'a note' }] }
     )
   })
@@ -65,7 +66,9 @@ describe('POST /api/triggers/[id]/summarize', () => {
   it('updates summaryStatus to "generated" and lastAgentRun on success', async () => {
     const trigger = {
       id: 'trig-1', userId: 'user-1', categoryId: 'cat-1',
-      fullContent: 'Content', summary: null, summaryStatus: 'pending',
+      title: 'Original title',
+      fullContent: 'Content with enough extra detail to pass the shared summary eligibility threshold during this update assertion test.',
+      summary: null, summaryStatus: 'pending',
       agentMetadata: null,
     }
     let capturedSet: unknown
@@ -82,5 +85,55 @@ describe('POST /api/triggers/[id]/summarize', () => {
 
     expect((capturedSet as { summaryStatus: string }).summaryStatus).toBe('generated')
     expect((capturedSet as { summary: string }).summary).toBe('Updated summary.')
+  })
+
+  it('uses title fallback when notes and history make a short trigger summarizable', async () => {
+    const trigger = {
+      id: 'trig-1', userId: 'user-1', categoryId: 'cat-1',
+      title: 'Buy pineapple',
+      fullContent: '',
+      summary: null, summaryStatus: 'pending',
+      agentMetadata: {
+        condensedHistory: 'Waiting until the July sale before deciding which store to use.',
+        notes: [{ id: 'n1', date: '2026-04-01', text: 'Also compare canned versus fresh because shelf life matters for this plan.' }],
+      },
+    }
+    getDb.mockReturnValue(makeDb(trigger))
+
+    const res = await POST(
+      new Request('http://localhost/api/triggers/trig-1/summarize', { method: 'POST' }),
+      { params: Promise.resolve({ id: 'trig-1' }) }
+    )
+
+    expect(res.status).toBe(200)
+    expect(summarizeTrigger).toHaveBeenCalledWith(
+      'Buy pineapple',
+      {
+        condensedHistory: trigger.agentMetadata.condensedHistory,
+        notes: [{ date: '2026-04-01', text: trigger.agentMetadata.notes[0].text }],
+      }
+    )
+  })
+
+  it('returns 400 when combined content is still too thin to summarize', async () => {
+    const trigger = {
+      id: 'trig-1', userId: 'user-1', categoryId: 'cat-1',
+      title: 'Buy pineapple',
+      fullContent: '',
+      summary: null, summaryStatus: 'pending',
+      agentMetadata: null,
+    }
+    getDb.mockReturnValue(makeDb(trigger))
+
+    const res = await POST(
+      new Request('http://localhost/api/triggers/trig-1/summarize', { method: 'POST' }),
+      { params: Promise.resolve({ id: 'trig-1' }) }
+    )
+    const payload = await res.json()
+
+    expect(res.status).toBe(400)
+    expect(payload.code).toBe('INSUFFICIENT_CONTENT')
+    expect(String(payload.error)).toContain('Not enough detail')
+    expect(summarizeTrigger).not.toHaveBeenCalled()
   })
 })

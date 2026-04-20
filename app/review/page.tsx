@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { getDb } from '@/lib/db/client'
 import { categories, triggers } from '@/lib/db/schema'
 import { eq, and, lte, asc } from 'drizzle-orm'

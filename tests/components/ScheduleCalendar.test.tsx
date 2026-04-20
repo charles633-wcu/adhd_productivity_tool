@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ScheduleCalendar } from '@/components/ScheduleCalendar'
 
-// Helper: create a serialized trigger (dates as ISO strings, matching server→client shape)
+// Helper: create a serialized trigger (dates as ISO strings, matching server->client shape)
 function makeTrigger(overrides: Record<string, unknown> = {}) {
   const base = new Date()
   base.setUTCHours(12, 0, 0, 0)
@@ -31,23 +31,15 @@ describe('ScheduleCalendar', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }))
   })
-  afterEach(() => { vi.unstubAllGlobals() })
 
-  it('renders the Schedule section header', () => {
-    render(<ScheduleCalendar triggers={[]} />)
-    expect(screen.getByText(/schedule/i)).toBeTruthy()
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
-  it('collapses and expands when the header is clicked', () => {
-    render(<ScheduleCalendar triggers={[makeTrigger()]} />)
-    // Starts open — trigger list visible
-    expect(screen.getByText('Test trigger')).toBeTruthy()
-    // Click header to collapse
-    fireEvent.click(screen.getByRole('button', { name: /schedule/i }))
-    expect(screen.queryByText('Test trigger')).toBeNull()
-    // Click again to expand
-    fireEvent.click(screen.getByRole('button', { name: /schedule/i }))
-    expect(screen.getByText('Test trigger')).toBeTruthy()
+  it('renders the day-of-week labels and trigger list', () => {
+    render(<ScheduleCalendar triggers={[]} />)
+    expect(screen.getByText('Mon')).toBeTruthy()
+    expect(screen.getByText(/All triggers/i)).toBeTruthy()
   })
 
   it('shows a green badge for 1 trigger due on a day', () => {
@@ -87,19 +79,21 @@ describe('ScheduleCalendar', () => {
 
   it('selecting a trigger shows reschedule hint text', () => {
     render(<ScheduleCalendar triggers={[makeTrigger()]} />)
-    // Target the list-item button specifically to avoid matching the hint span
-    fireEvent.click(screen.getByRole('button', { name: /Test trigger/i }))
+    const triggerButton = screen.getByText('Test trigger').closest('button')
+    expect(triggerButton).toBeTruthy()
+    fireEvent.click(triggerButton!)
+    expect(screen.getByTestId('hint-trigger-title')).toHaveTextContent('Test trigger')
     expect(screen.getByText(/tap a day to reschedule/i)).toBeTruthy()
   })
 
   it('deselects a trigger when clicked a second time', () => {
     render(<ScheduleCalendar triggers={[makeTrigger()]} />)
-    // First click — hint span not yet visible, only one button with this name
-    fireEvent.click(screen.getByRole('button', { name: /Test trigger/i }))
-    expect(screen.getByText(/tap a day to reschedule/i)).toBeTruthy()
-    // Second click — hint span is now also visible, but getByRole targets only the button
-    fireEvent.click(screen.getByRole('button', { name: /Test trigger/i }))
-    expect(screen.queryByText(/tap a day to reschedule/i)).toBeNull()
+    const triggerButton = screen.getByText('Test trigger').closest('button')
+    expect(triggerButton).toBeTruthy()
+    fireEvent.click(triggerButton!)
+    expect(screen.queryByTestId('hint-trigger-title')).toBeTruthy()
+    fireEvent.click(triggerButton!)
+    expect(screen.queryByTestId('hint-trigger-title')).toBeNull()
   })
 
   it('calls PATCH with rescheduleDate when a future day is clicked while a trigger is selected', async () => {
@@ -108,7 +102,9 @@ describe('ScheduleCalendar', () => {
     inFuture.setUTCHours(12, 0, 0, 0)
     render(<ScheduleCalendar triggers={[makeTrigger({ nextReviewAt: inFuture.toISOString() })]} />)
 
-    fireEvent.click(screen.getByRole('button', { name: /Test trigger/i }))
+    const triggerButton = screen.getByText('Test trigger').closest('button')
+    expect(triggerButton).toBeTruthy()
+    fireEvent.click(triggerButton!)
     const futureDay = new Date()
     futureDay.setDate(futureDay.getDate() + 14)
     const y = futureDay.getFullYear()
@@ -134,7 +130,9 @@ describe('ScheduleCalendar', () => {
     inFuture.setUTCHours(12, 0, 0, 0)
     render(<ScheduleCalendar triggers={[makeTrigger({ nextReviewAt: inFuture.toISOString() })]} />)
 
-    fireEvent.click(screen.getByRole('button', { name: /Test trigger/i }))
+    const triggerButton = screen.getByText('Test trigger').closest('button')
+    expect(triggerButton).toBeTruthy()
+    fireEvent.click(triggerButton!)
     const futureDay = new Date()
     futureDay.setDate(futureDay.getDate() + 7)
     const y = futureDay.getFullYear()

@@ -79,9 +79,8 @@ describe('acknowledgeTrigger', () => {
     expect(updated.lastReviewedAt!.getTime()).toBeGreaterThanOrEqual(before - 5000)
     expect(updated.lastReviewedAt!.getTime()).toBeLessThanOrEqual(after + 5000)
 
-    // next_review_at should be ~last_reviewed_at + 7 days + 65-min grace
-    const graceMs = 65 * 60 * 1000
-    const expectedNextReview = updated.lastReviewedAt!.getTime() + 7 * 24 * 60 * 60 * 1000 + graceMs
+    // next_review_at should be ~trigger.nextReviewAt + 7 days (schedules from original due date, not now)
+    const expectedNextReview = trigger.nextReviewAt.getTime() + 7 * 24 * 60 * 60 * 1000
     expect(updated.nextReviewAt.getTime()).toBeGreaterThanOrEqual(expectedNextReview - 5000)
     expect(updated.nextReviewAt.getTime()).toBeLessThanOrEqual(expectedNextReview + 5000)
   })

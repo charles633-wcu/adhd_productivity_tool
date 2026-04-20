@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getDb } from '@/lib/db/client'
-import { triggers } from '@/lib/db/schema'
+import { triggers, categories } from '@/lib/db/schema'
 import { createTrigger } from '@/lib/db/triggers'
 import { getCurrentUser } from '@/lib/auth'
 import { eq, and } from 'drizzle-orm'
@@ -14,7 +14,8 @@ const CreateTriggerSchema = z.object({
   title: z.string().min(1).max(200),
   fullContent: z.string().default(''),
   priority: z.number().int().min(0).max(3).default(2),
-  reviewIntervalDays: z.number().int().min(1).max(365).default(7),
+  // 0 = always due (review immediately after each acknowledge); 365 = annual
+  reviewIntervalDays: z.number().int().min(0).max(365).default(7),
 })
 
 /**
@@ -50,6 +51,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.message, code: 'VALIDATION_ERROR' }, { status: 400 })
     }
     const db = getDb()
+
+    // A-001: Verify the target category belongs to the current user (IDOR prevention)
+    const [ownedCat] = await db
+      .select({ id: categories.id })
+      .from(categories)
+      .where(and(eq(categories.id, parsed.data.categoryId), eq(categories.userId, user.id)))
+      .limit(1)
+    if (!ownedCat) {
+      return NextResponse.json({ error: 'Category not found', code: 'NOT_FOUND' }, { status: 403 })
+    }
+
     const createdAt = new Date()
     const nextReviewAt = deriveNextReviewAt({
       createdAt,

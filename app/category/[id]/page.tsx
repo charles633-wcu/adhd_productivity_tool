@@ -1,13 +1,16 @@
+export const dynamic = 'force-dynamic'
+
 import { notFound } from 'next/navigation'
 import { getDb } from '@/lib/db/client'
 import { categories, triggers } from '@/lib/db/schema'
 import { eq, and, asc, lte } from 'drizzle-orm'
 import { getCurrentUser } from '@/lib/auth'
 import { CategoryViewClient } from '@/components/CategoryViewClient'
+import { CategoryHeader } from '@/components/CategoryHeader'
 
 interface PageProps {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ sort?: string; filter?: string }>
+  searchParams: Promise<{ filter?: string }>
 }
 
 // Category view — server component, fetches triggers for the given category
@@ -15,7 +18,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
   const user = await getCurrentUser()
   const db = getDb()
   const { id } = await params
-  const { sort, filter } = await searchParams
+  const { filter } = await searchParams
 
   // Fetch the category — 404 if not found or doesn't belong to user
   const [category] = await db
@@ -42,25 +45,19 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Sticky header */}
+      {/* Sticky header — CategoryHeader is a client component for the edit sheet */}
       <header className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
-          <a
-            href="/"
-            className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors"
-          >
-            ← back
-          </a>
-          <span className="text-muted-foreground/30">/</span>
-          <span className="text-xl" aria-hidden="true">{category.icon ?? '📌'}</span>
-          <h1 className="text-lg font-bold leading-none">{category.name}</h1>
-        </div>
+        <CategoryHeader
+          id={id}
+          name={category.name}
+          icon={category.icon}
+          color={category.color}
+        />
       </header>
 
       <main className="max-w-2xl mx-auto w-full px-4 py-6">
         <CategoryViewClient
           categoryId={id}
-          currentSort={sort ?? 'priority'}
           currentFilter={filter ?? 'all'}
           triggers={rows}
           categoryName={category.name}
