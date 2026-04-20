@@ -4,10 +4,6 @@ import { useState } from 'react'
 import { CheckCircle, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
 import type { Trigger } from '@/lib/db/schema'
 
-// TriggerCard — displays a single trigger with a priority-colored left border,
-// summary/title display, Acknowledge button, and expandable Details section.
-// Shows a Retry button inside the expander when summaryStatus is 'pending'.
-
 const PRIORITY_CONFIG: Record<number, {
   label: string
   borderClass: string
@@ -43,6 +39,10 @@ interface TriggerCardProps {
   isProcessing?: boolean
 }
 
+function formatCardDate(date: Date): string {
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 export function TriggerCard({
   trigger,
   categoryName,
@@ -52,7 +52,6 @@ export function TriggerCard({
 }: TriggerCardProps) {
   const [expanded, setExpanded] = useState(false)
 
-  // Show AI summary when available, fall back to raw title
   const displayText =
     trigger.summaryStatus === 'generated' && trigger.summary
       ? trigger.summary
@@ -64,9 +63,7 @@ export function TriggerCard({
     <div
       className={`rounded-lg border-l-2 border border-border bg-card hover:bg-card/80 transition-colors ${config.borderClass} overflow-hidden`}
     >
-      {/* Main row */}
       <div className="px-4 py-3 space-y-2.5">
-        {/* Header: badge + text */}
         <div className="flex items-start gap-2.5">
           <span
             className={`shrink-0 mt-0.5 rounded px-1.5 py-0.5 text-[10px] font-mono font-bold ${config.badgeClass}`}
@@ -78,19 +75,29 @@ export function TriggerCard({
           </p>
         </div>
 
-        {/* Meta: category + summary status */}
-        <div className="flex items-center gap-2 pl-0.5">
+        <div className="flex items-center gap-2 pl-0.5 flex-wrap">
           <span className="text-xs text-muted-foreground">{categoryName}</span>
+          <span className="rounded bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground ring-1 ring-border">
+            Created {formatCardDate(trigger.createdAt)}
+          </span>
+          <span className="rounded bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground ring-1 ring-border">
+            {trigger.lastReviewedAt ? `Reviewed ${formatCardDate(trigger.lastReviewedAt)}` : 'Not yet reviewed'}
+          </span>
+          <span className="rounded bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground ring-1 ring-border">
+            Next {formatCardDate(trigger.nextReviewAt)}
+          </span>
+          <span className="rounded bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground ring-1 ring-border">
+            Every {trigger.reviewIntervalDays}d
+          </span>
           {trigger.summaryStatus === 'pending' && (
-            <span className="text-[10px] font-mono text-amber-500/70">· pending summary</span>
+            <span className="text-[10px] font-mono text-amber-500/70">pending summary</span>
           )}
           {trigger.summaryStatus === 'generated' && (
-            <span className="text-[10px] font-mono text-emerald-500/60">· ai summary</span>
+            <span className="text-[10px] font-mono text-emerald-500/60">ai summary</span>
           )}
         </div>
       </div>
 
-      {/* Action row */}
       <div className="px-4 pb-3 flex items-center gap-2">
         <button
           type="button"
@@ -118,7 +125,6 @@ export function TriggerCard({
         </button>
       </div>
 
-      {/* Expandable section */}
       {expanded && (
         <div className="border-t border-border px-4 py-3 space-y-3 bg-background/40 animate-in">
           {trigger.fullContent ? (

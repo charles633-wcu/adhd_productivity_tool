@@ -202,3 +202,63 @@ describe('PATCH rescheduleDate', () => {
     expect(res.status).toBe(400)
   })
 })
+
+describe('PATCH reviewIntervalDays', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('recomputes nextReviewAt from createdAt when the trigger has never been reviewed', async () => {
+    getCurrentUser.mockResolvedValue({ id: 'user-1' })
+
+    const owned = {
+      id: 'trigger-1',
+      userId: 'user-1',
+      categoryId: 'cat-1',
+      createdAt: new Date('2026-04-15T12:00:00.000Z'),
+      lastReviewedAt: null,
+      nextReviewAt: new Date('2026-04-20T12:00:00.000Z'),
+      reviewIntervalDays: 7,
+    }
+
+    let setPayload: Record<string, unknown> | undefined
+    const returning = vi.fn().mockResolvedValue([{
+      ...owned,
+      reviewIntervalDays: 3,
+      nextReviewAt: new Date('2026-04-18T12:00:00.000Z'),
+    }])
+
+    getDb.mockReturnValue({
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ({
+            limit: vi.fn().mockResolvedValue([owned]),
+          })),
+        })),
+      })),
+      update: vi.fn(() => ({
+        set: vi.fn((payload: Record<string, unknown>) => {
+          setPayload = payload
+          return {
+            where: vi.fn(() => ({ returning })),
+          }
+        }),
+      })),
+    })
+
+    const res = await PATCH(
+      new Request('http://localhost/api/triggers/trigger-1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reviewIntervalDays: 3 }),
+      }),
+      { params: Promise.resolve({ id: 'trigger-1' }) }
+    )
+
+    expect(res.status).toBe(200)
+    expect(setPayload).toMatchObject({
+      reviewIntervalDays: 3,
+      nextReviewAt: new Date('2026-04-18T12:00:00.000Z'),
+    })
+  })
+})

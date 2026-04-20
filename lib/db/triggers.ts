@@ -5,6 +5,7 @@
 import { eq, asc } from 'drizzle-orm'
 import { triggers, type NewTrigger, type Trigger } from './schema'
 import type { DrizzleDb } from './client'
+import { deriveNextReviewAt } from '@/lib/services/reviewClock'
 
 /**
  * Inserts a new trigger. Validates that title is non-empty.
@@ -36,12 +37,17 @@ export async function acknowledgeTrigger(db: DrizzleDb, triggerId: string): Prom
   if (!trigger) throw new Error(`Trigger ${triggerId} not found`)
 
   const now = new Date()
-  // Add a 65-minute grace on top of the interval so the trigger always escapes the
-  // "due within 24h" review window after being acknowledged. Without this, a 1-day
-  // trigger lands exactly ON the boundary and stays visible in the banner forever.
-  const intervalMs = trigger.reviewIntervalDays * 24 * 60 * 60 * 1000
-  const graceMs    = 65 * 60 * 1000  // 65 minutes
-  const nextReviewAt = new Date(now.getTime() + intervalMs + graceMs)
+  // Add 65-min grace so a 1-day trigger always escapes the "due within 24h" window
+  // after acknowledge. Without it, nextReviewAt lands exactly ON the boundary and the
+  // trigger stays visible in the review banner immediately after being cleared.
+  const graceMs = 65 * 60 * 1000
+  const nextReviewAt = new Date(
+    deriveNextReviewAt({
+      createdAt: trigger.createdAt,
+      lastReviewedAt: now,
+      reviewIntervalDays: trigger.reviewIntervalDays,
+    }).getTime() + graceMs
+  )
 
   // Write last_reviewed_at, next_review_at, and updated_at
   const [updated] = await db

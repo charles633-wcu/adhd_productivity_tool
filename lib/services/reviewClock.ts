@@ -9,6 +9,9 @@ type ClockTrigger = {
   reviewIntervalDays: number
 }
 
+type ReviewAnchor = Pick<ClockTrigger, 'lastReviewedAt' | 'createdAt'>
+type ReviewSchedule = ReviewAnchor & Pick<ClockTrigger, 'reviewIntervalDays'>
+
 /**
  * Returns true when the trigger is due for review within the next 24 hours (or overdue).
  * Threshold: next_review_at <= now + 1 day
@@ -18,12 +21,21 @@ export function isDueSoon(trigger: ClockTrigger): boolean {
   return trigger.nextReviewAt <= oneDayFromNow
 }
 
+export function getReviewAnchor(trigger: ReviewAnchor): Date {
+  return trigger.lastReviewedAt ?? trigger.createdAt
+}
+
+export function deriveNextReviewAt(trigger: ReviewSchedule): Date {
+  const anchor = getReviewAnchor(trigger)
+  return new Date(anchor.getTime() + trigger.reviewIntervalDays * 24 * 60 * 60 * 1000)
+}
+
 /**
  * Returns the number of whole days elapsed since last review.
  * Falls back to created_at if the trigger has never been reviewed (last_reviewed_at is null).
  */
 export function daysElapsed(trigger: ClockTrigger): number {
-  const baseline = trigger.lastReviewedAt ?? trigger.createdAt
+  const baseline = getReviewAnchor(trigger)
   const msElapsed = Date.now() - baseline.getTime()
   return Math.floor(msElapsed / (24 * 60 * 60 * 1000))
 }
