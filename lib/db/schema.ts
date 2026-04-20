@@ -95,6 +95,43 @@ export const conversations = sqliteTable('conversations', {
     .default(sql`(unixepoch())`),
 })
 
+// Calendar: event_categories — isolated from Sentinel categories
+export const eventCategories = sqliteTable('event_categories', {
+  id: text('id').primaryKey().$defaultFn(() => createId()),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  color: text('color').notNull().default('#6366f1'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`).$onUpdate(() => new Date()),
+})
+
+// Calendar: personal events with optional repeat rules
+export const calendarEvents = sqliteTable('calendar_events', {
+  id: text('id').primaryKey().$defaultFn(() => createId()),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  startAt: integer('start_at', { mode: 'timestamp' }).notNull(),
+  endAt: integer('end_at', { mode: 'timestamp' }).notNull(),
+  color: text('color'),
+  notes: text('notes'),
+  repeatIntervalDays: integer('repeat_interval_days'),
+  repeatEndsAt: integer('repeat_ends_at', { mode: 'timestamp' }),
+  categoryId: text('category_id').references(() => eventCategories.id, { onDelete: 'set null' }),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`).$onUpdate(() => new Date()),
+})
+
+// Calendar: ICS subscription — one per user
+export const icsSubscriptions = sqliteTable('ics_subscriptions', {
+  id: text('id').primaryKey().$defaultFn(() => createId()),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  url: text('url').notNull(),
+  lastFetchedAt: integer('last_fetched_at', { mode: 'timestamp' }),
+  cachedEventsJson: text('cached_events_json'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`).$onUpdate(() => new Date()),
+})
+
 // Infer TypeScript types from schema
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
@@ -104,3 +141,9 @@ export type Trigger = typeof triggers.$inferSelect
 export type NewTrigger = typeof triggers.$inferInsert
 export type Conversation = typeof conversations.$inferSelect
 export type NewConversation = typeof conversations.$inferInsert
+export type EventCategory = typeof eventCategories.$inferSelect
+export type NewEventCategory = typeof eventCategories.$inferInsert
+export type CalendarEvent = typeof calendarEvents.$inferSelect
+export type NewCalendarEvent = typeof calendarEvents.$inferInsert
+export type IcsSubscription = typeof icsSubscriptions.$inferSelect
+export type NewIcsSubscription = typeof icsSubscriptions.$inferInsert
