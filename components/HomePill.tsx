@@ -12,6 +12,7 @@
 // Calls router.refresh() after successful mutations.
 
 import { useState, useEffect, useRef, FormEvent } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { FileUp, CalendarDays, FolderPlus, Plus, MessageCircle } from 'lucide-react'
 import {
@@ -220,16 +221,14 @@ export function HomePill({ categories, triggers }: HomePillProps) {
           Triggers
         </button>
 
-        {/* Future app slot — inert placeholder */}
-        <button
-          type="button"
-          disabled
-          className="flex items-center gap-1.5 rounded-xl px-4 min-h-[44px] text-[13px] font-medium text-muted-foreground/40 cursor-default select-none"
-          title="Coming soon"
+        {/* Calendar app — navigates to /calendar */}
+        <Link
+          href="/calendar"
+          className="flex items-center gap-1.5 rounded-xl px-4 min-h-[44px] text-[13px] font-medium text-muted-foreground hover:bg-muted/60 transition-colors"
         >
           <CalendarDays className="h-4 w-4" aria-hidden="true" />
           Calendar
-        </button>
+        </Link>
 
         {/* Divider */}
         <div className="h-5 w-px bg-border/60" aria-hidden="true" />
