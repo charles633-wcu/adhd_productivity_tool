@@ -35,18 +35,17 @@ export async function fetchAndParseIcs(url: string): Promise<IcsEvent[]> {
 
   for (const key of Object.keys(parsed)) {
     const comp = parsed[key]
+    if (!comp || comp.type !== 'VEVENT') continue
 
-    // Skip non-event components (VTIMEZONE, VALARM, etc.)
-    if (comp.type !== 'VEVENT') continue
-
-    // Skip events missing required fields
-    if (!comp.start || !comp.end || !comp.summary) continue
+    // VEvent is the only component type with start/end/summary
+    const vevent = comp as ical.VEvent
+    if (!vevent.start || !vevent.end || !vevent.summary) continue
 
     events.push({
-      uid: comp.uid ?? key,
-      title: String(comp.summary),
-      startAt: new Date(comp.start),
-      endAt: new Date(comp.end),
+      uid: vevent.uid ?? key,
+      title: String(vevent.summary),
+      startAt: new Date(vevent.start),
+      endAt: new Date(vevent.end),
     })
   }
 
