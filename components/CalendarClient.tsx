@@ -9,7 +9,7 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ChevronLeft, ChevronRight, ZoomOut, ZoomIn, FolderOpen, Link2, CalendarDays } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ZoomOut, ZoomIn, FolderOpen, Link2, CalendarDays, Plus } from 'lucide-react'
 import { DayDetailModal } from '@/components/DayDetailModal'
 import { EventCategoryModal } from '@/components/EventCategoryModal'
 import { IcsModal } from '@/components/IcsModal'
@@ -44,7 +44,7 @@ function monthLabel(d: Date) {
   return d.toLocaleString('default', { month: 'long', year: 'numeric' })
 }
 
-const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -56,6 +56,7 @@ export function CalendarClient({
   const [view, setView] = useState<'month' | 'sixMonth'>('month')
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const [modalDay, setModalDay] = useState<string | null>(null)
+  const [modalStartsInAddMode, setModalStartsInAddMode] = useState(false)
   const [manageCatsOpen, setManageCatsOpen] = useState(false)
   const [icsOpen, setIcsOpen] = useState(false)
   const [categories, setCategories] = useState(initialCategories)
@@ -63,10 +64,10 @@ export function CalendarClient({
   const [icsUrl, setIcsUrl] = useState(initialIcsUrl)
   const [direction, setDirection] = useState(1)
 
-  // Build 42-day grid for month view (Mon-indexed)
+  // Build 42-day grid for month view (Sun-indexed)
   const calendarDays = useMemo(() => {
     const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
-    const startDow = (firstDay.getDay() + 6) % 7
+    const startDow = firstDay.getDay()
     return Array.from({ length: 42 }, (_, i) => {
       const d = new Date(firstDay)
       d.setDate(1 - startDow + i)
@@ -105,16 +106,18 @@ export function CalendarClient({
   function navigate(delta: number) {
     setDirection(delta)
     setSelectedDay(null)
+    setModalStartsInAddMode(false)
     setCurrentMonth(m => new Date(m.getFullYear(), m.getMonth() + delta, 1))
   }
 
-  // Two-step day selection: first click selects (shows expand icon), second opens modal
+  // Day click only selects the day; adding is handled by the explicit selected-day action.
   function handleDayClick(key: string) {
-    if (selectedDay === key) {
-      setModalDay(key)
-    } else {
-      setSelectedDay(key)
-    }
+    setSelectedDay(key)
+  }
+
+  function handleAddEventClick(key: string) {
+    setModalStartsInAddMode(true)
+    setModalDay(key)
   }
 
   const todayKey = toLocalDateKey(today)
@@ -197,11 +200,16 @@ export function CalendarClient({
             transition={{ duration: 0.25, ease: 'easeInOut' }}
             className="flex-1 overflow-hidden flex flex-col px-2 py-2"
           >
-            {/* Day-of-week headers */}
+            {/* Day-of-week headers — today's column label is primary-colored */}
             <div className="grid grid-cols-7 mb-1">
-              {DOW.map(d => (
-                <div key={d} className="text-center text-[10px] font-mono text-muted-foreground py-1">{d}</div>
-              ))}
+              {DOW.map((d, i) => {
+                const isTodayCol = i === today.getDay()
+                return (
+                  <div key={d} className="text-center py-1">
+                    <span className={`text-[10px] font-mono ${isTodayCol ? 'text-primary font-bold' : 'text-muted-foreground'}`}>{d}</span>
+                  </div>
+                )
+              })}
             </div>
 
             {/* Day grid */}
@@ -216,23 +224,51 @@ export function CalendarClient({
                 const totalDots = dayEvents.length + dayIcsEvts.length
 
                 return (
-                  <motion.button
+                  // motion.div (not button) so the expand button inside is valid HTML
+                  <motion.div
                     key={key}
+                    data-testid={`calendar-day-${key}`}
+                    role={isCurrentMonth ? 'button' : undefined}
+                    aria-label={isCurrentMonth ? `Select ${day.toLocaleDateString(undefined, {
+                      month: 'long',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}` : undefined}
+                    tabIndex={isCurrentMonth ? 0 : -1}
                     onClick={() => { if (isCurrentMonth) handleDayClick(key) }}
-                    whileHover={isCurrentMonth ? { scale: 1.05 } : {}}
-                    whileTap={isCurrentMonth ? { scale: 0.95 } : {}}
+                    onKeyDown={e => { if (isCurrentMonth && (e.key === 'Enter' || e.key === ' ')) handleDayClick(key) }}
+                    whileHover={isCurrentMonth ? { scale: 1.04 } : {}}
+                    whileTap={isCurrentMonth ? { scale: 0.96 } : {}}
                     className={[
-                      'relative flex flex-col items-center justify-start pt-1 rounded-xl text-xs transition-colors min-h-[3.5rem]',
-                      isCurrentMonth ? 'text-foreground' : 'text-muted-foreground/40 cursor-default',
-                      isToday ? 'ring-1 ring-primary' : '',
-                      isSelected ? 'ring-2 ring-primary bg-primary/10' : isCurrentMonth ? 'hover:bg-muted/60' : '',
+                      'relative flex flex-col items-center justify-start pt-1 rounded-xl text-xs min-h-[3.5rem]',
+                      isCurrentMonth ? 'text-foreground cursor-pointer' : 'text-muted-foreground/40 cursor-default',
                     ].filter(Boolean).join(' ')}
                   >
-                    <span className={isToday ? 'font-bold text-primary' : ''}>{day.getDate()}</span>
+                    {/* Sliding selection background — follows selected day, iOS circle sits on top */}
+                    {isSelected && (
+                      <motion.div
+                        layoutId="day-selection"
+                        className="absolute inset-0 rounded-xl bg-muted shadow-sm"
+                        transition={{ type: 'spring', stiffness: 500, damping: 38 }}
+                      />
+                    )}
+
+                    {/* Date number — plain for all days; today gets bold primary text only */}
+                    <span className={[
+                      'relative z-10 text-xs font-medium w-6 h-6 flex items-center justify-center',
+                      isToday ? 'font-bold text-primary' : '',
+                    ].filter(Boolean).join(' ')}>
+                      {day.getDate()}
+                    </span>
+
+                    {/* Today dot — always visible below today's number to mark the current date */}
+                    {isToday && (
+                      <span className="relative z-10 w-1 h-1 rounded-full bg-primary" />
+                    )}
 
                     {/* Colored dots — up to 3 */}
                     {totalDots > 0 && (
-                      <div className="flex gap-0.5 mt-0.5 flex-wrap justify-center px-1">
+                      <div className="relative z-10 flex gap-0.5 mt-0.5 flex-wrap justify-center px-1">
                         {dayEvents.slice(0, 2).map((ev, i) => {
                           const cat = categories.find(c => c.id === ev.categoryId)
                           return <span key={`e${i}`} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ev.color ?? cat?.color ?? '#6366f1' }} />
@@ -242,20 +278,23 @@ export function CalendarClient({
                       </div>
                     )}
 
-                    {/* Expand icon — appears on selected day via spring animation */}
+                    {/* Selected-day add action — explicit instead of double-click opening */}
                     {isSelected && (
                       <motion.button
-                        aria-label="Expand day"
-                        initial={{ scale: 0, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-                        onClick={e => { e.stopPropagation(); setModalDay(key) }}
-                        className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-primary text-primary-foreground text-[9px] flex items-center justify-center shadow-sm"
+                        initial={{ opacity: 0, scale: 0.78, y: 6 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        transition={{ type: 'spring', stiffness: 520, damping: 30, mass: 0.5 }}
+                        onClick={e => {
+                          e.stopPropagation()
+                          handleAddEventClick(key)
+                        }}
+                        className="absolute bottom-1 left-1/2 -translate-x-1/2 h-7 rounded-full bg-primary text-primary-foreground px-3 text-[10px] font-semibold flex items-center gap-1 shadow-sm z-20"
                       >
-                        ⤢
+                        <Plus className="h-3 w-3" aria-hidden="true" />
+                        <span>Add event</span>
                       </motion.button>
                     )}
-                  </motion.button>
+                  </motion.div>
                 )
               })}
             </div>
@@ -273,7 +312,7 @@ export function CalendarClient({
             <div className="grid grid-cols-2 gap-4">
               {sixMonths.map(month => {
                 const firstDay = new Date(month.getFullYear(), month.getMonth(), 1)
-                const startDow = (firstDay.getDay() + 6) % 7
+                const startDow = firstDay.getDay()
                 const days = Array.from({ length: 35 }, (_, i) => {
                   const d = new Date(firstDay); d.setDate(1 - startDow + i); return d
                 })
@@ -312,7 +351,12 @@ export function CalendarClient({
           events={modalEvents.map(ev => ({ ...ev, startAt: new Date(ev.startAt), endAt: new Date(ev.endAt) }))}
           icsEvents={modalIcsEvents.map(ev => ({ ...ev, startAt: new Date(ev.startAt), endAt: new Date(ev.endAt) }))}
           eventCategories={categories}
-          onClose={() => { setModalDay(null); setSelectedDay(null) }}
+          startInAddMode={modalStartsInAddMode}
+          onClose={() => {
+            setModalDay(null)
+            setSelectedDay(null)
+            setModalStartsInAddMode(false)
+          }}
           onEventCreated={ev => setLocalEvents(prev => [
             ...prev,
             { ...ev, startAt: ev.startAt.toISOString(), endAt: ev.endAt.toISOString() },
