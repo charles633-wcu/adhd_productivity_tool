@@ -72,6 +72,26 @@ describe('POST /api/calendar/events', () => {
     }))
     expect(res.status).toBe(400)
   })
+
+  it('accepts blank notes in create-event payloads', async () => {
+    const request = new Request('http://localhost/api/calendar/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Planning',
+        startAt: '2026-04-15T09:00:00.000Z',
+        endAt: '2026-04-15T10:00:00.000Z',
+        notes: null,
+        categoryId: null,
+        repeatFrequency: null,
+        repeatInterval: null,
+        repeatEndsAt: null,
+      }),
+    })
+
+    const response = await POST(request)
+    expect(response.status).toBe(201)
+  })
 })
 
 describe('PATCH /api/calendar/events/[id]', () => {

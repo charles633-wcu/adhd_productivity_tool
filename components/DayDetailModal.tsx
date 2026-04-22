@@ -19,6 +19,7 @@ interface DayDetailModalProps {
   events: CalendarEventItem[]
   icsEvents: IcsEventItem[]
   eventCategories: EventCategoryItem[]
+  startInAddMode?: boolean
   onClose: () => void
   onEventCreated: (event: CalendarEventItem) => void
   onEventDeleted: (sourceEventId: string) => void
@@ -33,9 +34,9 @@ function formatHeading(d: Date) {
 }
 
 export function DayDetailModal({
-  date, events, icsEvents, eventCategories, onClose, onEventCreated, onEventDeleted,
+  date, events, icsEvents, eventCategories, startInAddMode = false, onClose, onEventCreated, onEventDeleted,
 }: DayDetailModalProps) {
-  const [showForm, setShowForm] = useState(false)
+  const [showForm, setShowForm] = useState(startInAddMode)
   const [title, setTitle] = useState('')
   const [startTime, setStartTime] = useState('09:00')
   const [endTime, setEndTime] = useState('10:00')
@@ -64,7 +65,7 @@ export function DayDetailModal({
         startAt: buildDateTime(startTime),
         endAt: buildDateTime(endTime),
         categoryId: categoryId || null,
-        notes: notes || null,
+        notes: notes.trim() ? notes.trim() : undefined,
         repeatIntervalDays: repeatDays ? parseInt(repeatDays) : null,
       }
       const res = await fetch('/api/calendar/events', {

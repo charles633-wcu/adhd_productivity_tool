@@ -13,7 +13,7 @@ const CreateSchema = z
     startAt: z.string().datetime(),
     endAt: z.string().datetime(),
     color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-    notes: z.string().optional(),
+    notes: z.string().optional().nullable(),
     repeatIntervalDays: z.number().int().positive().optional().nullable(),
     repeatEndsAt: z.string().datetime().optional().nullable(),
     categoryId: z.string().optional().nullable(),
