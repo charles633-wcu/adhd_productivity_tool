@@ -81,13 +81,19 @@ describe('DayDetailModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /save/i }))
 
     await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith(
-        '/api/calendar/events',
-        expect.objectContaining({
-          method: 'POST',
-          body: expect.not.stringContaining('"notes":null'),
-        }),
-      )
+      const [url, init] = vi.mocked(fetch).mock.calls[0]
+      expect(url).toBe('/api/calendar/events')
+      expect(init).toEqual(expect.objectContaining({ method: 'POST' }))
+
+      const body = JSON.parse(String(init.body))
+      expect(body).toEqual({
+        title: 'Planning',
+        startAt: expect.any(String),
+        endAt: expect.any(String),
+        categoryId: null,
+        repeatIntervalDays: null,
+      })
+      expect(body).not.toHaveProperty('notes')
     })
   })
 })
