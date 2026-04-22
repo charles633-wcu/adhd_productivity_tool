@@ -1,12 +1,9 @@
 // Server component — fetches all calendar data and passes to CalendarClient.
-// Reads trigger nextReviewAt directly (minimal query, no trigger CRUD imported).
 // Re-fetches ICS in background if stale (>1 hour).
 export const dynamic = 'force-dynamic'
 
-import { eq, and } from 'drizzle-orm'
 import { getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db/client'
-import { triggers } from '@/lib/db/schema'
 import {
   listEventCategories, listEventsInRange,
   getIcsSubscription, upsertIcsSubscription,
@@ -25,10 +22,7 @@ export default async function CalendarPage() {
   const rangeTo = new Date()
   rangeTo.setMonth(rangeTo.getMonth() + 6)
 
-  const [triggerRows, eventRows, categoryRows, [icsSub]] = await Promise.all([
-    db.select({ id: triggers.id, title: triggers.title, nextReviewAt: triggers.nextReviewAt })
-      .from(triggers)
-      .where(and(eq(triggers.userId, user.id), eq(triggers.status, 'active'))),
+  const [eventRows, categoryRows, [icsSub]] = await Promise.all([
     listEventsInRange(db, user.id, rangeFrom, rangeTo),
     listEventCategories(db, user.id),
     getIcsSubscription(db, user.id),
@@ -73,15 +67,8 @@ export default async function CalendarPage() {
     })),
   )
 
-  const serializedTriggers = triggerRows.map(t => ({
-    id: t.id,
-    title: t.title,
-    nextReviewAt: t.nextReviewAt.toISOString(),
-  }))
-
   return (
     <CalendarClient
-      initialTriggers={serializedTriggers}
       initialEvents={expandedEvents}
       initialIcsEvents={icsEvents}
       eventCategories={categoryRows}

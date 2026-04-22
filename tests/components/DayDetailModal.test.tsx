@@ -6,7 +6,6 @@ vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => (
 
 const baseProps = {
   date: new Date('2026-04-15T00:00:00'),
-  triggers: [],
   events: [],
   icsEvents: [],
   eventCategories: [],
@@ -28,10 +27,16 @@ describe('DayDetailModal', () => {
     expect(screen.getByText(/Nothing scheduled/i)).toBeTruthy()
   })
 
-  it('renders trigger titles', () => {
-    const props = { ...baseProps, triggers: [{ id: 't1', title: 'Review Go notes' }] }
+  it('renders personal events', () => {
+    const props = {
+      ...baseProps,
+      events: [{
+        occurrenceId: 'e1::2026-04-15', sourceEventId: 'e1', title: 'Team standup',
+        startAt: new Date('2026-04-15T09:00:00'), endAt: new Date('2026-04-15T09:30:00'),
+      }],
+    }
     render(<DayDetailModal {...props} />)
-    expect(screen.getByText('Review Go notes')).toBeTruthy()
+    expect(screen.getByText('Team standup')).toBeTruthy()
   })
 
   it('renders ICS events as read-only', () => {

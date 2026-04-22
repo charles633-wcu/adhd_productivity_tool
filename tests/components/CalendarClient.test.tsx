@@ -5,7 +5,6 @@ import { CalendarClient } from '@/components/CalendarClient'
 vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [] }))
 
 const baseProps = {
-  initialTriggers: [],
   initialEvents: [],
   initialIcsEvents: [],
   eventCategories: [],

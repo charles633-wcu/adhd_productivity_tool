@@ -7,15 +7,15 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import Link from 'next/link'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ChevronLeft, ChevronRight, ZoomOut, ZoomIn, FolderOpen, Link2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ZoomOut, ZoomIn, FolderOpen, Link2, CalendarDays } from 'lucide-react'
 import { DayDetailModal } from '@/components/DayDetailModal'
 import { EventCategoryModal } from '@/components/EventCategoryModal'
 import { IcsModal } from '@/components/IcsModal'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface TriggerItem { id: string; title: string; nextReviewAt: string }
 interface CalendarEventItem {
   occurrenceId: string; sourceEventId: string; title: string
   startAt: string; endAt: string; color?: string | null; categoryId?: string | null
@@ -24,7 +24,6 @@ interface IcsEventItem { uid: string; title: string; startAt: string; endAt: str
 interface EventCategory { id: string; name: string; color: string }
 
 interface CalendarClientProps {
-  initialTriggers: TriggerItem[]
   initialEvents: CalendarEventItem[]
   initialIcsEvents: IcsEventItem[]
   eventCategories: EventCategory[]
@@ -50,7 +49,7 @@ const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function CalendarClient({
-  initialTriggers, initialEvents, initialIcsEvents, eventCategories: initialCategories, icsUrl: initialIcsUrl,
+  initialEvents, initialIcsEvents, eventCategories: initialCategories, icsUrl: initialIcsUrl,
 }: CalendarClientProps) {
   const [today] = useState(() => startOfLocalToday())
   const [currentMonth, setCurrentMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1))
@@ -83,16 +82,6 @@ export function CalendarClient({
   }, [currentMonth])
 
   // Index events by local date key for O(1) lookups
-  const triggersByDate = useMemo(() => {
-    const map = new Map<string, TriggerItem[]>()
-    for (const t of initialTriggers) {
-      const key = toLocalDateKey(new Date(t.nextReviewAt))
-      if (!map.has(key)) map.set(key, [])
-      map.get(key)!.push(t)
-    }
-    return map
-  }, [initialTriggers])
-
   const eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarEventItem[]>()
     for (const ev of localEvents) {
@@ -135,13 +124,33 @@ export function CalendarClient({
     ? (() => { const [y, mo, d] = modalDay.split('-').map(Number); return new Date(y, mo - 1, d) })()
     : null
 
-  const modalTriggers = modalDay ? (triggersByDate.get(modalDay) ?? []) : []
   const modalEvents = modalDay ? (eventsByDate.get(modalDay) ?? []) : []
   const modalIcsEvents = modalDay ? (icsEventsByDate.get(modalDay) ?? []) : []
 
   return (
     <div className="fixed inset-0 bg-background overflow-hidden flex flex-col pt-[60px]">
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
+      {/* ── App Nav Pill — mirrors HomePill toolbar ─────────────────────────── */}
+      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 rounded-full border border-border/50 bg-background/90 backdrop-blur-md shadow-lg px-4 py-0">
+        <span className="text-[13px] font-extrabold tracking-widest text-foreground select-none">SENTINEL</span>
+        <div className="h-5 w-px bg-border/60" aria-hidden="true" />
+        <Link
+          href="/"
+          className="flex items-center gap-1.5 rounded-xl px-4 min-h-[44px] text-[13px] font-medium text-muted-foreground hover:bg-muted/60 transition-colors"
+        >
+          <span aria-hidden="true">🎯</span>
+          Triggers
+        </Link>
+        <button
+          type="button"
+          className="flex items-center gap-1.5 rounded-xl bg-primary text-primary-foreground px-4 min-h-[44px] text-[13px] font-semibold cursor-default"
+          aria-current="page"
+        >
+          <CalendarDays className="h-4 w-4" aria-hidden="true" />
+          Calendar
+        </button>
+      </div>
+
+      {/* ── Calendar Header ──────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-center gap-2">
           <button aria-label="Previous month" onClick={() => navigate(-1)} className="p-2 rounded-lg hover:bg-muted transition-colors">
@@ -202,10 +211,9 @@ export function CalendarClient({
                 const isCurrentMonth = day.getMonth() === currentMonth.getMonth()
                 const isToday = key === todayKey
                 const isSelected = key === selectedDay
-                const dayTriggers = triggersByDate.get(key) ?? []
                 const dayEvents = eventsByDate.get(key) ?? []
                 const dayIcsEvts = icsEventsByDate.get(key) ?? []
-                const totalDots = dayTriggers.length + dayEvents.length + dayIcsEvts.length
+                const totalDots = dayEvents.length + dayIcsEvts.length
 
                 return (
                   <motion.button
@@ -225,8 +233,7 @@ export function CalendarClient({
                     {/* Colored dots — up to 3 */}
                     {totalDots > 0 && (
                       <div className="flex gap-0.5 mt-0.5 flex-wrap justify-center px-1">
-                        {dayTriggers.slice(0, 1).map((_, i) => <span key={`t${i}`} className="w-1.5 h-1.5 rounded-full bg-primary" />)}
-                        {dayEvents.slice(0, 1).map((ev, i) => {
+                        {dayEvents.slice(0, 2).map((ev, i) => {
                           const cat = categories.find(c => c.id === ev.categoryId)
                           return <span key={`e${i}`} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: ev.color ?? cat?.color ?? '#6366f1' }} />
                         })}
@@ -280,7 +287,7 @@ export function CalendarClient({
                     <div className="grid grid-cols-7 gap-0.5">
                       {days.map(d => {
                         const key = toLocalDateKey(d)
-                        const hasDots = (triggersByDate.get(key)?.length ?? 0) + (eventsByDate.get(key)?.length ?? 0) + (icsEventsByDate.get(key)?.length ?? 0) > 0
+                        const hasDots = (eventsByDate.get(key)?.length ?? 0) + (icsEventsByDate.get(key)?.length ?? 0) > 0
                         const inMonth = d.getMonth() === month.getMonth()
                         return (
                           <div key={key} className={`relative flex items-center justify-center rounded text-[7px] h-4 ${inMonth ? 'text-foreground' : 'text-muted-foreground/20'}`}>
@@ -302,7 +309,6 @@ export function CalendarClient({
       {modalDay && modalDate && (
         <DayDetailModal
           date={modalDate}
-          triggers={modalTriggers}
           events={modalEvents.map(ev => ({ ...ev, startAt: new Date(ev.startAt), endAt: new Date(ev.endAt) }))}
           icsEvents={modalIcsEvents.map(ev => ({ ...ev, startAt: new Date(ev.startAt), endAt: new Date(ev.endAt) }))}
           eventCategories={categories}

@@ -7,7 +7,6 @@
 
 import { useState, FormEvent } from 'react'
 
-interface TriggerItem { id: string; title: string }
 interface CalendarEventItem {
   occurrenceId: string; sourceEventId: string; title: string
   startAt: Date; endAt: Date; color?: string | null; categoryId?: string | null
@@ -17,7 +16,6 @@ interface EventCategoryItem { id: string; name: string; color: string }
 
 interface DayDetailModalProps {
   date: Date
-  triggers: TriggerItem[]
   events: CalendarEventItem[]
   icsEvents: IcsEventItem[]
   eventCategories: EventCategoryItem[]
@@ -35,7 +33,7 @@ function formatHeading(d: Date) {
 }
 
 export function DayDetailModal({
-  date, triggers, events, icsEvents, eventCategories, onClose, onEventCreated, onEventDeleted,
+  date, events, icsEvents, eventCategories, onClose, onEventCreated, onEventDeleted,
 }: DayDetailModalProps) {
   const [showForm, setShowForm] = useState(false)
   const [title, setTitle] = useState('')
@@ -47,7 +45,7 @@ export function DayDetailModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const isEmpty = triggers.length === 0 && events.length === 0 && icsEvents.length === 0
+  const isEmpty = events.length === 0 && icsEvents.length === 0
 
   function buildDateTime(time: string) {
     const [h, m] = time.split(':').map(Number)
@@ -108,21 +106,6 @@ export function DayDetailModal({
         <div className="overflow-y-auto max-h-[70vh] px-5 py-4 space-y-5">
           {isEmpty && !showForm && (
             <p className="text-sm text-muted-foreground text-center py-4">Nothing scheduled</p>
-          )}
-
-          {/* Triggers due */}
-          {triggers.length > 0 && (
-            <section>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-primary mb-2">Triggers due</p>
-              <ul className="space-y-1">
-                {triggers.map(t => (
-                  <li key={t.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 text-sm">
-                    <span className="text-primary">🎯</span>
-                    <span className="font-medium">{t.title}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
           )}
 
           {/* Personal events */}

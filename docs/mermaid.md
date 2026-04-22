@@ -1,5 +1,5 @@
-```mermaid
-  flowchart TD
+  ```mermaid
+flowchart TD
       U[User in Browser]
 
       subgraph Frontend
@@ -8,7 +8,7 @@
       end
 
       subgraph NextServer[Next.js Server]
-          ServerPages[Server-rendered pages<br/>app/page.tsx<br/>app/review/page.tsx<br/>app/category/[id]/page.tsx]
+          ServerPages[Server-rendered pages<br/>app/page.tsx<br/>app/review/page.tsx<br/>app/category/:id/page.tsx]
           APIRoutes[API routes<br/>app/api/*]
       end
 
@@ -48,7 +48,6 @@
 
       ServerPages -->|HTML + props| UI
       APIRoutes -->|JSON responses| UI
-
 ```
 
 
