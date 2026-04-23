@@ -22,21 +22,15 @@ export interface EventOccurrence {
   endAt: Date
 }
 
-function lastUtcDayOfMonth(year: number, month: number) {
-  return new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+function lastLocalDayOfMonth(year: number, month: number) {
+  return new Date(year, month + 1, 0).getDate()
 }
 
-function buildUtcDateLike(source: Date, year: number, month: number, day: number) {
-  const safeDay = Math.min(day, lastUtcDayOfMonth(year, month))
-  return new Date(Date.UTC(
-    year,
-    month,
-    safeDay,
-    source.getUTCHours(),
-    source.getUTCMinutes(),
-    source.getUTCSeconds(),
-    source.getUTCMilliseconds(),
-  ))
+function buildLocalDateLike(source: Date, year: number, month: number, day: number) {
+  const next = new Date(source)
+  next.setDate(1)
+  next.setFullYear(year, month, Math.min(day, lastLocalDayOfMonth(year, month)))
+  return next
 }
 
 function advanceCursor(
@@ -47,18 +41,18 @@ function advanceCursor(
 ) {
   if (frequency === 'day' || frequency === 'week') {
     const next = new Date(cursor)
-    next.setUTCDate(next.getUTCDate() + interval * (frequency === 'week' ? 7 : 1))
+    next.setDate(next.getDate() + interval * (frequency === 'week' ? 7 : 1))
     return next
   }
 
   if (frequency === 'month') {
-    const monthIndex = cursor.getUTCFullYear() * 12 + cursor.getUTCMonth() + interval
+    const monthIndex = cursor.getFullYear() * 12 + cursor.getMonth() + interval
     const year = Math.floor(monthIndex / 12)
     const month = monthIndex % 12
-    return buildUtcDateLike(cursor, year, month, anchor.day)
+    return buildLocalDateLike(cursor, year, month, anchor.day)
   }
 
-  return buildUtcDateLike(cursor, cursor.getUTCFullYear() + interval, anchor.month, anchor.day)
+  return buildLocalDateLike(cursor, cursor.getFullYear() + interval, anchor.month, anchor.day)
 }
 
 export function expandRepeatingEvent(
@@ -72,8 +66,8 @@ export function expandRepeatingEvent(
   const repeatInterval = event.repeatInterval
   const isRepeating = repeatFrequency !== null && repeatInterval !== null && repeatInterval > 0
   const anchor = {
-    day: event.startAt.getUTCDate(),
-    month: event.startAt.getUTCMonth(),
+    day: event.startAt.getDate(),
+    month: event.startAt.getMonth(),
   }
 
   let cursor = new Date(event.startAt)

@@ -47,6 +47,7 @@ describe('expandRepeatingEvent', () => {
   })
 
   it('expands monthly recurrences by calendar month', () => {
+    const localHour = new Date('2026-01-31T09:00:00Z').getHours()
     const result = expandRepeatingEvent(
       event({
         startAt: new Date('2026-01-31T09:00:00Z'),
@@ -58,12 +59,16 @@ describe('expandRepeatingEvent', () => {
       new Date('2026-05-31T23:59:59Z'),
     )
 
-    expect(starts(result)).toEqual([
-      '2026-01-31T09:00:00.000Z',
-      '2026-02-28T09:00:00.000Z',
-      '2026-03-31T09:00:00.000Z',
-      '2026-04-30T09:00:00.000Z',
-      '2026-05-31T09:00:00.000Z',
+    expect(result.map(item => ({
+      month: item.startAt.getMonth(),
+      day: item.startAt.getDate(),
+      hour: item.startAt.getHours(),
+    }))).toEqual([
+      { month: 0, day: 31, hour: localHour },
+      { month: 1, day: 28, hour: localHour },
+      { month: 2, day: 31, hour: localHour },
+      { month: 3, day: 30, hour: localHour },
+      { month: 4, day: 31, hour: localHour },
     ])
   })
 
@@ -140,6 +145,25 @@ describe('expandRepeatingEvent', () => {
     )
 
     expect(starts(result)).toEqual(['2026-04-01T09:00:00.000Z'])
+  })
+
+  it('preserves local wall-clock time across DST changes when the local offset changes', () => {
+    const before = new Date(2026, 2, 7, 9, 0, 0, 0)
+    const after = new Date(2026, 2, 9, 9, 0, 0, 0)
+    if (before.getTimezoneOffset() === after.getTimezoneOffset()) return
+
+    const result = expandRepeatingEvent(
+      event({
+        startAt: before,
+        endAt: new Date(2026, 2, 7, 10, 0, 0, 0),
+        repeatFrequency: 'day',
+        repeatInterval: 1,
+      }),
+      new Date(2026, 2, 7, 0, 0, 0, 0),
+      new Date(2026, 2, 10, 0, 0, 0, 0),
+    )
+
+    expect(result.map(item => item.startAt.getHours())).toEqual([9, 9, 9])
   })
 
   it('includes occurrences that overlap the range start', () => {

@@ -13,6 +13,7 @@ import { ChevronLeft, ChevronRight, ZoomOut, ZoomIn, FolderOpen, Link2, Calendar
 import { DayDetailModal } from '@/components/DayDetailModal'
 import { EventCategoryModal } from '@/components/EventCategoryModal'
 import { IcsModal } from '@/components/IcsModal'
+import { expandRepeatingEvent } from '@/lib/services/repeatExpander'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,19 @@ interface CalendarEventItem {
 }
 interface IcsEventItem { uid: string; title: string; startAt: string; endAt: string }
 interface EventCategory { id: string; name: string; color: string }
+type RepeatFrequency = 'day' | 'week' | 'month' | 'year'
+
+interface CreatedCalendarEventItem {
+  id: string
+  title: string
+  startAt: string
+  endAt: string
+  color?: string | null
+  categoryId?: string | null
+  repeatFrequency?: RepeatFrequency | null
+  repeatInterval?: number | null
+  repeatEndsAt?: string | null
+}
 
 interface CalendarClientProps {
   initialEvents: CalendarEventItem[]
@@ -130,6 +144,26 @@ export function CalendarClient({
   const modalEvents = modalDay ? (eventsByDate.get(modalDay) ?? []) : []
   const modalIcsEvents = modalDay ? (icsEventsByDate.get(modalDay) ?? []) : []
 
+  function expandCreatedEvent(event: CreatedCalendarEventItem): CalendarEventItem[] {
+    const rangeFrom = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 3, 1)
+    const rangeTo = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 7, 0, 23, 59, 59, 999)
+    return expandRepeatingEvent({
+      id: event.id,
+      title: event.title,
+      startAt: new Date(event.startAt),
+      endAt: new Date(event.endAt),
+      repeatFrequency: event.repeatFrequency ?? null,
+      repeatInterval: event.repeatInterval ?? null,
+      repeatEndsAt: event.repeatEndsAt ? new Date(event.repeatEndsAt) : null,
+    }, rangeFrom, rangeTo).map(occurrence => ({
+      ...occurrence,
+      startAt: occurrence.startAt.toISOString(),
+      endAt: occurrence.endAt.toISOString(),
+      color: event.color ?? null,
+      categoryId: event.categoryId ?? null,
+    }))
+  }
+
   return (
     <div className="fixed inset-0 bg-background overflow-hidden flex flex-col pt-[60px]">
       {/* ── App Nav Pill — mirrors HomePill toolbar ─────────────────────────── */}
@@ -236,7 +270,12 @@ export function CalendarClient({
                     })}` : undefined}
                     tabIndex={isCurrentMonth ? 0 : -1}
                     onClick={() => { if (isCurrentMonth) handleDayClick(key) }}
-                    onKeyDown={e => { if (isCurrentMonth && (e.key === 'Enter' || e.key === ' ')) handleDayClick(key) }}
+                    onKeyDown={e => {
+                      if (isCurrentMonth && (e.key === 'Enter' || e.key === ' ')) {
+                        if (e.key === ' ') e.preventDefault()
+                        handleDayClick(key)
+                      }
+                    }}
                     whileHover={isCurrentMonth ? { scale: 1.04 } : {}}
                     whileTap={isCurrentMonth ? { scale: 0.96 } : {}}
                     className={[
@@ -357,10 +396,7 @@ export function CalendarClient({
             setSelectedDay(null)
             setModalStartsInAddMode(false)
           }}
-          onEventCreated={ev => setLocalEvents(prev => [
-            ...prev,
-            { ...ev, startAt: ev.startAt.toISOString(), endAt: ev.endAt.toISOString() },
-          ])}
+          onEventCreated={event => setLocalEvents(prev => [...prev, ...expandCreatedEvent(event)])}
           onEventDeleted={id => setLocalEvents(prev => prev.filter(e => e.sourceEventId !== id))}
         />
       )}

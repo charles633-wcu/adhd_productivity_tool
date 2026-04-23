@@ -18,6 +18,18 @@ type RepeatMode = 'never' | 'daily' | 'weekly' | 'monthly' | 'yearly'
 type RepeatTabMode = Exclude<RepeatMode, 'never'>
 type RepeatFrequency = 'day' | 'week' | 'month' | 'year'
 
+interface CreatedCalendarEventItem {
+  id: string
+  title: string
+  startAt: string
+  endAt: string
+  color?: string | null
+  categoryId?: string | null
+  repeatFrequency?: RepeatFrequency | null
+  repeatInterval?: number | null
+  repeatEndsAt?: string | null
+}
+
 interface RepeatConfig {
   mode: RepeatMode
   every: number
@@ -30,7 +42,7 @@ interface DayDetailModalProps {
   eventCategories: EventCategoryItem[]
   startInAddMode?: boolean
   onClose: () => void
-  onEventCreated: (event: CalendarEventItem) => void
+  onEventCreated: (event: CreatedCalendarEventItem) => void
   onEventDeleted: (sourceEventId: string) => void
 }
 

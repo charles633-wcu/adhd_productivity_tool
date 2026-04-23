@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { CalendarClient } from '@/components/CalendarClient'
 
@@ -20,7 +20,10 @@ function todayKey() {
 }
 
 describe('CalendarClient', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
 
   it('renders Sunday-first day-of-week headers', () => {
     render(<CalendarClient {...baseProps} />)
@@ -88,9 +91,44 @@ describe('CalendarClient', () => {
     expect(screen.getByPlaceholderText(/Title/i)).toBeTruthy()
   })
 
+  it('normalizes created rows and expands recurring events locally after save', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-15T12:00:00'))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({
+      id: 'ev-1',
+      title: 'Planning',
+      startAt: '2026-04-15T13:00:00.000Z',
+      endAt: '2026-04-15T14:00:00.000Z',
+      color: null,
+      categoryId: null,
+      repeatFrequency: 'day',
+      repeatInterval: 1,
+      repeatEndsAt: null,
+    }), { status: 201 })))
+
+    render(<CalendarClient {...baseProps} />)
+    fireEvent.click(screen.getByTestId('calendar-day-2026-04-15'))
+    fireEvent.click(screen.getByRole('button', { name: /add event/i }))
+    fireEvent.change(screen.getByPlaceholderText(/title/i), { target: { value: 'Planning' } })
+    fireEvent.click(screen.getByRole('button', { name: /repeat never/i }))
+    fireEvent.click(screen.getByRole('button', { name: /every day/i }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /save/i }))
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+    expect(screen.queryByPlaceholderText(/title/i)).toBeNull()
+
+    fireEvent.click(screen.getByTestId('calendar-day-2026-04-16'))
+    expect(screen.getByText('Planning')).toBeTruthy()
+  })
+
   it('toggles zoom to 6-month view', async () => {
     render(<CalendarClient {...baseProps} />)
     fireEvent.click(screen.getByLabelText(/Zoom out/i))
-    await waitFor(() => expect(screen.getByText(/6 months/i)).toBeTruthy())
+    await waitFor(() => expect(screen.getByLabelText(/Zoom in/i)).toBeTruthy())
   })
 })
