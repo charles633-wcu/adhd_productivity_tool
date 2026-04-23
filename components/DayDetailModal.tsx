@@ -1,11 +1,11 @@
 /**
- * DayDetailModal — centered overlay showing all items for a selected calendar day.
- * Three sections (triggers due, personal events, ICS imports) + inline add-event form.
+ * DayDetailModal - centered overlay showing all items for a selected calendar day.
+ * Three sections (personal events, ICS imports) plus inline add-event form.
  * Calls onEventCreated / onEventDeleted to let CalendarClient update local state.
  */
 'use client'
 
-import { useState, FormEvent } from 'react'
+import { FormEvent, useState } from 'react'
 
 interface CalendarEventItem {
   occurrenceId: string; sourceEventId: string; title: string
@@ -13,6 +13,13 @@ interface CalendarEventItem {
 }
 interface IcsEventItem { uid: string; title: string; startAt: Date; endAt: Date }
 interface EventCategoryItem { id: string; name: string; color: string }
+
+type RepeatMode = 'never' | 'daily' | 'weekly' | 'monthly' | 'yearly'
+
+interface RepeatConfig {
+  mode: RepeatMode
+  every: number
+}
 
 interface DayDetailModalProps {
   date: Date
@@ -33,6 +40,33 @@ function formatHeading(d: Date) {
   return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
 }
 
+function weekdayLabel(d: Date) {
+  return d.toLocaleDateString(undefined, { weekday: 'long' })
+}
+
+function monthlyAnchorLabel(d: Date) {
+  return d.toLocaleDateString(undefined, { day: 'numeric' })
+}
+
+function yearlyAnchorLabel(d: Date) {
+  return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
+}
+
+function repeatSummary(config: RepeatConfig, date: Date) {
+  if (config.mode === 'never') return 'Never'
+  if (config.mode === 'daily') return `Every ${config.every} day${config.every === 1 ? '' : 's'}`
+  if (config.mode === 'weekly') return `Every ${config.every} week${config.every === 1 ? '' : 's'} on ${weekdayLabel(date)}`
+  if (config.mode === 'monthly') return `Every ${config.every} month${config.every === 1 ? '' : 's'} on day ${monthlyAnchorLabel(date)}`
+  return `Every ${config.every} year${config.every === 1 ? '' : 's'} on ${yearlyAnchorLabel(date)}`
+}
+
+function repeatUnitLabel(mode: Exclude<RepeatMode, 'never'>, every: number) {
+  if (mode === 'daily') return `day${every === 1 ? '' : 's'}`
+  if (mode === 'weekly') return `week${every === 1 ? '' : 's'}`
+  if (mode === 'monthly') return `month${every === 1 ? '' : 's'}`
+  return `year${every === 1 ? '' : 's'}`
+}
+
 export function DayDetailModal({
   date, events, icsEvents, eventCategories, startInAddMode = false, onClose, onEventCreated, onEventDeleted,
 }: DayDetailModalProps) {
@@ -40,19 +74,43 @@ export function DayDetailModal({
   const [title, setTitle] = useState('')
   const [startTime, setStartTime] = useState('09:00')
   const [endTime, setEndTime] = useState('10:00')
-  const [repeatDays, setRepeatDays] = useState('')
+  const [repeatOpen, setRepeatOpen] = useState(false)
+  const [repeatPresetOpen, setRepeatPresetOpen] = useState(false)
+  const [repeatConfig, setRepeatConfig] = useState<RepeatConfig>({ mode: 'never', every: 1 })
   const [categoryId, setCategoryId] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const isEmpty = events.length === 0 && icsEvents.length === 0
+  const customRepeatMode: Exclude<RepeatMode, 'never'> = repeatConfig.mode === 'never' ? 'daily' : repeatConfig.mode
 
   function buildDateTime(time: string) {
     const [h, m] = time.split(':').map(Number)
     const d = new Date(date)
     d.setHours(h, m, 0, 0)
     return d.toISOString()
+  }
+
+  function selectRepeatPreset(mode: RepeatMode) {
+    setRepeatConfig({ mode, every: 1 })
+    setRepeatPresetOpen(false)
+    setRepeatOpen(false)
+  }
+
+  function openCustomRepeat() {
+    setRepeatPresetOpen(false)
+    setRepeatOpen(true)
+    setRepeatConfig(current => ({
+      mode: current.mode === 'never' ? 'daily' : current.mode,
+      every: current.every,
+    }))
+  }
+
+  function closeForm() {
+    setShowForm(false)
+    setRepeatOpen(false)
+    setRepeatPresetOpen(false)
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -66,7 +124,7 @@ export function DayDetailModal({
         endAt: buildDateTime(endTime),
         categoryId: categoryId || null,
         notes: notes.trim() ? notes.trim() : undefined,
-        repeatIntervalDays: repeatDays ? parseInt(repeatDays) : null,
+        repeatIntervalDays: repeatConfig.mode === 'daily' ? repeatConfig.every : null,
       }
       const res = await fetch('/api/calendar/events', {
         method: 'POST',
@@ -76,8 +134,13 @@ export function DayDetailModal({
       if (!res.ok) throw new Error(await res.text())
       const created = await res.json()
       onEventCreated(created)
-      setShowForm(false)
-      setTitle(''); setStartTime('09:00'); setEndTime('10:00'); setRepeatDays(''); setCategoryId(''); setNotes('')
+      closeForm()
+      setTitle('')
+      setStartTime('09:00')
+      setEndTime('10:00')
+      setRepeatConfig({ mode: 'never', every: 1 })
+      setCategoryId('')
+      setNotes('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save event')
     } finally {
@@ -89,46 +152,46 @@ export function DayDetailModal({
     try {
       await fetch(`/api/calendar/events/${sourceEventId}`, { method: 'DELETE' })
       onEventDeleted(sourceEventId)
-    } catch { /* silent — parent handles state */ }
+    } catch {
+      // Silent; parent handles state.
+    }
   }
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="relative w-full max-w-md rounded-2xl bg-background border border-border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-border bg-background shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <h2 className="text-base font-semibold">{formatHeading(date)}</h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-lg leading-none">✕</button>
+          <button onClick={onClose} className="text-lg leading-none text-muted-foreground hover:text-foreground">x</button>
         </div>
 
-        <div className="overflow-y-auto max-h-[70vh] px-5 py-4 space-y-5">
+        <div className="max-h-[70vh] space-y-5 overflow-y-auto px-5 py-4">
           {isEmpty && !showForm && (
-            <p className="text-sm text-muted-foreground text-center py-4">Nothing scheduled</p>
+            <p className="py-4 text-center text-sm text-muted-foreground">Nothing scheduled</p>
           )}
 
-          {/* Personal events */}
           {events.length > 0 && (
             <section>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Your events</p>
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Your events</p>
               <ul className="space-y-1">
                 {events.map(ev => {
                   const cat = eventCategories.find(c => c.id === ev.categoryId)
                   return (
-                    <li key={ev.occurrenceId} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/40 text-sm group">
+                    <li key={ev.occurrenceId} className="group flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2 text-sm">
                       <span
-                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
                         style={{ backgroundColor: ev.color ?? cat?.color ?? '#6366f1' }}
                       />
                       <span className="flex-1 font-medium">{ev.title}</span>
-                      <span className="text-xs text-muted-foreground">{formatTime(new Date(ev.startAt))} – {formatTime(new Date(ev.endAt))}</span>
+                      <span className="text-xs text-muted-foreground">{formatTime(new Date(ev.startAt))} - {formatTime(new Date(ev.endAt))}</span>
                       <button
                         onClick={() => handleDelete(ev.sourceEventId)}
-                        className="opacity-0 group-hover:opacity-100 text-destructive text-xs ml-1 transition-opacity"
+                        className="ml-1 text-xs text-destructive opacity-0 transition-opacity group-hover:opacity-100"
                         aria-label="Delete event"
-                      >✕</button>
+                      >x</button>
                     </li>
                   )
                 })}
@@ -136,23 +199,21 @@ export function DayDetailModal({
             </section>
           )}
 
-          {/* ICS events — read-only */}
           {icsEvents.length > 0 && (
             <section>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2">Imported</p>
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Imported</p>
               <ul className="space-y-1">
                 {icsEvents.map(ev => (
-                  <li key={ev.uid} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/20 text-sm text-muted-foreground">
-                    <span className="w-2.5 h-2.5 rounded-full shrink-0 bg-muted-foreground/40" />
+                  <li key={ev.uid} className="flex items-center gap-2 rounded-lg bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-muted-foreground/40" />
                     <span>{ev.title}</span>
-                    <span className="ml-auto text-xs">{formatTime(new Date(ev.startAt))} – {formatTime(new Date(ev.endAt))}</span>
+                    <span className="ml-auto text-xs">{formatTime(new Date(ev.startAt))} - {formatTime(new Date(ev.endAt))}</span>
                   </li>
                 ))}
               </ul>
             </section>
           )}
 
-          {/* Add event inline form */}
           {showForm && (
             <form onSubmit={handleSubmit} className="space-y-3 border-t border-border pt-4">
               <input
@@ -165,23 +226,77 @@ export function DayDetailModal({
               />
               <div className="flex gap-2">
                 <div className="flex-1">
-                  <label className="block text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">Start</label>
+                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Start</label>
                   <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm" />
                 </div>
                 <div className="flex-1">
-                  <label className="block text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">End</label>
+                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">End</label>
                   <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="w-full rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm" />
                 </div>
               </div>
               <div className="flex gap-2">
-                <input
-                  type="number"
-                  placeholder="Repeat every N days (0 = none)"
-                  value={repeatDays}
-                  onChange={e => setRepeatDays(e.target.value)}
-                  min={1}
-                  className="flex-1 rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm"
-                />
+                <div className="relative flex-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRepeatPresetOpen(open => !open)
+                      setRepeatOpen(false)
+                    }}
+                    className="w-full rounded-lg border border-input bg-muted/40 px-3 py-2 text-left text-sm hover:bg-muted/60"
+                    aria-expanded={repeatPresetOpen || repeatOpen}
+                    aria-label={`Repeat ${repeatSummary(repeatConfig, date)}`}
+                  >
+                    <span className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Repeat</span>
+                    <span>{repeatOpen ? 'Custom' : repeatSummary(repeatConfig, date)}</span>
+                  </button>
+
+                  {repeatPresetOpen && (
+                    <div className="absolute left-0 right-0 top-full z-10 mt-2 rounded-xl border border-border bg-background p-2 shadow-xl">
+                      <div className="space-y-1">
+                        <button type="button" onClick={() => selectRepeatPreset('never')} className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted">Never</button>
+                        <button type="button" onClick={() => selectRepeatPreset('daily')} className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted">Every day</button>
+                        <button type="button" onClick={() => selectRepeatPreset('weekly')} className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted">Every week</button>
+                        <button type="button" onClick={() => selectRepeatPreset('monthly')} className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted">Every month</button>
+                        <button type="button" onClick={() => selectRepeatPreset('yearly')} className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted">Every year</button>
+                        <button type="button" onClick={openCustomRepeat} className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted">Custom</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {repeatOpen && (
+                    <div className="absolute left-0 right-0 top-full z-10 mt-2 space-y-3 rounded-xl border border-border bg-background p-3 shadow-xl">
+                      <div role="tablist" aria-label="Repeat frequency" className="grid grid-cols-4 gap-1 rounded-lg bg-muted/60 p-1">
+                        {(['daily', 'weekly', 'monthly', 'yearly'] as const).map(mode => (
+                          <button
+                            key={mode}
+                            type="button"
+                            role="tab"
+                            aria-selected={customRepeatMode === mode}
+                            onClick={() => setRepeatConfig(current => ({ ...current, mode }))}
+                            className={`rounded-md px-2 py-1.5 text-xs font-medium capitalize transition-colors ${customRepeatMode === mode ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                          >
+                            {mode}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-center gap-2">
+                        <span className="text-sm text-muted-foreground">Every</span>
+                        <select
+                          value={repeatConfig.every}
+                          onChange={e => setRepeatConfig(current => ({ ...current, every: parseInt(e.target.value, 10) }))}
+                          className="w-24 rounded-lg border border-input bg-muted/40 px-3 py-2 text-center text-sm"
+                          aria-label="Repeat interval"
+                        >
+                          {Array.from({ length: 120 }, (_, index) => index + 1).map(value => (
+                            <option key={value} value={value}>{value}</option>
+                          ))}
+                        </select>
+                        <span className="text-sm capitalize text-muted-foreground">{repeatUnitLabel(customRepeatMode, repeatConfig.every)}</span>
+                      </div>
+                      <p className="text-center text-xs text-muted-foreground">{repeatSummary(repeatConfig, date)}</p>
+                    </div>
+                  )}
+                </div>
                 <select
                   value={categoryId}
                   onChange={e => setCategoryId(e.target.value)}
@@ -202,21 +317,20 @@ export function DayDetailModal({
               />
               {error && <p className="text-xs text-destructive">{error}</p>}
               <div className="flex gap-2">
-                <button type="button" onClick={() => setShowForm(false)} className="flex-1 rounded-lg border border-border py-2 text-sm text-muted-foreground hover:bg-muted">Cancel</button>
-                <button type="submit" disabled={saving} className="flex-1 rounded-lg bg-primary text-primary-foreground py-2 text-sm font-semibold disabled:opacity-50">
-                  {saving ? 'Saving…' : 'Save'}
+                <button type="button" onClick={closeForm} className="flex-1 rounded-lg border border-border py-2 text-sm text-muted-foreground hover:bg-muted">Cancel</button>
+                <button type="submit" disabled={saving} className="flex-1 rounded-lg bg-primary py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+                  {saving ? 'Saving...' : 'Save'}
                 </button>
               </div>
             </form>
           )}
         </div>
 
-        {/* Footer */}
         {!showForm && (
-          <div className="px-5 py-4 border-t border-border">
+          <div className="border-t border-border px-5 py-4">
             <button
               onClick={() => setShowForm(true)}
-              className="w-full rounded-xl bg-primary/10 text-primary py-2.5 text-sm font-semibold hover:bg-primary/20 transition-colors"
+              className="w-full rounded-xl bg-primary/10 py-2.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/20"
             >
               + Add Event
             </button>

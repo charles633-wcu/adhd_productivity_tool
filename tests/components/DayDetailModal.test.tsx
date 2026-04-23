@@ -65,6 +65,35 @@ describe('DayDetailModal', () => {
     expect(screen.queryByText(/Nothing scheduled/i)).toBeNull()
   })
 
+  it('defaults repeat to Never', () => {
+    render(<DayDetailModal {...baseProps} startInAddMode />)
+    expect(screen.getByRole('button', { name: /repeat never/i })).toBeTruthy()
+  })
+
+  it('opens repeat presets and switches to custom tabs', () => {
+    render(<DayDetailModal {...baseProps} startInAddMode />)
+
+    fireEvent.click(screen.getByRole('button', { name: /repeat never/i }))
+    expect(screen.getByRole('button', { name: /every day/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /custom/i })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /custom/i }))
+    expect(screen.getByRole('tab', { name: /daily/i })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /weekly/i })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /monthly/i })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /yearly/i })).toBeTruthy()
+  })
+
+  it('shows weekly recurrence anchored to the selected weekday', () => {
+    render(<DayDetailModal {...baseProps} date={new Date('2026-04-15T00:00:00')} startInAddMode />)
+
+    fireEvent.click(screen.getByRole('button', { name: /repeat never/i }))
+    fireEvent.click(screen.getByRole('button', { name: /custom/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /weekly/i }))
+
+    expect(screen.getByText(/every 1 week on wednesday/i)).toBeTruthy()
+  })
+
   it('submits blank notes without sending null notes', async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
       occurrenceId: 'e1::2026-04-15T09:00:00.000Z',
