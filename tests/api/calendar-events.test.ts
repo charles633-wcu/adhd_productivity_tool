@@ -43,7 +43,7 @@ describe('GET /api/calendar/events', () => {
       id: 'ev-1', title: 'Test',
       startAt: new Date('2026-04-15T09:00:00Z'),
       endAt: new Date('2026-04-15T10:00:00Z'),
-      repeatIntervalDays: null, repeatEndsAt: null,
+      repeatFrequency: null, repeatInterval: null, repeatEndsAt: null,
     }
     getDb.mockReturnValue({
       select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn().mockResolvedValue([event]) })) })),
@@ -108,6 +108,42 @@ describe('POST /api/calendar/events', () => {
     const response = await POST(request)
     expect(response.status).toBe(201)
   })
+
+  it('creates recurring events with explicit frequency and interval fields', async () => {
+    const values = vi.fn(data => ({
+      returning: vi.fn().mockResolvedValue([{
+        ...data,
+        repeatFrequency: data.repeatFrequency,
+        repeatInterval: data.repeatInterval,
+      }]),
+    }))
+    getDb.mockReturnValue({
+      insert: vi.fn(() => ({ values })),
+    })
+
+    const response = await POST(new Request('http://localhost/api/calendar/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Monthly planning',
+        startAt: '2026-04-15T09:00:00.000Z',
+        endAt: '2026-04-15T10:00:00.000Z',
+        repeatFrequency: 'month',
+        repeatInterval: 1,
+      }),
+    }))
+
+    expect(response.status).toBe(201)
+    expect(values).toHaveBeenCalledWith(expect.objectContaining({
+      repeatFrequency: 'month',
+      repeatInterval: 1,
+    }))
+    const body = await response.json()
+    expect(body).toEqual(expect.objectContaining({
+      repeatFrequency: 'month',
+      repeatInterval: 1,
+    }))
+  })
 })
 
 describe('PATCH /api/calendar/events/[id]', () => {
@@ -141,6 +177,29 @@ describe('PATCH /api/calendar/events/[id]', () => {
       { params: Promise.resolve({ id: 'missing' }) },
     )
     expect(res.status).toBe(404)
+  })
+
+  it('updates recurring events with explicit frequency and interval fields', async () => {
+    const set = vi.fn(() => ({
+      where: vi.fn(() => ({ returning: vi.fn().mockResolvedValue([{ id: 'ev-1', repeatFrequency: 'week', repeatInterval: 2 }]) })),
+    }))
+    getDb.mockReturnValue({
+      update: vi.fn(() => ({ set })),
+    })
+
+    const res = await PATCH(
+      new Request('http://localhost', {
+        method: 'PATCH',
+        body: JSON.stringify({ repeatFrequency: 'week', repeatInterval: 2 }),
+      }),
+      { params: Promise.resolve({ id: 'ev-1' }) },
+    )
+
+    expect(res.status).toBe(200)
+    expect(set).toHaveBeenCalledWith(expect.objectContaining({
+      repeatFrequency: 'week',
+      repeatInterval: 2,
+    }))
   })
 })
 

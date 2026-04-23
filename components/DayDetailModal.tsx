@@ -16,6 +16,7 @@ interface EventCategoryItem { id: string; name: string; color: string }
 
 type RepeatMode = 'never' | 'daily' | 'weekly' | 'monthly' | 'yearly'
 type RepeatTabMode = Exclude<RepeatMode, 'never'>
+type RepeatFrequency = 'day' | 'week' | 'month' | 'year'
 
 interface RepeatConfig {
   mode: RepeatMode
@@ -69,6 +70,12 @@ function repeatUnitLabel(mode: Exclude<RepeatMode, 'never'>, every: number) {
 }
 
 const repeatTabModes: RepeatTabMode[] = ['daily', 'weekly', 'monthly', 'yearly']
+const repeatFrequencyByMode: Record<RepeatTabMode, RepeatFrequency> = {
+  daily: 'day',
+  weekly: 'week',
+  monthly: 'month',
+  yearly: 'year',
+}
 
 export function DayDetailModal({
   date, events, icsEvents, eventCategories, startInAddMode = false, onClose, onEventCreated, onEventDeleted,
@@ -151,7 +158,8 @@ export function DayDetailModal({
         endAt: buildDateTime(endTime),
         categoryId: categoryId || null,
         notes: notes.trim() ? notes.trim() : undefined,
-        repeatIntervalDays: repeatConfig.mode === 'daily' ? repeatConfig.every : null,
+        repeatFrequency: repeatConfig.mode === 'never' ? null : repeatFrequencyByMode[repeatConfig.mode],
+        repeatInterval: repeatConfig.mode === 'never' ? null : repeatConfig.every,
       }
       const res = await fetch('/api/calendar/events', {
         method: 'POST',

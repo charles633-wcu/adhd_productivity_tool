@@ -128,7 +128,7 @@ describe('DayDetailModal', () => {
     expect(document.activeElement).toBe(repeatTrigger)
   })
 
-  it('submits a daily custom interval as repeatIntervalDays', async () => {
+  it('submits custom recurrence as explicit frequency and interval fields', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({
       occurrenceId: 'e1::2026-04-15T09:00:00.000Z',
       sourceEventId: 'e1',
@@ -143,7 +143,7 @@ describe('DayDetailModal', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /repeat never/i }))
     fireEvent.click(screen.getByRole('button', { name: /custom/i }))
-    fireEvent.click(screen.getByRole('tab', { name: /daily/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /monthly/i }))
     fireEvent.change(screen.getByLabelText(/repeat interval/i), { target: { value: '3' } })
     fireEvent.click(screen.getByRole('button', { name: /done/i }))
 
@@ -161,7 +161,8 @@ describe('DayDetailModal', () => {
         startAt: expect.any(String),
         endAt: expect.any(String),
         categoryId: null,
-        repeatIntervalDays: 3,
+        repeatFrequency: 'month',
+        repeatInterval: 3,
       })
     })
   })
@@ -192,7 +193,8 @@ describe('DayDetailModal', () => {
         startAt: expect.any(String),
         endAt: expect.any(String),
         categoryId: null,
-        repeatIntervalDays: null,
+        repeatFrequency: null,
+        repeatInterval: null,
       })
       expect(body).not.toHaveProperty('notes')
     })

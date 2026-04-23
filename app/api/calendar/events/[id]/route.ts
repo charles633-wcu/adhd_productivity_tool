@@ -11,7 +11,8 @@ const PatchSchema = z.object({
   endAt: z.string().datetime().optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().nullable(),
   notes: z.string().optional().nullable(),
-  repeatIntervalDays: z.number().int().positive().optional().nullable(),
+  repeatFrequency: z.enum(['day', 'week', 'month', 'year']).optional().nullable(),
+  repeatInterval: z.number().int().min(1).max(120).optional().nullable(),
   repeatEndsAt: z.string().datetime().optional().nullable(),
   categoryId: z.string().optional().nullable(),
 })
