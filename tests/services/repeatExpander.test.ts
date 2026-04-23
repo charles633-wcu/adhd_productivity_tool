@@ -132,6 +132,16 @@ describe('expandRepeatingEvent', () => {
     expect(result).toHaveLength(0)
   })
 
+  it.each([0, -1])('does not loop forever for invalid stored repeat interval %i', repeatInterval => {
+    const result = expandRepeatingEvent(
+      event({ repeatFrequency: 'day', repeatInterval }),
+      new Date('2026-04-01T00:00:00Z'),
+      new Date('2026-04-30T23:59:59Z'),
+    )
+
+    expect(starts(result)).toEqual(['2026-04-01T09:00:00.000Z'])
+  })
+
   it('includes occurrences that overlap the range start', () => {
     const result = expandRepeatingEvent(
       event({

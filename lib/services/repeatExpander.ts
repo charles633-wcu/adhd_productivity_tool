@@ -70,7 +70,7 @@ export function expandRepeatingEvent(
   const durationMs = event.endAt.getTime() - event.startAt.getTime()
   const repeatFrequency = event.repeatFrequency
   const repeatInterval = event.repeatInterval
-  const isRepeating = repeatFrequency !== null && repeatInterval !== null
+  const isRepeating = repeatFrequency !== null && repeatInterval !== null && repeatInterval > 0
   const anchor = {
     day: event.startAt.getUTCDate(),
     month: event.startAt.getUTCMonth(),
