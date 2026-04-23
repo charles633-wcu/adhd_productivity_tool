@@ -94,6 +94,55 @@ describe('DayDetailModal', () => {
     expect(screen.getByText(/every 1 week on wednesday/i)).toBeTruthy()
   })
 
+  it('closes the custom repeat builder with Escape', () => {
+    render(<DayDetailModal {...baseProps} startInAddMode />)
+
+    fireEvent.click(screen.getByRole('button', { name: /repeat never/i }))
+    fireEvent.click(screen.getByRole('button', { name: /custom/i }))
+    expect(screen.getByRole('button', { name: /done/i })).toBeTruthy()
+
+    fireEvent.keyDown(screen.getByRole('dialog', { name: /custom repeat builder/i }), { key: 'Escape' })
+    expect(screen.queryByRole('button', { name: /done/i })).toBeNull()
+  })
+
+  it('submits a daily custom interval as repeatIntervalDays', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({
+      occurrenceId: 'e1::2026-04-15T09:00:00.000Z',
+      sourceEventId: 'e1',
+      title: 'Planning',
+      startAt: '2026-04-15T09:00:00.000Z',
+      endAt: '2026-04-15T10:00:00.000Z',
+      color: null,
+      categoryId: null,
+    }), { status: 201 }))
+
+    render(<DayDetailModal {...baseProps} startInAddMode />)
+
+    fireEvent.click(screen.getByRole('button', { name: /repeat never/i }))
+    fireEvent.click(screen.getByRole('button', { name: /custom/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /daily/i }))
+    fireEvent.change(screen.getByLabelText(/repeat interval/i), { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: /done/i }))
+
+    fireEvent.change(screen.getByPlaceholderText(/Title/i), { target: { value: 'Planning' } })
+    fireEvent.click(screen.getByRole('button', { name: /save/i }))
+
+    await waitFor(() => {
+      const [url, init] = vi.mocked(fetch).mock.calls[0]
+      expect(url).toBe('/api/calendar/events')
+      expect(init).toEqual(expect.objectContaining({ method: 'POST' }))
+
+      const body = JSON.parse(String(init.body))
+      expect(body).toEqual({
+        title: 'Planning',
+        startAt: expect.any(String),
+        endAt: expect.any(String),
+        categoryId: null,
+        repeatIntervalDays: 3,
+      })
+    })
+  })
+
   it('submits blank notes without sending null notes', async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({
       occurrenceId: 'e1::2026-04-15T09:00:00.000Z',

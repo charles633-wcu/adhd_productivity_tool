@@ -5,7 +5,7 @@
  */
 'use client'
 
-import { FormEvent, useState } from 'react'
+import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react'
 
 interface CalendarEventItem {
   occurrenceId: string; sourceEventId: string; title: string
@@ -15,6 +15,7 @@ interface IcsEventItem { uid: string; title: string; startAt: Date; endAt: Date 
 interface EventCategoryItem { id: string; name: string; color: string }
 
 type RepeatMode = 'never' | 'daily' | 'weekly' | 'monthly' | 'yearly'
+type RepeatTabMode = Exclude<RepeatMode, 'never'>
 
 interface RepeatConfig {
   mode: RepeatMode
@@ -67,6 +68,8 @@ function repeatUnitLabel(mode: Exclude<RepeatMode, 'never'>, every: number) {
   return `year${every === 1 ? '' : 's'}`
 }
 
+const repeatTabModes: RepeatTabMode[] = ['daily', 'weekly', 'monthly', 'yearly']
+
 export function DayDetailModal({
   date, events, icsEvents, eventCategories, startInAddMode = false, onClose, onEventCreated, onEventDeleted,
 }: DayDetailModalProps) {
@@ -81,9 +84,11 @@ export function DayDetailModal({
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const repeatControlRef = useRef<HTMLDivElement>(null)
+  const repeatTabRefs = useRef<Partial<Record<RepeatTabMode, HTMLButtonElement | null>>>({})
 
   const isEmpty = events.length === 0 && icsEvents.length === 0
-  const customRepeatMode: Exclude<RepeatMode, 'never'> = repeatConfig.mode === 'never' ? 'daily' : repeatConfig.mode
+  const customRepeatMode: RepeatTabMode = repeatConfig.mode === 'never' ? 'daily' : repeatConfig.mode
 
   function buildDateTime(time: string) {
     const [h, m] = time.split(':').map(Number)
@@ -92,10 +97,14 @@ export function DayDetailModal({
     return d.toISOString()
   }
 
+  function closeRepeatMenus() {
+    setRepeatOpen(false)
+    setRepeatPresetOpen(false)
+  }
+
   function selectRepeatPreset(mode: RepeatMode) {
     setRepeatConfig({ mode, every: 1 })
-    setRepeatPresetOpen(false)
-    setRepeatOpen(false)
+    closeRepeatMenus()
   }
 
   function openCustomRepeat() {
@@ -107,10 +116,26 @@ export function DayDetailModal({
     }))
   }
 
+  function handleRepeatTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    const keys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'] as const
+    if (!keys.includes(event.key as typeof keys[number])) return
+
+    event.preventDefault()
+
+    let nextIndex = index
+    if (event.key === 'Home') nextIndex = 0
+    else if (event.key === 'End') nextIndex = repeatTabModes.length - 1
+    else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = (index + 1) % repeatTabModes.length
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = (index - 1 + repeatTabModes.length) % repeatTabModes.length
+
+    const nextMode = repeatTabModes[nextIndex]
+    setRepeatConfig(current => ({ ...current, mode: nextMode }))
+    repeatTabRefs.current[nextMode]?.focus()
+  }
+
   function closeForm() {
     setShowForm(false)
-    setRepeatOpen(false)
-    setRepeatPresetOpen(false)
+    closeRepeatMenus()
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -157,10 +182,34 @@ export function DayDetailModal({
     }
   }
 
+  useEffect(() => {
+    if (!repeatOpen) return
+
+    repeatTabRefs.current[customRepeatMode]?.focus()
+  }, [customRepeatMode, repeatOpen])
+
+  useEffect(() => {
+    if (!repeatOpen && !repeatPresetOpen) return
+
+    function handlePointerDown(event: PointerEvent) {
+      if (repeatControlRef.current?.contains(event.target as Node)) return
+      closeRepeatMenus()
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [repeatOpen, repeatPresetOpen])
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      onKeyDown={e => {
+        if (e.key === 'Escape' && (repeatOpen || repeatPresetOpen)) {
+          e.stopPropagation()
+          closeRepeatMenus()
+        }
+      }}
     >
       <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-border bg-background shadow-2xl animate-in fade-in zoom-in-95 duration-200">
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
@@ -235,12 +284,12 @@ export function DayDetailModal({
                 </div>
               </div>
               <div className="flex gap-2">
-                <div className="relative flex-1">
+                <div ref={repeatControlRef} className="relative flex-1">
                   <button
                     type="button"
                     onClick={() => {
-                      setRepeatPresetOpen(open => !open)
                       setRepeatOpen(false)
+                      setRepeatPresetOpen(open => !open)
                     }}
                     className="w-full rounded-lg border border-input bg-muted/40 px-3 py-2 text-left text-sm hover:bg-muted/60"
                     aria-expanded={repeatPresetOpen || repeatOpen}
@@ -264,36 +313,67 @@ export function DayDetailModal({
                   )}
 
                   {repeatOpen && (
-                    <div className="absolute left-0 right-0 top-full z-10 mt-2 space-y-3 rounded-xl border border-border bg-background p-3 shadow-xl">
+                    <div
+                      className="absolute left-0 right-0 top-full z-10 mt-2 space-y-3 rounded-xl border border-border bg-background p-3 shadow-xl"
+                      role="dialog"
+                      aria-label="Custom repeat builder"
+                      onKeyDown={e => {
+                        if (e.key === 'Escape') {
+                          e.stopPropagation()
+                          closeRepeatMenus()
+                        }
+                      }}
+                    >
                       <div role="tablist" aria-label="Repeat frequency" className="grid grid-cols-4 gap-1 rounded-lg bg-muted/60 p-1">
-                        {(['daily', 'weekly', 'monthly', 'yearly'] as const).map(mode => (
+                        {repeatTabModes.map((mode, index) => (
                           <button
                             key={mode}
                             type="button"
                             role="tab"
+                            id={`repeat-tab-${mode}`}
                             aria-selected={customRepeatMode === mode}
+                            aria-controls="repeat-panel"
+                            tabIndex={customRepeatMode === mode ? 0 : -1}
+                            ref={el => { repeatTabRefs.current[mode] = el }}
                             onClick={() => setRepeatConfig(current => ({ ...current, mode }))}
+                            onKeyDown={event => handleRepeatTabKeyDown(event, index)}
                             className={`rounded-md px-2 py-1.5 text-xs font-medium capitalize transition-colors ${customRepeatMode === mode ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                           >
                             {mode}
                           </button>
                         ))}
                       </div>
-                      <div className="flex items-center justify-center gap-2">
-                        <span className="text-sm text-muted-foreground">Every</span>
-                        <select
-                          value={repeatConfig.every}
-                          onChange={e => setRepeatConfig(current => ({ ...current, every: parseInt(e.target.value, 10) }))}
-                          className="w-24 rounded-lg border border-input bg-muted/40 px-3 py-2 text-center text-sm"
-                          aria-label="Repeat interval"
-                        >
-                          {Array.from({ length: 120 }, (_, index) => index + 1).map(value => (
-                            <option key={value} value={value}>{value}</option>
-                          ))}
-                        </select>
-                        <span className="text-sm capitalize text-muted-foreground">{repeatUnitLabel(customRepeatMode, repeatConfig.every)}</span>
+                      <div
+                        role="tabpanel"
+                        id="repeat-panel"
+                        aria-labelledby={`repeat-tab-${customRepeatMode}`}
+                        className="space-y-3"
+                      >
+                        <div className="flex items-center justify-center gap-2">
+                          <span className="text-sm text-muted-foreground">Every</span>
+                          <select
+                            value={repeatConfig.every}
+                            onChange={e => setRepeatConfig(current => ({ ...current, every: parseInt(e.target.value, 10) }))}
+                            className="w-24 rounded-lg border border-input bg-muted/40 px-3 py-2 text-center text-sm"
+                            aria-label="Repeat interval"
+                          >
+                            {Array.from({ length: 120 }, (_, index) => index + 1).map(value => (
+                              <option key={value} value={value}>{value}</option>
+                            ))}
+                          </select>
+                          <span className="text-sm capitalize text-muted-foreground">{repeatUnitLabel(customRepeatMode, repeatConfig.every)}</span>
+                        </div>
+                        <p className="text-center text-xs text-muted-foreground">{repeatSummary(repeatConfig, date)}</p>
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={closeRepeatMenus}
+                            className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted"
+                          >
+                            Done
+                          </button>
+                        </div>
                       </div>
-                      <p className="text-center text-xs text-muted-foreground">{repeatSummary(repeatConfig, date)}</p>
                     </div>
                   )}
                 </div>
