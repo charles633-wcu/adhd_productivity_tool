@@ -12,11 +12,23 @@ vi.mock('@/lib/services/repeatExpander', () => ({
 
 import { GET, POST } from '@/app/api/calendar/events/route'
 import { PATCH, DELETE } from '@/app/api/calendar/events/[id]/route'
+import { calendarEvents } from '@/lib/db/schema'
+import { getTableColumns } from 'drizzle-orm'
 
 // listEventsInRange: select().from().where() terminal
 // createCalendarEvent: insert().values().returning() terminal
 // updateCalendarEvent: update().set().where().returning() terminal
 // deleteCalendarEvent: delete().where().returning() terminal
+
+describe('calendar event recurrence persistence fields', () => {
+  it('stores recurrence frequency and interval as explicit columns', () => {
+    const columns = getTableColumns(calendarEvents) as Record<string, { name: string }>
+
+    expect(columns.repeatFrequency.name).toBe('repeat_frequency')
+    expect(columns.repeatInterval.name).toBe('repeat_interval')
+    expect('repeatIntervalDays' in columns).toBe(false)
+  })
+})
 
 describe('GET /api/calendar/events', () => {
   beforeEach(() => { vi.clearAllMocks(); getCurrentUser.mockResolvedValue({ id: 'u1' }) })
