@@ -20,6 +20,9 @@ const CreateSchema = z
     categoryId: z.string().optional().nullable(),
   })
   .refine(d => new Date(d.endAt) >= new Date(d.startAt), { message: 'endAt must be >= startAt' })
+  .refine(d => (d.repeatFrequency == null) === (d.repeatInterval == null), {
+    message: 'repeatFrequency and repeatInterval must be provided together',
+  })
 
 export async function GET(request: Request) {
   try {

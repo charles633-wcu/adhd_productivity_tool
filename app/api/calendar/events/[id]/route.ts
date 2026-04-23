@@ -5,17 +5,27 @@ import { getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db/client'
 import { updateCalendarEvent, deleteCalendarEvent } from '@/lib/db/calendar'
 
-const PatchSchema = z.object({
-  title: z.string().min(1).max(100).optional(),
-  startAt: z.string().datetime().optional(),
-  endAt: z.string().datetime().optional(),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().nullable(),
-  notes: z.string().optional().nullable(),
-  repeatFrequency: z.enum(['day', 'week', 'month', 'year']).optional().nullable(),
-  repeatInterval: z.number().int().min(1).max(120).optional().nullable(),
-  repeatEndsAt: z.string().datetime().optional().nullable(),
-  categoryId: z.string().optional().nullable(),
-})
+const PatchSchema = z
+  .object({
+    title: z.string().min(1).max(100).optional(),
+    startAt: z.string().datetime().optional(),
+    endAt: z.string().datetime().optional(),
+    color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().nullable(),
+    notes: z.string().optional().nullable(),
+    repeatFrequency: z.enum(['day', 'week', 'month', 'year']).optional().nullable(),
+    repeatInterval: z.number().int().min(1).max(120).optional().nullable(),
+    repeatEndsAt: z.string().datetime().optional().nullable(),
+    categoryId: z.string().optional().nullable(),
+  })
+  .refine(d => {
+    const hasFrequency = 'repeatFrequency' in d
+    const hasInterval = 'repeatInterval' in d
+    if (!hasFrequency && !hasInterval) return true
+    if (hasFrequency !== hasInterval) return false
+    return (d.repeatFrequency == null) === (d.repeatInterval == null)
+  }, {
+    message: 'repeatFrequency and repeatInterval must be patched together',
+  })
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {

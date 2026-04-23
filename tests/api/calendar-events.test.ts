@@ -144,6 +144,36 @@ describe('POST /api/calendar/events', () => {
       repeatInterval: 1,
     }))
   })
+
+  it('rejects repeatFrequency without repeatInterval', async () => {
+    const response = await POST(new Request('http://localhost/api/calendar/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Monthly planning',
+        startAt: '2026-04-15T09:00:00.000Z',
+        endAt: '2026-04-15T10:00:00.000Z',
+        repeatFrequency: 'month',
+      }),
+    }))
+
+    expect(response.status).toBe(400)
+  })
+
+  it('rejects repeatInterval without repeatFrequency', async () => {
+    const response = await POST(new Request('http://localhost/api/calendar/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Monthly planning',
+        startAt: '2026-04-15T09:00:00.000Z',
+        endAt: '2026-04-15T10:00:00.000Z',
+        repeatInterval: 1,
+      }),
+    }))
+
+    expect(response.status).toBe(400)
+  })
 })
 
 describe('PATCH /api/calendar/events/[id]', () => {
@@ -200,6 +230,30 @@ describe('PATCH /api/calendar/events/[id]', () => {
       repeatFrequency: 'week',
       repeatInterval: 2,
     }))
+  })
+
+  it('rejects patches that clear only one recurrence field', async () => {
+    const res = await PATCH(
+      new Request('http://localhost', {
+        method: 'PATCH',
+        body: JSON.stringify({ repeatFrequency: null }),
+      }),
+      { params: Promise.resolve({ id: 'ev-1' }) },
+    )
+
+    expect(res.status).toBe(400)
+  })
+
+  it('rejects patches that mix null and non-null recurrence fields', async () => {
+    const res = await PATCH(
+      new Request('http://localhost', {
+        method: 'PATCH',
+        body: JSON.stringify({ repeatFrequency: null, repeatInterval: 2 }),
+      }),
+      { params: Promise.resolve({ id: 'ev-1' }) },
+    )
+
+    expect(res.status).toBe(400)
   })
 })
 
