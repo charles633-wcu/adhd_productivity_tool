@@ -94,7 +94,23 @@ describe('DayDetailModal', () => {
     expect(screen.getByText(/every 1 week on wednesday/i)).toBeTruthy()
   })
 
-  it('closes the custom repeat builder with Escape', () => {
+  it('moves between repeat tabs with arrow keys', () => {
+    render(<DayDetailModal {...baseProps} startInAddMode />)
+
+    fireEvent.click(screen.getByRole('button', { name: /repeat never/i }))
+    fireEvent.click(screen.getByRole('button', { name: /custom/i }))
+
+    const dailyTab = screen.getByRole('tab', { name: /daily/i })
+    expect(document.activeElement).toBe(dailyTab)
+
+    fireEvent.keyDown(dailyTab, { key: 'ArrowRight' })
+
+    const weeklyTab = screen.getByRole('tab', { name: /weekly/i })
+    expect(document.activeElement).toBe(weeklyTab)
+    expect(weeklyTab).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('restores focus to the repeat trigger after Escape or Done', () => {
     render(<DayDetailModal {...baseProps} startInAddMode />)
 
     fireEvent.click(screen.getByRole('button', { name: /repeat never/i }))
@@ -102,7 +118,14 @@ describe('DayDetailModal', () => {
     expect(screen.getByRole('button', { name: /done/i })).toBeTruthy()
 
     fireEvent.keyDown(screen.getByRole('dialog', { name: /custom repeat builder/i }), { key: 'Escape' })
-    expect(screen.queryByRole('button', { name: /done/i })).toBeNull()
+    const repeatTrigger = screen.getByRole('button', { name: /repeat every 1 day/i })
+    expect(document.activeElement).toBe(repeatTrigger)
+
+    fireEvent.click(repeatTrigger)
+    fireEvent.click(screen.getByRole('button', { name: /custom/i }))
+    fireEvent.click(screen.getByRole('button', { name: /done/i }))
+
+    expect(document.activeElement).toBe(repeatTrigger)
   })
 
   it('submits a daily custom interval as repeatIntervalDays', async () => {

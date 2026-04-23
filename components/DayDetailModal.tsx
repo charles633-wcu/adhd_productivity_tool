@@ -84,6 +84,7 @@ export function DayDetailModal({
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const repeatTriggerRef = useRef<HTMLButtonElement>(null)
   const repeatControlRef = useRef<HTMLDivElement>(null)
   const repeatTabRefs = useRef<Partial<Record<RepeatTabMode, HTMLButtonElement | null>>>({})
 
@@ -97,14 +98,15 @@ export function DayDetailModal({
     return d.toISOString()
   }
 
-  function closeRepeatMenus() {
+  function closeRepeatMenus(restoreFocus = false) {
     setRepeatOpen(false)
     setRepeatPresetOpen(false)
+    if (restoreFocus) repeatTriggerRef.current?.focus()
   }
 
   function selectRepeatPreset(mode: RepeatMode) {
     setRepeatConfig({ mode, every: 1 })
-    closeRepeatMenus()
+    closeRepeatMenus(true)
   }
 
   function openCustomRepeat() {
@@ -207,7 +209,7 @@ export function DayDetailModal({
       onKeyDown={e => {
         if (e.key === 'Escape' && (repeatOpen || repeatPresetOpen)) {
           e.stopPropagation()
-          closeRepeatMenus()
+          closeRepeatMenus(true)
         }
       }}
     >
@@ -286,6 +288,7 @@ export function DayDetailModal({
               <div className="flex gap-2">
                 <div ref={repeatControlRef} className="relative flex-1">
                   <button
+                    ref={repeatTriggerRef}
                     type="button"
                     onClick={() => {
                       setRepeatOpen(false)
@@ -320,7 +323,7 @@ export function DayDetailModal({
                       onKeyDown={e => {
                         if (e.key === 'Escape') {
                           e.stopPropagation()
-                          closeRepeatMenus()
+                          closeRepeatMenus(true)
                         }
                       }}
                     >
@@ -367,7 +370,7 @@ export function DayDetailModal({
                         <div className="flex justify-end">
                           <button
                             type="button"
-                            onClick={closeRepeatMenus}
+                            onClick={() => closeRepeatMenus(true)}
                             className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted"
                           >
                             Done
