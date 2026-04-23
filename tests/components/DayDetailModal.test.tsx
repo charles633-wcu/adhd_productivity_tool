@@ -154,6 +154,7 @@ describe('DayDetailModal', () => {
       const [url, init] = vi.mocked(fetch).mock.calls[0]
       expect(url).toBe('/api/calendar/events')
       expect(init).toEqual(expect.objectContaining({ method: 'POST' }))
+      if (!init) throw new Error('Expected fetch init')
 
       const body = JSON.parse(String(init.body))
       expect(body).toEqual({
@@ -186,6 +187,7 @@ describe('DayDetailModal', () => {
       const [url, init] = vi.mocked(fetch).mock.calls[0]
       expect(url).toBe('/api/calendar/events')
       expect(init).toEqual(expect.objectContaining({ method: 'POST' }))
+      if (!init) throw new Error('Expected fetch init')
 
       const body = JSON.parse(String(init.body))
       expect(body).toEqual({

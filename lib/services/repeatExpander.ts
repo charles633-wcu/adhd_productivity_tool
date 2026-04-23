@@ -1,13 +1,15 @@
 // lib/services/repeatExpander.ts
 // Expands a repeating calendar event into occurrence objects within a date range.
-// Repeat is fixed-day interval only (no weekly/monthly calendar patterns).
+
+type RepeatFrequency = 'day' | 'week' | 'month' | 'year'
 
 interface RepeatableEvent {
   id: string
   title: string
   startAt: Date
   endAt: Date
-  repeatIntervalDays: number | null
+  repeatFrequency: RepeatFrequency | null
+  repeatInterval: number | null
   repeatEndsAt: Date | null
   [key: string]: unknown
 }
@@ -20,6 +22,45 @@ export interface EventOccurrence {
   endAt: Date
 }
 
+function lastUtcDayOfMonth(year: number, month: number) {
+  return new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+}
+
+function buildUtcDateLike(source: Date, year: number, month: number, day: number) {
+  const safeDay = Math.min(day, lastUtcDayOfMonth(year, month))
+  return new Date(Date.UTC(
+    year,
+    month,
+    safeDay,
+    source.getUTCHours(),
+    source.getUTCMinutes(),
+    source.getUTCSeconds(),
+    source.getUTCMilliseconds(),
+  ))
+}
+
+function advanceCursor(
+  cursor: Date,
+  frequency: RepeatFrequency,
+  interval: number,
+  anchor: { day: number; month: number },
+) {
+  if (frequency === 'day' || frequency === 'week') {
+    const next = new Date(cursor)
+    next.setUTCDate(next.getUTCDate() + interval * (frequency === 'week' ? 7 : 1))
+    return next
+  }
+
+  if (frequency === 'month') {
+    const monthIndex = cursor.getUTCFullYear() * 12 + cursor.getUTCMonth() + interval
+    const year = Math.floor(monthIndex / 12)
+    const month = monthIndex % 12
+    return buildUtcDateLike(cursor, year, month, anchor.day)
+  }
+
+  return buildUtcDateLike(cursor, cursor.getUTCFullYear() + interval, anchor.month, anchor.day)
+}
+
 export function expandRepeatingEvent(
   event: RepeatableEvent,
   rangeFrom: Date,
@@ -27,15 +68,15 @@ export function expandRepeatingEvent(
 ): EventOccurrence[] {
   const occurrences: EventOccurrence[] = []
   const durationMs = event.endAt.getTime() - event.startAt.getTime()
+  const repeatFrequency = event.repeatFrequency
+  const repeatInterval = event.repeatInterval
+  const isRepeating = repeatFrequency !== null && repeatInterval !== null
+  const anchor = {
+    day: event.startAt.getUTCDate(),
+    month: event.startAt.getUTCMonth(),
+  }
 
   let cursor = new Date(event.startAt)
-
-  // Jump cursor forward to near rangeFrom to avoid O(n) iteration from far past
-  if (event.repeatIntervalDays && cursor < rangeFrom) {
-    const intervalMs = event.repeatIntervalDays * 24 * 60 * 60 * 1000
-    const stepsNeeded = Math.floor((rangeFrom.getTime() - cursor.getTime()) / intervalMs)
-    cursor = new Date(cursor.getTime() + stepsNeeded * intervalMs)
-  }
 
   while (cursor <= rangeTo) {
     const occurrenceEnd = new Date(cursor.getTime() + durationMs)
@@ -55,8 +96,8 @@ export function expandRepeatingEvent(
     }
 
     // Advance or stop for non-repeating
-    if (!event.repeatIntervalDays) break
-    cursor = new Date(cursor.getTime() + event.repeatIntervalDays * 24 * 60 * 60 * 1000)
+    if (!isRepeating) break
+    cursor = advanceCursor(cursor, repeatFrequency, repeatInterval, anchor)
   }
 
   return occurrences
