@@ -18,7 +18,7 @@ const UpdateTodoSchema = z.object({
 }).refine(d => Object.keys(d).length > 0, { message: 'At least one field required' })
 
 /**
- * GET /api/todos/[id] — fetch a single task (ownership verified).
+ * GET /api/todos/[id] — fetch a single task (ownership verified) with its subtasks.
  */
 export async function GET(
   _request: Request,
@@ -33,7 +33,12 @@ export async function GET(
       .from(todos)
       .where(and(eq(todos.id, id), eq(todos.userId, user.id)))
     if (!todo) return NextResponse.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 })
-    return NextResponse.json(todo)
+    // Fetch subtasks for this task
+    const subtasks = await db
+      .select()
+      .from(todos)
+      .where(and(eq(todos.parentId, id), eq(todos.userId, user.id)))
+    return NextResponse.json({ ...todo, subtasks })
   } catch (error) {
     return NextResponse.json({ error: String(error), code: 'DB_ERROR' }, { status: 500 })
   }
