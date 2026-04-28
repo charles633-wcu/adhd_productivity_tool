@@ -1,7 +1,7 @@
 // Database schema — Drizzle ORM table definitions and inferred TypeScript types.
 // Single source of truth for all DB column shapes; consumed by lib/db/client.ts,
 // lib/db/triggers.ts, and all API route and service functions.
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, primaryKey } from 'drizzle-orm/sqlite-core'
 import { createId } from '@paralleldrive/cuid2'
 import { sql } from 'drizzle-orm'
 
@@ -133,6 +133,66 @@ export const icsSubscriptions = sqliteTable('ics_subscriptions', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`).$onUpdate(() => new Date()),
 })
 
+// ── To-Do Feature ─────────────────────────────────────────────────────────────
+
+// todo_lists — named project lists; "Inbox" is auto-created per user
+export const todoLists = sqliteTable('todo_lists', {
+  id: text('id').primaryKey().$defaultFn(() => createId()),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  color: text('color'),
+  emoji: text('emoji'),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`)
+    .$onUpdate(() => new Date()),
+})
+
+// todo_labels — tags for cross-list filtering
+export const todoLabels = sqliteTable('todo_labels', {
+  id: text('id').primaryKey().$defaultFn(() => createId()),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  color: text('color'),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+})
+
+// todos — core task entity; parentId makes it a subtask (one level only)
+export const todos = sqliteTable('todos', {
+  id: text('id').primaryKey().$defaultFn(() => createId()),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  listId: text('list_id').notNull().references(() => todoLists.id, { onDelete: 'cascade' }),
+  parentId: text('parent_id'),  // FK to todos.id enforced at API layer
+  title: text('title').notNull(),
+  description: text('description'),
+  priority: text('priority').$type<'high' | 'medium' | 'low' | 'none'>().notNull().default('none'),
+  dueDate: text('due_date'),    // YYYY-MM-DD
+  dueTime: text('due_time'),    // HH:MM
+  completed: integer('completed').notNull().default(0),
+  completedAt: integer('completed_at', { mode: 'timestamp' }),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`)
+    .$onUpdate(() => new Date()),
+})
+
+// todo_task_labels — junction: many todos ↔ many labels (composite PK prevents duplicates)
+export const todoTaskLabels = sqliteTable('todo_task_labels', {
+  todoId: text('todo_id').notNull().references(() => todos.id, { onDelete: 'cascade' }),
+  labelId: text('label_id').notNull().references(() => todoLabels.id, { onDelete: 'cascade' }),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.todoId, table.labelId] }),
+}))
+
 // Infer TypeScript types from schema
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
@@ -148,3 +208,12 @@ export type CalendarEvent = typeof calendarEvents.$inferSelect
 export type NewCalendarEvent = typeof calendarEvents.$inferInsert
 export type IcsSubscription = typeof icsSubscriptions.$inferSelect
 export type NewIcsSubscription = typeof icsSubscriptions.$inferInsert
+export type TodoList = typeof todoLists.$inferSelect
+export type NewTodoList = typeof todoLists.$inferInsert
+export type TodoLabel = typeof todoLabels.$inferSelect
+export type NewTodoLabel = typeof todoLabels.$inferInsert
+export type Todo = typeof todos.$inferSelect
+export type NewTodo = typeof todos.$inferInsert
+export type TodoTaskLabel = typeof todoTaskLabels.$inferSelect
+export type NewTodoTaskLabel = typeof todoTaskLabels.$inferInsert
+export type TodoPriority = 'high' | 'medium' | 'low' | 'none'

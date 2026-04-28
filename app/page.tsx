@@ -82,13 +82,21 @@ export default async function HomePage() {
     updatedAt: trigger.updatedAt.toISOString(),
   }))
 
+  // Fetch today's incomplete task count for the pill badge
+  const todayTodoCount = await fetch(
+    `${process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000'}/api/todos?view=today`
+  )
+    .then(r => r.json())
+    .then((tasks: unknown[]) => tasks.length)
+    .catch(() => 0)
+
   return (
     <div className="fixed inset-0 overflow-hidden bg-background">
       {categoriesWithCounts.length > 0 && (
         <CategoryCanvas categories={categoriesWithCounts} />
       )}
 
-      <HomePill categories={categoriesWithCounts} triggers={serializedTriggers} />
+      <HomePill categories={categoriesWithCounts} triggers={serializedTriggers} todayTodoCount={todayTodoCount} />
 
       {Number(dueCount) > 0 && (
         <Link

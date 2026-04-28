@@ -33,6 +33,7 @@ describe('HomePill', () => {
       <HomePill
         categories={[{ id: 'cat-1', name: 'Work', color: null, icon: null }]}
         triggers={[]}
+        todayTodoCount={0}
       />
     )
 
