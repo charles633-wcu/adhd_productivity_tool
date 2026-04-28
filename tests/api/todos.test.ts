@@ -188,6 +188,21 @@ describe('PATCH /api/todos/[id]', () => {
     )
     expect(res.status).toBe(404)
   })
+
+  it('marks task as incomplete and clears completedAt', async () => {
+    const updated = { ...mockTodo, completed: 0, completedAt: null }
+    getDb.mockReturnValue({
+      update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => ({ returning: vi.fn().mockResolvedValue([updated]) })) })) })),
+    })
+    const res = await PATCH(
+      new Request('http://localhost', { method: 'PATCH', body: JSON.stringify({ completed: false }) }),
+      { params: Promise.resolve({ id: 't1' }) }
+    )
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.completed).toBe(0)
+    expect(body.completedAt).toBeNull()
+  })
 })
 
 describe('DELETE /api/todos/[id]', () => {
@@ -200,6 +215,17 @@ describe('DELETE /api/todos/[id]', () => {
     const res = await DELETE(
       new Request('http://localhost', { method: 'DELETE' }),
       { params: Promise.resolve({ id: 't1' }) }
+    )
+    expect(res.status).toBe(204)
+  })
+
+  it('returns 204 even when task not found (idempotent)', async () => {
+    getDb.mockReturnValue({
+      select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]) })) })),
+    })
+    const res = await DELETE(
+      new Request('http://localhost', { method: 'DELETE' }),
+      { params: Promise.resolve({ id: 'nonexistent' }) }
     )
     expect(res.status).toBe(204)
   })
