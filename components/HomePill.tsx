@@ -37,6 +37,7 @@ type SerializedTrigger = Omit<Trigger, 'nextReviewAt' | 'lastReviewedAt' | 'crea
 interface HomePillProps {
   categories: Array<{ id: string; name: string; color: string | null; icon: string | null }>
   triggers: SerializedTrigger[]
+  todayTodoCount: number
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -118,7 +119,7 @@ function useEmojiSuggest(name: string) {
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export function HomePill({ categories, triggers }: HomePillProps) {
+export function HomePill({ categories, triggers, todayTodoCount }: HomePillProps) {
   const router = useRouter()
 
   // Sheet open states
@@ -228,6 +229,19 @@ export function HomePill({ categories, triggers }: HomePillProps) {
         >
           <CalendarDays className="h-4 w-4" aria-hidden="true" />
           Calendar
+        </Link>
+
+        {/* To-Dos app — navigates to /todos with today count badge */}
+        <Link
+          href="/todos"
+          className="flex items-center gap-1.5 rounded-xl px-4 min-h-[44px] text-[13px] font-medium text-muted-foreground hover:bg-muted/60 transition-colors"
+        >
+          ✓ To-Dos
+          {todayTodoCount > 0 && (
+            <span className="ml-1 bg-primary text-primary-foreground text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">
+              {todayTodoCount}
+            </span>
+          )}
         </Link>
 
         {/* Divider */}
