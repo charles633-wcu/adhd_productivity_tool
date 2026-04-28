@@ -94,7 +94,7 @@ export async function GET(request: Request) {
       const todoIds = junctionRows.map(r => r.todoId)
       rows = todoIds.length > 0
         ? await db.select().from(todos).where(
-            and(eq(todos.userId, user.id), isNull(todos.parentId), inArray(todos.id, todoIds))
+            and(eq(todos.userId, user.id), isNull(todos.parentId), eq(todos.completed, 0), inArray(todos.id, todoIds))
           ).orderBy(PRIORITY_ORDER, asc(todos.dueDate), asc(todos.sortOrder))
         : []
     } else if (view === 'inbox') {
