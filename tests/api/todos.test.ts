@@ -8,6 +8,7 @@ vi.mock('@/lib/auth', () => ({ getCurrentUser }))
 vi.mock('@/lib/db/client', () => ({ getDb }))
 
 import { GET, POST } from '@/app/api/todos/route'
+import { GET as GET_ONE, PATCH, DELETE } from '@/app/api/todos/[id]/route'
 
 const mockUser = { id: 'u1' }
 const mockInbox = { id: 'inbox1', userId: 'u1', name: 'Inbox' }
@@ -125,5 +126,81 @@ describe('POST /api/todos', () => {
       body: JSON.stringify({ title: 'Sub-subtask', parentId: 'child1' }),
     }))
     expect(res.status).toBe(400)
+  })
+})
+
+describe('GET /api/todos/[id]', () => {
+  it('returns single todo with 200', async () => {
+    getDb.mockReturnValue({
+      select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn().mockResolvedValue([mockTodo]) })) })),
+    })
+    const res = await GET_ONE(
+      new Request('http://localhost/api/todos/t1'),
+      { params: Promise.resolve({ id: 't1' }) }
+    )
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.id).toBe('t1')
+  })
+
+  it('returns 404 when not found', async () => {
+    getDb.mockReturnValue({
+      select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]) })) })),
+    })
+    const res = await GET_ONE(
+      new Request('http://localhost/api/todos/missing'),
+      { params: Promise.resolve({ id: 'missing' }) }
+    )
+    expect(res.status).toBe(404)
+  })
+})
+
+describe('PATCH /api/todos/[id]', () => {
+  it('marks task as completed and sets completedAt', async () => {
+    const updated = { ...mockTodo, completed: 1, completedAt: new Date() }
+    getDb.mockReturnValue({
+      update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => ({ returning: vi.fn().mockResolvedValue([updated]) })) })) })),
+    })
+    const res = await PATCH(
+      new Request('http://localhost', { method: 'PATCH', body: JSON.stringify({ completed: true }) }),
+      { params: Promise.resolve({ id: 't1' }) }
+    )
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.completed).toBe(1)
+  })
+
+  it('returns 400 with no fields', async () => {
+    const res = await PATCH(
+      new Request('http://localhost', { method: 'PATCH', body: JSON.stringify({}) }),
+      { params: Promise.resolve({ id: 't1' }) }
+    )
+    expect(res.status).toBe(400)
+  })
+
+  it('returns 404 when task not found', async () => {
+    getDb.mockReturnValue({
+      update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => ({ returning: vi.fn().mockResolvedValue([]) })) })) })),
+    })
+    const res = await PATCH(
+      new Request('http://localhost', { method: 'PATCH', body: JSON.stringify({ title: 'X' }) }),
+      { params: Promise.resolve({ id: 'missing' }) }
+    )
+    expect(res.status).toBe(404)
+  })
+})
+
+describe('DELETE /api/todos/[id]', () => {
+  it('returns 204 and cascades to subtasks', async () => {
+    const mockDb = {
+      select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn().mockResolvedValue([mockTodo]) })) })),
+      delete: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })),
+    }
+    getDb.mockReturnValue(mockDb)
+    const res = await DELETE(
+      new Request('http://localhost', { method: 'DELETE' }),
+      { params: Promise.resolve({ id: 't1' }) }
+    )
+    expect(res.status).toBe(204)
   })
 })
