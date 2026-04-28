@@ -36,6 +36,13 @@
       "when": 1776923711221,
       "tag": "0004_calendar_recurrence_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1777358015677,
+      "tag": "0005_hard_masque",
+      "breakpoints": true
     }
   ]
 }
