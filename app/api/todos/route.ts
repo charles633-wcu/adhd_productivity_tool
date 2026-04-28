@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getDb } from '@/lib/db/client'
-import { todos, todoLists, todoTaskLabels } from '@/lib/db/schema'
+import { todos, todoLists, todoTaskLabels, todoLabels } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth'
 import { eq, and, isNull, gt, lte, inArray, asc, sql } from 'drizzle-orm'
 import { createId } from '@paralleldrive/cuid2'
@@ -86,6 +86,11 @@ export async function GET(request: Request) {
     let rows: TodoRow[]
 
     if (labelId) {
+      // Verify the label belongs to this user before querying (prevents IDOR)
+      const [label] = await db.select().from(todoLabels)
+        .where(and(eq(todoLabels.id, labelId), eq(todoLabels.userId, user.id)))
+      if (!label) return NextResponse.json({ error: 'Label not found', code: 'NOT_FOUND' }, { status: 404 })
+
       // Label filter: join through junction table to get matching todo IDs
       const junctionRows = await db
         .select({ todoId: todoTaskLabels.todoId })
@@ -179,6 +184,13 @@ export async function POST(request: Request) {
     const { parentId, listId: rawListId, ...rest } = parsed.data
 
     let resolvedListId = rawListId
+
+    // If a listId was explicitly provided, verify it belongs to this user (prevents IDOR)
+    if (rawListId) {
+      const [list] = await db.select().from(todoLists)
+        .where(and(eq(todoLists.id, rawListId), eq(todoLists.userId, user.id)))
+      if (!list) return NextResponse.json({ error: 'List not found', code: 'NOT_FOUND' }, { status: 404 })
+    }
 
     // Subtask validation: parent must exist and be a root-level task
     if (parentId) {

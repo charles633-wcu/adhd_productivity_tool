@@ -82,7 +82,9 @@ describe('GET /api/todos', () => {
 
 describe('POST /api/todos', () => {
   it('returns 201 on valid task create', async () => {
+    // select() is called first to verify list ownership, then insert() creates the task
     getDb.mockReturnValue({
+      select: vi.fn(() => makeSelectChain([mockInbox])),
       insert: vi.fn(() => ({ values: vi.fn(() => ({ returning: vi.fn().mockResolvedValue([mockTodo]) })) })),
     })
     const res = await POST(new Request('http://localhost', {

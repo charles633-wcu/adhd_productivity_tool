@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getDb } from '@/lib/db/client'
-import { todos } from '@/lib/db/schema'
+import { todos, todoLists } from '@/lib/db/schema'
 import { getCurrentUser } from '@/lib/auth'
 import { eq, and } from 'drizzle-orm'
 
@@ -61,6 +61,14 @@ export async function PATCH(
     }
     const db = getDb()
     const { completed, ...rest } = parsed.data
+
+    // If moving to a different list, verify the target list belongs to this user (prevents IDOR)
+    if (rest.listId) {
+      const [list] = await db.select().from(todoLists)
+        .where(and(eq(todoLists.id, rest.listId), eq(todoLists.userId, user.id)))
+      if (!list) return NextResponse.json({ error: 'List not found', code: 'NOT_FOUND' }, { status: 404 })
+    }
+
     const updatePayload: Record<string, unknown> = { ...rest }
     // Set completedAt timestamp when toggling completion state
     if (completed !== undefined) {
