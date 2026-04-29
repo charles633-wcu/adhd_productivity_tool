@@ -1,8 +1,6 @@
 import { render, screen, fireEvent, act, within } from '@testing-library/react'
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { CalendarClient } from '@/components/CalendarClient'
-
-vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [] }))
 
 const baseProps = {
   initialEvents: [],
@@ -27,9 +25,29 @@ function localDateKey(date: Date) {
 }
 
 describe('CalendarClient', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [] }))
+  })
+
   afterEach(() => {
     vi.useRealTimers()
+    vi.restoreAllMocks()
     vi.unstubAllGlobals()
+  })
+
+  it('uses deterministic date labels instead of the runtime locale', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-15T12:00:00'))
+    vi.spyOn(Date.prototype, 'toLocaleDateString').mockReturnValue('15 April 2026')
+    vi.spyOn(Date.prototype, 'toLocaleString').mockReturnValue('April 2026')
+
+    render(<CalendarClient {...baseProps} />)
+
+    expect(screen.getByTestId('calendar-day-2026-04-15')).toHaveAttribute(
+      'aria-label',
+      'Select April 15, 2026',
+    )
+    expect(screen.getByText('April 2026')).toBeTruthy()
   })
 
   it('renders Sunday-first day-of-week headers', () => {

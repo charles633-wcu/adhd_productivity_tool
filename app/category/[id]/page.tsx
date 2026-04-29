@@ -7,6 +7,7 @@ import { eq, and, asc, lte } from 'drizzle-orm'
 import { getCurrentUser } from '@/lib/auth'
 import { CategoryViewClient } from '@/components/CategoryViewClient'
 import { CategoryHeader } from '@/components/CategoryHeader'
+import { AppHeader } from '@/components/AppHeader'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -44,9 +45,10 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
     .orderBy(asc(triggers.priority), asc(triggers.nextReviewAt))
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col pt-[60px]">
+      <AppHeader active="triggers" />
       {/* Sticky header — CategoryHeader is a client component for the edit sheet */}
-      <header className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur-md">
+      <header className="sticky top-[56px] z-20 border-b border-border bg-background/80 backdrop-blur-md">
         <CategoryHeader
           id={id}
           name={category.name}

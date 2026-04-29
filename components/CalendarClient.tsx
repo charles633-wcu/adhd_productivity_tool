@@ -5,9 +5,9 @@
 'use client'
 
 import { useMemo, useState, type WheelEvent } from 'react'
-import Link from 'next/link'
 import { AnimatePresence, motion } from 'framer-motion'
-import { CalendarDays, ChevronLeft, ChevronRight, FolderOpen, Link2, Plus, Target } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FolderOpen, Link2, Plus } from 'lucide-react'
+import { AppHeader } from '@/components/AppHeader'
 import { DayDetailModal } from '@/components/DayDetailModal'
 import { EventCategoryModal } from '@/components/EventCategoryModal'
 import { IcsModal } from '@/components/IcsModal'
@@ -58,6 +58,20 @@ interface CalendarClientProps {
 }
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+]
 
 function toLocalDateKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -70,7 +84,11 @@ function startOfLocalToday() {
 }
 
 function monthLabel(d: Date) {
-  return d.toLocaleString('default', { month: 'long', year: 'numeric' })
+  return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`
+}
+
+function formatAccessibleDate(d: Date) {
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
 }
 
 function dateLabel(d: Date) {
@@ -281,11 +299,7 @@ export function CalendarClient({
                 key={key}
                 data-testid={`calendar-day-${key}`}
                 role={isCurrentMonth ? 'button' : undefined}
-                aria-label={isCurrentMonth ? `Select ${day.toLocaleDateString(undefined, {
-                  month: 'long',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}` : undefined}
+                aria-label={isCurrentMonth ? `Select ${formatAccessibleDate(day)}` : undefined}
                 tabIndex={isCurrentMonth ? 0 : -1}
                 onClick={() => { if (isCurrentMonth) handleDayClick(key) }}
                 onKeyDown={e => {
@@ -347,25 +361,7 @@ export function CalendarClient({
 
   return (
     <div className="fixed inset-0 bg-background overflow-hidden flex flex-col pt-[60px]">
-      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 rounded-full border border-border/50 bg-background/90 backdrop-blur-md shadow-lg px-4 py-0">
-        <span className="text-[13px] font-extrabold tracking-widest text-foreground select-none">SENTINEL</span>
-        <div className="h-5 w-px bg-border/60" aria-hidden="true" />
-        <Link
-          href="/"
-          className="flex items-center gap-1.5 rounded-xl px-4 min-h-[44px] text-[13px] font-medium text-muted-foreground hover:bg-muted/60 transition-colors"
-        >
-          <Target className="h-4 w-4" aria-hidden="true" />
-          Triggers
-        </Link>
-        <button
-          type="button"
-          className="flex items-center gap-1.5 rounded-xl bg-primary text-primary-foreground px-4 min-h-[44px] text-[13px] font-semibold cursor-default"
-          aria-current="page"
-        >
-          <CalendarDays className="h-4 w-4" aria-hidden="true" />
-          Calendar
-        </button>
-      </div>
+      <AppHeader active="calendar" position="fixed" />
 
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-center gap-2">
