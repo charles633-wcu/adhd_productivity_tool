@@ -7,7 +7,7 @@
  */
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { Trigger } from '@/lib/db/schema'
 
 // Serialized shape from server component — Date fields arrive as ISO strings
@@ -46,8 +46,8 @@ function badgeColor(count: number): string {
   return 'bg-red-500'
 }
 
-// Day-of-week header labels (Mon-indexed)
-const DOW_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+// Day-of-week header labels (Sun-indexed)
+const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 export function ScheduleCalendar({ triggers: initialTriggers }: ScheduleCalendarProps) {
   // Local trigger state for optimistic updates — dates stored as ISO strings
@@ -59,8 +59,10 @@ export function ScheduleCalendar({ triggers: initialTriggers }: ScheduleCalendar
   // all stay consistent even if the component re-renders after midnight
   const [today] = useState(() => startOfLocalToday())
   const todayKey = toLocalDateKey(today)
-  // Monday-indexed day offset for today (to pad the first calendar row)
-  const todayDow = (today.getDay() + 6) % 7 // JS Sun=0 → Mon-indexed 0
+  const [activeDayKey, setActiveDayKey] = useState(todayKey)
+  const dayButtonRefs = useRef(new Map<string, HTMLButtonElement | null>())
+  // Sunday-indexed day offset for today (to pad the first calendar row)
+  const todayDow = today.getDay()
 
   // 42 calendar days — stable because today is stable state (not recomputed each render)
   const calendarDays = useMemo(() => {
@@ -70,6 +72,17 @@ export function ScheduleCalendar({ triggers: initialTriggers }: ScheduleCalendar
       return d
     })
   }, [today])
+  const calendarDayKeys = useMemo(
+    () => calendarDays.map(day => toLocalDateKey(day)),
+    [calendarDays]
+  )
+
+  useEffect(() => {
+    const activeButton = dayButtonRefs.current.get(activeDayKey)
+    if (activeButton && document.activeElement !== activeButton) {
+      activeButton.focus()
+    }
+  }, [activeDayKey])
 
   // Group triggers by their nextReviewAt local date key
   const triggersByDate = useMemo(() => {
@@ -121,6 +134,27 @@ export function ScheduleCalendar({ triggers: initialTriggers }: ScheduleCalendar
     }
   }
 
+  function handleDayKeyDown(event: KeyboardEvent<HTMLButtonElement>, dayKey: string) {
+    const offsetByKey: Record<string, number> = {
+      ArrowLeft: -1,
+      ArrowRight: 1,
+      ArrowUp: -7,
+      ArrowDown: 7,
+    }
+
+    const offset = offsetByKey[event.key]
+    if (offset === undefined) return
+
+    event.preventDefault()
+    const currentIndex = calendarDayKeys.indexOf(dayKey)
+    if (currentIndex === -1) return
+
+    const nextIndex = currentIndex + offset
+    if (nextIndex < 0 || nextIndex >= calendarDayKeys.length) return
+
+    setActiveDayKey(calendarDayKeys[nextIndex])
+  }
+
   const selectedTrigger = localTriggers.find(t => t.id === selectedId)
 
   return (
@@ -167,6 +201,12 @@ export function ScheduleCalendar({ triggers: initialTriggers }: ScheduleCalendar
               key={key}
               data-testid={`day-${key}`}
               disabled={isPast}
+              tabIndex={key === activeDayKey ? 0 : -1}
+              ref={node => {
+                dayButtonRefs.current.set(key, node)
+              }}
+              onFocus={() => setActiveDayKey(key)}
+              onKeyDown={event => handleDayKeyDown(event, key)}
               onClick={() => handleDayClick(day)}
               className={[
                 'relative flex flex-col items-center justify-center rounded-lg py-1.5 text-xs transition-colors min-h-[2.5rem]',

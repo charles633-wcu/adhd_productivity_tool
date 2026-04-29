@@ -27,6 +27,13 @@ function makeTrigger(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function toLocalDateKey(date: Date) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 describe('ScheduleCalendar', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }))
@@ -36,9 +43,10 @@ describe('ScheduleCalendar', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders the day-of-week labels and trigger list', () => {
+  it('renders Sunday-first day-of-week labels and trigger list', () => {
     render(<ScheduleCalendar triggers={[]} />)
-    expect(screen.getByText('Mon')).toBeTruthy()
+    const headerLabels = screen.getAllByText(/^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)$/).map(node => node.textContent)
+    expect(headerLabels).toEqual(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'])
     expect(screen.getByText(/All triggers/i)).toBeTruthy()
   })
 
@@ -145,5 +153,33 @@ describe('ScheduleCalendar', () => {
     await waitFor(() => {
       expect(screen.getByText(/failed to reschedule/i)).toBeTruthy()
     })
+  })
+
+  it('uses roving tabindex from today and moves focus with arrow keys', () => {
+    render(<ScheduleCalendar triggers={[]} />)
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const tomorrow = new Date(today)
+    tomorrow.setDate(today.getDate() + 1)
+    const nextWeekFromTomorrow = new Date(today)
+    nextWeekFromTomorrow.setDate(today.getDate() + 8)
+
+    const todayButton = screen.getByTestId(`day-${toLocalDateKey(today)}`)
+    const tomorrowButton = screen.getByTestId(`day-${toLocalDateKey(tomorrow)}`)
+    const nextWeekButton = screen.getByTestId(`day-${toLocalDateKey(nextWeekFromTomorrow)}`)
+
+    expect(todayButton).toHaveAttribute('tabindex', '0')
+    expect(tomorrowButton).toHaveAttribute('tabindex', '-1')
+    expect(todayButton).toHaveFocus()
+
+    fireEvent.keyDown(todayButton, { key: 'ArrowRight' })
+    expect(tomorrowButton).toHaveFocus()
+    expect(tomorrowButton).toHaveAttribute('tabindex', '0')
+    expect(todayButton).toHaveAttribute('tabindex', '-1')
+
+    fireEvent.keyDown(tomorrowButton, { key: 'ArrowDown' })
+    expect(nextWeekButton).toHaveFocus()
+    expect(nextWeekButton).toHaveAttribute('tabindex', '0')
   })
 })
