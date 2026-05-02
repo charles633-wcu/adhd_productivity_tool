@@ -93,7 +93,7 @@ const repeatFrequencyByMode: Record<RepeatTabMode, RepeatFrequency> = {
 }
 
 export function DayDetailModal({
-  date, events, icsEvents, eventCategories, startInAddMode = false, onClose, onEventCreated, onEventDeleted, onEditEvent = () => {},
+  date, events, icsEvents, eventCategories, startInAddMode = false, onClose, onEventCreated, onEventDeleted = () => {}, onEditEvent = () => {},
 }: DayDetailModalProps) {
   const [showForm, setShowForm] = useState(startInAddMode)
   const [title, setTitle] = useState('')
@@ -248,18 +248,19 @@ export function DayDetailModal({
                     <li key={ev.occurrenceId}>
                       <button
                         type="button"
-                        className="flex w-full items-center gap-3 rounded-lg bg-muted/40 px-3 py-2.5 text-sm transition-colors hover:bg-muted/60"
+                        className="flex w-full items-center gap-3 rounded-lg bg-muted/40 px-3 py-2.5 text-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
                         onClick={() => onEditEvent(ev)}
+                        aria-label={`Edit event: ${ev.title} at ${formatTime(ev.startAt)}`}
                       >
                         <span className="w-16 shrink-0 font-mono text-xs text-muted-foreground text-left">
-                          {formatTime(new Date(ev.startAt))}
+                          {formatTime(ev.startAt)}
                         </span>
                         <span
                           className="h-2.5 w-2.5 shrink-0 rounded-full"
                           style={{ backgroundColor: ev.color ?? cat?.color ?? '#6366f1' }}
                         />
                         <span className="flex-1 truncate font-medium text-left">{ev.title}</span>
-                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" aria-hidden="true" />
                       </button>
                     </li>
                   )
@@ -276,7 +277,7 @@ export function DayDetailModal({
                   <li key={ev.uid} className="flex items-center gap-2 rounded-lg bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
                     <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-muted-foreground/40" />
                     <span>{ev.title}</span>
-                    <span className="ml-auto text-xs">{formatTime(new Date(ev.startAt))} - {formatTime(new Date(ev.endAt))}</span>
+                    <span className="ml-auto text-xs">{formatTime(ev.startAt)} - {formatTime(ev.endAt)}</span>
                   </li>
                 ))}
               </ul>
