@@ -13,6 +13,7 @@ const baseProps = {
   onClose: vi.fn(),
   onEventCreated: vi.fn(),
   onEventDeleted: vi.fn(),
+  onEditEvent: vi.fn(),
 }
 
 describe('DayDetailModal', () => {
@@ -166,6 +167,16 @@ describe('DayDetailModal', () => {
         repeatInterval: 3,
       })
     })
+  })
+
+  it('tapping an event row calls onEditEvent with that event', () => {
+    const event = {
+      occurrenceId: 'e1::2026-04-15', sourceEventId: 'e1', title: 'Team standup',
+      startAt: new Date('2026-04-15T09:00:00'), endAt: new Date('2026-04-15T09:30:00'),
+    }
+    render(<DayDetailModal {...baseProps} events={[event]} />)
+    fireEvent.click(screen.getByText('Team standup'))
+    expect(baseProps.onEditEvent).toHaveBeenCalledWith(event)
   })
 
   it('submits blank notes without sending null notes', async () => {
