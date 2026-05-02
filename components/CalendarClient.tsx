@@ -484,6 +484,7 @@ export function CalendarClient({
             setModalDay(null)
             setSelectedDay(null)
             setModalStartsInAddMode(false)
+            setEditingEvent(null)
           }}
           onEventCreated={event => setLocalEvents(prev => [...prev, ...expandCreatedEvent(event)])}
           onEditEvent={ev => setEditingEvent(ev)}
