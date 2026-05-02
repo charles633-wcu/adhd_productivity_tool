@@ -10,6 +10,7 @@ import { ChevronLeft, ChevronRight, FolderOpen, Link2, Plus } from 'lucide-react
 import { AppHeader } from '@/components/AppHeader'
 import { DayDetailModal } from '@/components/DayDetailModal'
 import { EventCategoryModal } from '@/components/EventCategoryModal'
+import { EventDetailSheet } from '@/components/EventDetailSheet'
 import { IcsModal } from '@/components/IcsModal'
 import { expandRepeatingEvent } from '@/lib/services/repeatExpander'
 
@@ -37,6 +38,16 @@ interface EventCategory {
 }
 
 type RepeatFrequency = 'day' | 'week' | 'month' | 'year'
+
+type EditableEvent = {
+  occurrenceId: string
+  sourceEventId: string
+  title: string
+  startAt: Date
+  endAt: Date
+  color?: string | null
+  categoryId?: string | null
+}
 
 interface CreatedCalendarEventItem {
   id: string
@@ -131,6 +142,7 @@ export function CalendarClient({
   const [localEvents, setLocalEvents] = useState(initialEvents)
   const [icsUrl, setIcsUrl] = useState(initialIcsUrl)
   const [direction, setDirection] = useState(1)
+  const [editingEvent, setEditingEvent] = useState<EditableEvent | null>(null)
 
   const todayKey = toLocalDateKey(today)
 
@@ -198,6 +210,14 @@ export function CalendarClient({
   function handleAddEventClick(key: string) {
     setModalStartsInAddMode(true)
     setModalDay(key)
+  }
+
+  function handleEventEdited(patched: { id: string; title: string; startAt: string; endAt: string; color?: string | null; categoryId?: string | null }) {
+    setLocalEvents(prev => prev.map(e =>
+      e.sourceEventId === patched.id
+        ? { ...e, title: patched.title, startAt: patched.startAt, endAt: patched.endAt, color: patched.color ?? null, categoryId: patched.categoryId ?? null }
+        : e
+    ))
   }
 
   function expandCreatedEvent(event: CreatedCalendarEventItem): CalendarEventItem[] {
@@ -466,9 +486,22 @@ export function CalendarClient({
             setModalStartsInAddMode(false)
           }}
           onEventCreated={event => setLocalEvents(prev => [...prev, ...expandCreatedEvent(event)])}
-          onEventDeleted={id => setLocalEvents(prev => prev.filter(e => e.sourceEventId !== id))}
+          onEditEvent={ev => setEditingEvent(ev)}
         />
       )}
+
+      <EventDetailSheet
+        event={editingEvent}
+        onClose={() => setEditingEvent(null)}
+        onSaved={patched => {
+          handleEventEdited(patched)
+          setEditingEvent(null)
+        }}
+        onDeleted={id => {
+          setLocalEvents(prev => prev.filter(e => e.sourceEventId !== id))
+          setEditingEvent(null)
+        }}
+      />
 
       {manageCatsOpen && (
         <EventCategoryModal
