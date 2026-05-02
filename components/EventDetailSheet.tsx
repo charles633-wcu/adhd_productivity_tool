@@ -47,6 +47,7 @@ function toTimeStr(d: Date): string {
 }
 
 function buildDateTime(baseDate: Date, time: string): string {
+  if (!/^\d{2}:\d{2}$/.test(time)) throw new Error('Invalid time')
   const [h, m] = time.split(':').map(Number)
   const d = new Date(baseDate)
   d.setHours(h, m, 0, 0)
@@ -74,6 +75,9 @@ export function EventDetailSheet({ event, onClose, onSaved, onDeleted }: EventDe
 
   if (!event) return null
 
+  // Resets transient UI state before delegating close to parent
+  function close() { setDeleteConfirm(false); onClose() }
+
   async function handleSave() {
     if (!event) return
     setSaving(true)
@@ -84,7 +88,7 @@ export function EventDetailSheet({ event, onClose, onSaved, onDeleted }: EventDe
         body: JSON.stringify({
           title: title.trim(),
           startAt: buildDateTime(event.startAt, startTime),
-          endAt: buildDateTime(event.startAt, endTime),
+          endAt: buildDateTime(event.endAt, endTime),
           repeatFrequency: repeatMode === 'never' ? null : repeatFrequencyByMode[repeatMode],
           repeatInterval: repeatMode === 'never' ? null : 1,
         }),
@@ -120,7 +124,7 @@ export function EventDetailSheet({ event, onClose, onSaved, onDeleted }: EventDe
   return (
     <div
       className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 backdrop-blur-sm"
-      onClick={e => { if (e.target === e.currentTarget) { setDeleteConfirm(false); onClose() } }}
+      onClick={e => { if (e.target === e.currentTarget) close() }}
     >
       <div className="w-full max-w-md rounded-t-2xl border border-border bg-background shadow-2xl animate-in slide-in-from-bottom duration-200">
 
@@ -128,7 +132,7 @@ export function EventDetailSheet({ event, onClose, onSaved, onDeleted }: EventDe
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <button
             type="button"
-            onClick={() => { setDeleteConfirm(false); onClose() }}
+            onClick={close}
             className="text-sm text-muted-foreground hover:text-foreground"
           >
             Cancel
@@ -137,7 +141,7 @@ export function EventDetailSheet({ event, onClose, onSaved, onDeleted }: EventDe
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving || !title.trim()}
+            disabled={saving || deleting || !title.trim()}
             className="text-sm font-semibold text-primary disabled:opacity-50"
             aria-label="Done"
           >
@@ -149,6 +153,8 @@ export function EventDetailSheet({ event, onClose, onSaved, onDeleted }: EventDe
         <div className="space-y-3 px-5 py-4">
           <input
             placeholder="Title"
+            aria-label="Title"
+            autoFocus
             value={title}
             onChange={e => setTitle(e.target.value)}
             maxLength={100}
@@ -199,7 +205,7 @@ export function EventDetailSheet({ event, onClose, onSaved, onDeleted }: EventDe
           <button
             type="button"
             onClick={handleDelete}
-            disabled={deleting}
+            disabled={deleting || saving}
             className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
           >
             {deleting
