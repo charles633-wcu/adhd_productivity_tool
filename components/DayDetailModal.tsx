@@ -2,10 +2,12 @@
  * DayDetailModal - centered overlay showing all items for a selected calendar day.
  * Three sections (personal events, ICS imports) plus inline add-event form.
  * Calls onEventCreated / onEventDeleted to let CalendarClient update local state.
+ * Each event row is an Informant-style tappable button that calls onEditEvent.
  */
 'use client'
 
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react'
+import { ChevronRight } from 'lucide-react'
 
 interface CalendarEventItem {
   occurrenceId: string; sourceEventId: string; title: string
@@ -43,7 +45,8 @@ interface DayDetailModalProps {
   startInAddMode?: boolean
   onClose: () => void
   onEventCreated: (event: CreatedCalendarEventItem) => void
-  onEventDeleted: (sourceEventId: string) => void
+  onEventDeleted?: (sourceEventId: string) => void
+  onEditEvent?: (event: CalendarEventItem) => void
 }
 
 function formatTime(d: Date) {
@@ -90,7 +93,7 @@ const repeatFrequencyByMode: Record<RepeatTabMode, RepeatFrequency> = {
 }
 
 export function DayDetailModal({
-  date, events, icsEvents, eventCategories, startInAddMode = false, onClose, onEventCreated, onEventDeleted,
+  date, events, icsEvents, eventCategories, startInAddMode = false, onClose, onEventCreated, onEventDeleted = () => {}, onEditEvent = () => {},
 }: DayDetailModalProps) {
   const [showForm, setShowForm] = useState(startInAddMode)
   const [title, setTitle] = useState('')
@@ -195,15 +198,6 @@ export function DayDetailModal({
     }
   }
 
-  async function handleDelete(sourceEventId: string) {
-    try {
-      await fetch(`/api/calendar/events/${sourceEventId}`, { method: 'DELETE' })
-      onEventDeleted(sourceEventId)
-    } catch {
-      // Silent; parent handles state.
-    }
-  }
-
   useEffect(() => {
     if (!repeatOpen) return
 
@@ -251,18 +245,23 @@ export function DayDetailModal({
                 {events.map(ev => {
                   const cat = eventCategories.find(c => c.id === ev.categoryId)
                   return (
-                    <li key={ev.occurrenceId} className="group flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2 text-sm">
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: ev.color ?? cat?.color ?? '#6366f1' }}
-                      />
-                      <span className="flex-1 font-medium">{ev.title}</span>
-                      <span className="text-xs text-muted-foreground">{formatTime(new Date(ev.startAt))} - {formatTime(new Date(ev.endAt))}</span>
+                    <li key={ev.occurrenceId}>
                       <button
-                        onClick={() => handleDelete(ev.sourceEventId)}
-                        className="ml-1 text-xs text-destructive opacity-0 transition-opacity group-hover:opacity-100"
-                        aria-label="Delete event"
-                      >x</button>
+                        type="button"
+                        className="flex w-full items-center gap-3 rounded-lg bg-muted/40 px-3 py-2.5 text-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                        onClick={() => onEditEvent(ev)}
+                        aria-label={`Edit event: ${ev.title} at ${formatTime(ev.startAt)}`}
+                      >
+                        <span className="w-16 shrink-0 font-mono text-xs text-muted-foreground text-left">
+                          {formatTime(ev.startAt)}
+                        </span>
+                        <span
+                          className="h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: ev.color ?? cat?.color ?? '#6366f1' }}
+                        />
+                        <span className="flex-1 truncate font-medium text-left">{ev.title}</span>
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" aria-hidden="true" />
+                      </button>
                     </li>
                   )
                 })}
@@ -278,7 +277,7 @@ export function DayDetailModal({
                   <li key={ev.uid} className="flex items-center gap-2 rounded-lg bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
                     <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-muted-foreground/40" />
                     <span>{ev.title}</span>
-                    <span className="ml-auto text-xs">{formatTime(new Date(ev.startAt))} - {formatTime(new Date(ev.endAt))}</span>
+                    <span className="ml-auto text-xs">{formatTime(ev.startAt)} - {formatTime(ev.endAt)}</span>
                   </li>
                 ))}
               </ul>
