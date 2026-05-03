@@ -63,6 +63,7 @@ export default async function CalendarPage() {
       ...occ,
       startAt: occ.startAt.toISOString(),
       endAt: occ.endAt.toISOString(),
+      repeatEndsAt: occ.repeatEndsAt?.toISOString() ?? null,
       color: ev.color ?? null,
       categoryId: ev.categoryId ?? null,
     })),

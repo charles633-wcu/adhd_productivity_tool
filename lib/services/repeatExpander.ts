@@ -1,7 +1,7 @@
 // lib/services/repeatExpander.ts
 // Expands a repeating calendar event into occurrence objects within a date range.
 
-type RepeatFrequency = 'day' | 'week' | 'month' | 'year'
+import type { RepeatFrequency } from '@/lib/types/calendar'
 
 interface RepeatableEvent {
   id: string
@@ -20,6 +20,9 @@ export interface EventOccurrence {
   title: string
   startAt: Date
   endAt: Date
+  repeatFrequency: RepeatFrequency | null
+  repeatInterval: number | null
+  repeatEndsAt: Date | null
 }
 
 function lastLocalDayOfMonth(year: number, month: number) {
@@ -86,6 +89,9 @@ export function expandRepeatingEvent(
         title: event.title,
         startAt: new Date(cursor),
         endAt: occurrenceEnd,
+        repeatFrequency: event.repeatFrequency,
+        repeatInterval: event.repeatInterval,
+        repeatEndsAt: event.repeatEndsAt,
       })
     }
 
