@@ -4,7 +4,7 @@
  */
 'use client'
 
-import { useMemo, useState, type WheelEvent } from 'react'
+import { useMemo, useState, type PointerEvent, type WheelEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronLeft, ChevronRight, FolderOpen, Link2, Plus } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
@@ -143,6 +143,7 @@ export function CalendarClient({
   const [icsUrl, setIcsUrl] = useState(initialIcsUrl)
   const [direction, setDirection] = useState(1)
   const [editingEvent, setEditingEvent] = useState<EditableEvent | null>(null)
+  const [dragStartX, setDragStartX] = useState<number | null>(null)
 
   const todayKey = toLocalDateKey(today)
 
@@ -191,16 +192,23 @@ export function CalendarClient({
     setCurrentMonth(new Date(month.getFullYear(), month.getMonth(), 1))
   }
 
-  function navigateToToday() {
-    setDirection(today.getTime() >= currentMonth.getTime() ? 1 : -1)
-    setSelectedDay(todayKey)
-    setModalStartsInAddMode(false)
-    setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1))
-  }
-
   function handleCarouselWheel(event: WheelEvent<HTMLDivElement>) {
     if (Math.abs(event.deltaX) <= Math.abs(event.deltaY) || Math.abs(event.deltaX) < 40) return
     navigate(event.deltaX > 0 ? 1 : -1)
+  }
+
+  function handleCarouselPointerDown(event: PointerEvent<HTMLDivElement>) {
+    setDragStartX(event.clientX)
+  }
+
+  function handleCarouselPointerUp(event: PointerEvent<HTMLDivElement>) {
+    if (dragStartX === null) return
+
+    const deltaX = event.clientX - dragStartX
+    setDragStartX(null)
+    if (Math.abs(deltaX) < 80) return
+
+    navigate(deltaX < 0 ? 1 : -1)
   }
 
   function handleDayClick(key: string) {
@@ -250,20 +258,18 @@ export function CalendarClient({
         type="button"
         aria-label={`${position === 'previous' ? 'Previous' : 'Next'} month preview: ${label}`}
         onClick={() => navigateToMonth(month)}
-        className={[
-          'hidden md:flex shrink-0 w-[18rem] flex-col rounded-2xl border border-border bg-card/70 p-3 text-left opacity-55 shadow-sm transition-all hover:bg-muted/50 hover:opacity-80',
-          position === 'previous' ? '-ml-24' : '-mr-24',
-        ].join(' ')}
+        className="hidden w-[18rem] shrink-0 flex-col rounded-2xl border border-border bg-card/85 p-3 text-left opacity-70 shadow-sm transition-all hover:bg-muted/50 hover:opacity-90 md:flex"
       >
-        <span className="mb-3 text-xs font-semibold text-muted-foreground">{label}</span>
+        <span className="mb-3 text-xs font-medium text-muted-foreground/90">{label}</span>
         <span className="grid grid-cols-7 gap-1" aria-hidden="true">
-          {days.slice(0, 35).map(day => {
+          {days.map(day => {
             const key = toLocalDateKey(day)
             const inMonth = day.getMonth() === month.getMonth()
             const hasDots = (eventsByDate.get(key)?.length ?? 0) + (icsEventsByDate.get(key)?.length ?? 0) > 0
             return (
               <span
                 key={key}
+                data-preview-day={key}
                 className={[
                   'relative flex h-7 items-center justify-center rounded-md text-[10px]',
                   inMonth ? 'text-foreground' : 'text-muted-foreground/25',
@@ -290,7 +296,7 @@ export function CalendarClient({
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: direction * -40 }}
         transition={{ duration: 0.25, ease: 'easeInOut' }}
-        className="shrink-0 w-full max-w-4xl rounded-2xl border border-border bg-card p-3 shadow-sm sm:p-4"
+        className="shrink-0 w-full max-w-xl rounded-2xl border border-border bg-card p-3 shadow-sm sm:p-4"
         aria-label={`${activeMonthLabel} calendar`}
       >
         <div className="grid grid-cols-7 mb-1">
@@ -331,7 +337,7 @@ export function CalendarClient({
                 whileHover={isCurrentMonth ? { scale: 1.03 } : {}}
                 whileTap={isCurrentMonth ? { scale: 0.97 } : {}}
                 className={[
-                  'relative flex min-h-[3.25rem] flex-col items-center justify-start rounded-xl pt-1 text-xs sm:min-h-[4rem]',
+                  'relative flex aspect-square flex-col items-center justify-start rounded-xl pt-1 text-xs',
                   isCurrentMonth ? 'text-foreground cursor-pointer' : 'text-muted-foreground/30 cursor-default',
                   isSelected ? 'bg-muted shadow-sm' : '',
                 ].filter(Boolean).join(' ')}
@@ -380,50 +386,57 @@ export function CalendarClient({
   ]
 
   return (
-    <div className="fixed inset-0 bg-background overflow-hidden flex flex-col pt-[60px]">
+    <div className="fixed inset-0 bg-background overflow-hidden flex flex-col pt-[76px]">
       <AppHeader active="calendar" position="fixed" />
 
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={navigateToToday}
-            className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-muted"
-          >
-            Today
-          </button>
-          <button aria-label="Previous month" onClick={() => navigate(-1)} className="p-2 rounded-lg hover:bg-muted transition-colors">
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <h1 className="text-sm font-semibold min-w-[140px] text-center">{monthLabel(currentMonth)}</h1>
-          <button aria-label="Next month" onClick={() => navigate(1)} className="p-2 rounded-lg hover:bg-muted transition-colors">
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setManageCatsOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-muted transition-colors"
-          >
-            <FolderOpen className="h-3.5 w-3.5" />
-            Categories
-          </button>
-          <button
-            onClick={() => setIcsOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-border hover:bg-muted transition-colors"
-          >
-            <Link2 className="h-3.5 w-3.5" />
-            {icsUrl ? 'Calendar connected' : 'Connect Calendar'}
-          </button>
+      <div className="shrink-0 px-3 pb-3">
+        <div
+          data-testid="calendar-controls-island"
+          className="mx-auto flex w-full max-w-xl flex-wrap items-center justify-end gap-2 rounded-full border border-border/60 bg-background/90 px-3 py-2 shadow-lg backdrop-blur-md"
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <button
+              onClick={() => setManageCatsOpen(true)}
+              className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-xs transition-colors hover:bg-muted"
+            >
+              <FolderOpen className="h-3.5 w-3.5" />
+              Categories
+            </button>
+            <button
+              onClick={() => setIcsOpen(true)}
+              className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-xs transition-colors hover:bg-muted"
+            >
+              <Link2 className="h-3.5 w-3.5" />
+              {icsUrl ? 'Calendar connected' : 'Connect Calendar'}
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden px-3 py-3">
-        <div className="mx-auto flex h-full max-w-7xl flex-col gap-3">
+      <div className="flex-1 overflow-hidden px-3 py-2">
+        <div data-testid="calendar-stack" className="mx-auto flex h-full max-w-7xl flex-col items-center gap-1">
+          <div
+            data-testid="calendar-month-heading"
+            className="mx-auto flex w-full max-w-xl shrink-0 items-center justify-center gap-3"
+          >
+            <button aria-label="Previous month" onClick={() => navigate(-1)} className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background/90 shadow-sm transition-colors hover:bg-muted">
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <h1 className="min-w-[15rem] origin-center scale-x-95 text-center text-4xl font-extrabold tracking-normal text-foreground">
+              {monthLabel(currentMonth)}
+            </h1>
+            <button aria-label="Next month" onClick={() => navigate(1)} className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background/90 shadow-sm transition-colors hover:bg-muted">
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
+
           <div
             data-testid="month-carousel"
             onWheel={handleCarouselWheel}
-            className="flex min-h-0 flex-1 items-center justify-center gap-4 overflow-hidden"
+            onPointerDown={handleCarouselPointerDown}
+            onPointerUp={handleCarouselPointerUp}
+            onPointerCancel={() => setDragStartX(null)}
+            className="flex min-h-0 shrink-0 cursor-grab touch-pan-y select-none items-start justify-center gap-4 overflow-visible pt-1 active:cursor-grabbing"
           >
             {renderPreviewMonth(carouselMonths[0], 'previous')}
             <AnimatePresence mode="wait" initial={false}>
@@ -437,7 +450,7 @@ export function CalendarClient({
               data-testid="selected-day-dock"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mx-auto w-full max-w-4xl shrink-0 rounded-2xl border border-border bg-card p-3 shadow-sm"
+              className="mx-auto w-full max-w-xl shrink-0 rounded-2xl border border-border bg-card p-3 shadow-sm"
             >
               <div className="flex items-center justify-between gap-3">
                 <div>

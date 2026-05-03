@@ -59,7 +59,53 @@ describe('CalendarClient', () => {
   it('shows current month and year in header', () => {
     render(<CalendarClient {...baseProps} />)
     const now = new Date()
-    expect(screen.getByText(now.toLocaleString('default', { month: 'long', year: 'numeric' }))).toBeTruthy()
+    const heading = screen.getByRole('heading', {
+      name: now.toLocaleString('default', { month: 'long', year: 'numeric' }),
+    })
+
+    expect(heading.className).toContain('text-4xl')
+    expect(heading.className).toContain('scale-x-95')
+    expect(within(screen.getByTestId('calendar-month-heading')).getByLabelText('Previous month')).toBeTruthy()
+    expect(within(screen.getByTestId('calendar-month-heading')).getByLabelText('Next month')).toBeTruthy()
+  })
+
+  it('does not show a Today control in the calendar header', () => {
+    render(<CalendarClient {...baseProps} />)
+
+    expect(screen.queryByRole('button', { name: /today/i })).toBeNull()
+  })
+
+  it('renders calendar controls as a separate island from the Sentinel header', () => {
+    render(<CalendarClient {...baseProps} />)
+
+    const appHeader = screen.getByTestId('app-header-pill')
+    const calendarControls = screen.getByTestId('calendar-controls-island')
+
+    expect(appHeader.contains(calendarControls)).toBe(false)
+    expect(calendarControls.className).toContain('rounded-full')
+    expect(calendarControls.className).toContain('shadow-lg')
+    expect(calendarControls.className.split(/\s+/)).not.toContain('border-b')
+  })
+
+  it('keeps the month grid compact instead of stretched across the page', () => {
+    render(<CalendarClient {...baseProps} />)
+    const now = new Date()
+    const calendar = screen.getByRole('region', {
+      name: `${now.toLocaleString('default', { month: 'long', year: 'numeric' })} calendar`,
+    })
+
+    expect(calendar.className).toContain('max-w-xl')
+    expect(screen.getByTestId('calendar-month-heading').className).toContain('max-w-xl')
+    expect(screen.getByTestId(`calendar-day-${todayKey()}`).className).toContain('aspect-square')
+  })
+
+  it('places the month heading directly above the calendar grid', () => {
+    render(<CalendarClient {...baseProps} />)
+
+    expect(screen.getByTestId('calendar-stack').className).toContain('gap-1')
+    expect(screen.getByTestId('month-carousel').className.split(/\s+/)).not.toContain('flex-1')
+    expect(screen.getByTestId('month-carousel').className).toContain('pt-1')
+    expect(screen.getByTestId('month-carousel').className).toContain('items-start')
   })
 
   it('navigates to next month on > click', () => {
@@ -80,22 +126,40 @@ describe('CalendarClient', () => {
     expect(screen.getByLabelText(`Next month preview: ${nextMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}`)).toBeTruthy()
   })
 
+  it('shows full adjacent month previews with subdued month labels', () => {
+    render(<CalendarClient {...baseProps} />)
+    const now = new Date()
+    const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    const previousMonthPreview = screen.getByLabelText(`Previous month preview: ${previousMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}`)
+    const nextMonthPreview = screen.getByLabelText(`Next month preview: ${nextMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}`)
+    const nextMonthLabel = within(nextMonthPreview).getByText(nextMonth.toLocaleString('default', { month: 'long', year: 'numeric' }))
+
+    expect(previousMonthPreview.className).not.toContain('-ml-')
+    expect(nextMonthPreview.className).not.toContain('-mr-')
+    expect(nextMonthPreview.className).toContain('opacity-70')
+    expect(screen.getByTestId('month-carousel').className).toContain('overflow-visible')
+    expect(nextMonthPreview.querySelectorAll('[data-preview-day]').length).toBe(42)
+    expect(nextMonthLabel.className).toContain('text-xs')
+    expect(nextMonthLabel.className).toContain('font-medium')
+  })
+
   it('does not show the old six-month zoom control', () => {
     render(<CalendarClient {...baseProps} />)
     expect(screen.queryByLabelText(/Zoom out/i)).toBeNull()
     expect(screen.queryByLabelText(/Zoom in/i)).toBeNull()
   })
 
-  it('returns to the current month when Today is clicked', () => {
+  it('drags the calendar to the next month', () => {
     render(<CalendarClient {...baseProps} />)
     const now = new Date()
-    const currentMonthLabel = now.toLocaleString('default', { month: 'long', year: 'numeric' })
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    const nextMonthLabel = nextMonth.toLocaleString('default', { month: 'long', year: 'numeric' })
 
-    fireEvent.click(screen.getByLabelText('Next month'))
-    fireEvent.click(screen.getByRole('button', { name: /today/i }))
+    fireEvent.pointerDown(screen.getByTestId('month-carousel'), { clientX: 260 })
+    fireEvent.pointerUp(screen.getByTestId('month-carousel'), { clientX: 90 })
 
-    expect(screen.getByRole('heading', { name: currentMonthLabel })).toBeTruthy()
-    expect(screen.getByTestId(`calendar-day-${todayKey()}`)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: nextMonthLabel })).toBeTruthy()
   })
 
   it('selects a day on first click and shows a selected-day dock with add-event action', () => {
