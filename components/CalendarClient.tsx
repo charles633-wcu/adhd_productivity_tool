@@ -380,20 +380,19 @@ export function CalendarClient({
     )
   }
 
-  const selectedDockItems = [
-    ...selectedEvents.map(ev => ({
-      id: ev.occurrenceId,
-      title: ev.title,
-      startAt: new Date(ev.startAt),
-      color: ev.color ?? categories.find(c => c.id === ev.categoryId)?.color ?? '#6366f1',
-    })),
-    ...selectedIcsEvents.map(ev => ({
-      id: ev.uid,
-      title: ev.title,
-      startAt: new Date(ev.startAt),
-      color: '#94a3b8',
-    })),
-  ]
+  const selectedCalEvents = selectedEvents.map(ev => ({
+    ...ev,
+    startAtDate: new Date(ev.startAt),
+    endAtDate: new Date(ev.endAt),
+    resolvedColor: ev.color ?? categories.find(c => c.id === ev.categoryId)?.color ?? '#6366f1',
+  }))
+
+  const selectedIcsDockItems = selectedIcsEvents.map(ev => ({
+    id: ev.uid,
+    title: ev.title,
+    startAt: new Date(ev.startAt),
+    color: '#6366f1' as string,
+  }))
 
   return (
     <div className="fixed inset-0 bg-background overflow-hidden flex flex-col pt-[76px]">
@@ -478,14 +477,39 @@ export function CalendarClient({
               </div>
 
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {selectedDockItems.map(item => (
+                {selectedCalEvents.map(ev => (
+                  <button
+                    key={ev.occurrenceId}
+                    type="button"
+                    onClick={() => setEditingEvent({
+                      occurrenceId: ev.occurrenceId,
+                      sourceEventId: ev.sourceEventId,
+                      title: ev.title,
+                      startAt: ev.startAtDate,
+                      endAt: ev.endAtDate,
+                      color: ev.color,
+                      categoryId: ev.categoryId,
+                      repeatFrequency: ev.repeatFrequency ?? null,
+                      repeatInterval: ev.repeatInterval ?? null,
+                      repeatEndsAt: ev.repeatEndsAt ?? null,
+                    })}
+                    aria-label={ev.title}
+                    className="flex items-center gap-2 rounded-lg border border-border/70 bg-background px-3 py-2 text-left text-xs transition-colors hover:bg-muted/50"
+                  >
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: ev.resolvedColor }} />
+                    <span className="min-w-0 flex-1 truncate font-medium">{ev.title}</span>
+                    <span className="shrink-0 font-mono text-muted-foreground">{timeLabel(ev.startAtDate)}</span>
+                    <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/50" aria-hidden="true" />
+                  </button>
+                ))}
+                {selectedIcsDockItems.map(item => (
                   <div key={item.id} className="flex items-center gap-2 rounded-lg border border-border/70 bg-background px-3 py-2 text-xs">
                     <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
                     <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
                     <span className="shrink-0 font-mono text-muted-foreground">{timeLabel(item.startAt)}</span>
                   </div>
                 ))}
-                {selectedDockItems.length === 0 && (
+                {selectedCalEvents.length === 0 && selectedIcsDockItems.length === 0 && (
                   <p className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground sm:col-span-2">
                     No events scheduled.
                   </p>

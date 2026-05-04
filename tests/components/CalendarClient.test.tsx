@@ -239,6 +239,35 @@ describe('CalendarClient', () => {
     expect(dock.textContent).toContain('Dentist')
   })
 
+  it('clicking a dock event opens EventDetailSheet', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-05-03T12:00:00'))
+
+    const today = new Date('2026-05-03T12:00:00')
+    const todayIso = today.toISOString().slice(0, 10)
+    const event = {
+      occurrenceId: `ev1::${todayIso}T09:00:00.000Z`,
+      sourceEventId: 'ev1',
+      title: 'Morning run',
+      startAt: `${todayIso}T09:00:00.000Z`,
+      endAt: `${todayIso}T09:30:00.000Z`,
+      color: '#6366f1',
+      categoryId: null,
+      repeatFrequency: null,
+      repeatInterval: null,
+      repeatEndsAt: null,
+    }
+
+    render(<CalendarClient {...baseProps} initialEvents={[event]} />)
+
+    fireEvent.click(screen.getByTestId(`calendar-day-${todayIso}`))
+
+    const dockBtn = screen.getByRole('button', { name: /Morning run/i })
+    fireEvent.click(dockBtn)
+
+    expect(screen.getByText('Edit Event')).toBeTruthy()
+  })
+
   it('clicking an adjacent month preview moves that month into the center', () => {
     render(<CalendarClient {...baseProps} />)
     const now = new Date()
