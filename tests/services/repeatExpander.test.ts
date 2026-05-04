@@ -124,6 +124,9 @@ describe('expandRepeatingEvent', () => {
       title: 'Stand-up',
       startAt: new Date('2026-04-01T09:00:00Z'),
       endAt: new Date('2026-04-01T09:30:00Z'),
+      repeatFrequency: null,
+      repeatInterval: null,
+      repeatEndsAt: null,
     }])
   })
 

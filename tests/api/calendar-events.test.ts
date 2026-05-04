@@ -232,6 +232,39 @@ describe('PATCH /api/calendar/events/[id]', () => {
     }))
   })
 
+  it('clears repeatEndsAt when null is sent', async () => {
+    const updatedRow = {
+      id: 'ev-1',
+      title: 'Test',
+      startAt: new Date('2026-04-15T09:00:00Z'),
+      endAt: new Date('2026-04-15T10:00:00Z'),
+      repeatFrequency: 'week',
+      repeatInterval: 1,
+      repeatEndsAt: null,
+    }
+    getDb.mockReturnValue({
+      update: vi.fn(() => ({
+        set: vi.fn(() => ({
+          where: vi.fn(() => ({
+            returning: vi.fn().mockResolvedValue([updatedRow]),
+          })),
+        })),
+      })),
+    })
+
+    const res = await PATCH(
+      new Request('http://localhost', {
+        method: 'PATCH',
+        body: JSON.stringify({ repeatFrequency: 'week', repeatInterval: 1, repeatEndsAt: null }),
+      }),
+      { params: Promise.resolve({ id: 'ev-1' }) },
+    )
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.repeatEndsAt).toBeNull()
+  })
+
   it('rejects patches that clear only one recurrence field', async () => {
     const res = await PATCH(
       new Request('http://localhost', {

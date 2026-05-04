@@ -37,7 +37,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const patch: Record<string, unknown> = { ...parsed.data }
     if (parsed.data.startAt) patch.startAt = new Date(parsed.data.startAt)
     if (parsed.data.endAt) patch.endAt = new Date(parsed.data.endAt)
-    if (parsed.data.repeatEndsAt) patch.repeatEndsAt = new Date(parsed.data.repeatEndsAt)
+    if ('repeatEndsAt' in parsed.data) {
+      patch.repeatEndsAt = parsed.data.repeatEndsAt ? new Date(parsed.data.repeatEndsAt) : null
+    }
     const [row] = await updateCalendarEvent(
       db,
       id,
