@@ -13,6 +13,7 @@ import { EventCategoryModal } from '@/components/EventCategoryModal'
 import { EventDetailSheet } from '@/components/EventDetailSheet'
 import { IcsModal } from '@/components/IcsModal'
 import { expandRepeatingEvent } from '@/lib/services/repeatExpander'
+import type { RepeatFrequency } from '@/lib/types/calendar'
 
 interface CalendarEventItem {
   occurrenceId: string
@@ -22,6 +23,9 @@ interface CalendarEventItem {
   endAt: string
   color?: string | null
   categoryId?: string | null
+  repeatFrequency?: RepeatFrequency | null
+  repeatInterval?: number | null
+  repeatEndsAt?: string | null
 }
 
 interface IcsEventItem {
@@ -37,8 +41,6 @@ interface EventCategory {
   color: string
 }
 
-type RepeatFrequency = 'day' | 'week' | 'month' | 'year'
-
 type EditableEvent = {
   occurrenceId: string
   sourceEventId: string
@@ -47,6 +49,9 @@ type EditableEvent = {
   endAt: Date
   color?: string | null
   categoryId?: string | null
+  repeatFrequency?: RepeatFrequency | null
+  repeatInterval?: number | null
+  repeatEndsAt?: string | null
 }
 
 interface CreatedCalendarEventItem {
@@ -240,9 +245,14 @@ export function CalendarClient({
       repeatInterval: event.repeatInterval ?? null,
       repeatEndsAt: event.repeatEndsAt ? new Date(event.repeatEndsAt) : null,
     }, rangeFrom, rangeTo).map(occurrence => ({
-      ...occurrence,
+      occurrenceId: occurrence.occurrenceId,
+      sourceEventId: occurrence.sourceEventId,
+      title: occurrence.title,
       startAt: occurrence.startAt.toISOString(),
       endAt: occurrence.endAt.toISOString(),
+      repeatFrequency: occurrence.repeatFrequency,
+      repeatInterval: occurrence.repeatInterval,
+      repeatEndsAt: occurrence.repeatEndsAt?.toISOString() ?? null,
       color: event.color ?? null,
       categoryId: event.categoryId ?? null,
     }))
