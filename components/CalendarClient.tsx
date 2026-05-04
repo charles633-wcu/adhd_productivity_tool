@@ -4,9 +4,9 @@
  */
 'use client'
 
-import { useMemo, useState, type PointerEvent, type WheelEvent } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
-import { ChevronLeft, ChevronRight, FolderOpen, Link2, Plus } from 'lucide-react'
+import React, { useMemo, useState, type PointerEvent, type WheelEvent } from 'react'
+import { AnimatePresence, LayoutGroup, motion } from 'framer-motion'
+import { ChevronLeft, ChevronRight, FolderOpen, Link2, Maximize2, Minimize2, Plus } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { DayDetailModal } from '@/components/DayDetailModal'
 import { EventCategoryModal } from '@/components/EventCategoryModal'
@@ -144,6 +144,7 @@ export function CalendarClient({
   const [direction, setDirection] = useState(1)
   const [editingEvent, setEditingEvent] = useState<EditableEvent | null>(null)
   const [dragStartX, setDragStartX] = useState<number | null>(null)
+  const [isExpanded, setIsExpanded] = useState(false)
 
   const todayKey = toLocalDateKey(today)
 
@@ -248,125 +249,160 @@ export function CalendarClient({
     }))
   }
 
-  function renderPreviewMonth(month: Date, position: 'previous' | 'next') {
+  function renderCalendarCard(month: Date, role: 'prev' | 'center' | 'next') {
+    const monthKey = `${month.getFullYear()}-${month.getMonth()}`
+    const isCenter = role === 'center'
     const label = monthLabel(month)
     const days = buildMonthDays(month)
 
     return (
-      <button
-        key={`${position}-${month.toISOString()}`}
-        type="button"
-        aria-label={`${position === 'previous' ? 'Previous' : 'Next'} month preview: ${label}`}
-        onClick={() => navigateToMonth(month)}
-        className="hidden w-[18rem] shrink-0 flex-col rounded-2xl border border-border bg-card/85 p-3 text-left opacity-70 shadow-sm transition-all hover:bg-muted/50 hover:opacity-90 md:flex"
+      <motion.div
+        key={monthKey}
+        layout
+        initial={{ opacity: 0, x: direction * 80 }}
+        animate={{ opacity: isCenter ? 1 : isExpanded ? 0 : 0.7, x: 0 }}
+        exit={{ opacity: 0, x: direction * -80 }}
+        transition={{
+          layout: { duration: 0.4, ease: [0.4, 0, 0.2, 1] },
+          opacity: { duration: 0.25 },
+          x: { duration: 0.35, ease: [0.4, 0, 0.2, 1] },
+        }}
+        role={isCenter ? 'region' : 'button'}
+        aria-label={
+          isCenter
+            ? `${label} calendar`
+            : `${role === 'prev' ? 'Previous' : 'Next'} month preview: ${label}`
+        }
+        tabIndex={isCenter ? undefined : isExpanded ? -1 : 0}
+        onClick={!isCenter && !isExpanded ? () => navigateToMonth(month) : undefined}
+        onKeyDown={
+          !isCenter && !isExpanded
+            ? (e: React.KeyboardEvent<HTMLDivElement>) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  navigateToMonth(month)
+                }
+              }
+            : undefined
+        }
+        className={[
+          'rounded-2xl border border-border bg-card shadow-sm',
+          isCenter
+            ? `relative shrink-0 w-full p-3 sm:p-4 ${isExpanded ? '' : 'max-w-xl'}`
+            : isExpanded
+              ? 'w-0 overflow-hidden p-0'
+              : 'hidden w-[18rem] shrink-0 flex-col p-3 opacity-70 cursor-pointer hover:bg-muted/50 hover:opacity-90 md:flex',
+        ].join(' ')}
       >
-        <span className="mb-3 text-xs font-medium text-muted-foreground/90">{label}</span>
-        <span className="grid grid-cols-7 gap-1" aria-hidden="true">
-          {days.map(day => {
-            const key = toLocalDateKey(day)
-            const inMonth = day.getMonth() === month.getMonth()
-            const hasDots = (eventsByDate.get(key)?.length ?? 0) + (icsEventsByDate.get(key)?.length ?? 0) > 0
-            return (
-              <span
-                key={key}
-                data-preview-day={key}
-                className={[
-                  'relative flex h-7 items-center justify-center rounded-md text-[10px]',
-                  inMonth ? 'text-foreground' : 'text-muted-foreground/25',
-                ].join(' ')}
-              >
-                {day.getDate()}
-                {hasDots && inMonth && <span className="absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-primary" />}
-              </span>
-            )
-          })}
-        </span>
-      </button>
-    )
-  }
-
-  function renderCurrentMonth(month: Date) {
-    const days = buildMonthDays(month)
-    const activeMonthLabel = monthLabel(month)
-
-    return (
-      <motion.section
-        key={`current-${month.toISOString()}`}
-        initial={{ opacity: 0, x: direction * 40 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: direction * -40 }}
-        transition={{ duration: 0.25, ease: 'easeInOut' }}
-        className="shrink-0 w-full max-w-xl rounded-2xl border border-border bg-card p-3 shadow-sm sm:p-4"
-        aria-label={`${activeMonthLabel} calendar`}
-      >
-        <div className="grid grid-cols-7 mb-1">
-          {DOW.map((d, i) => {
-            const isTodayCol = month.getMonth() === today.getMonth() && month.getFullYear() === today.getFullYear() && i === today.getDay()
-            return (
-              <div key={d} className="text-center py-1">
-                <span className={`text-[10px] font-mono ${isTodayCol ? 'text-primary font-bold' : 'text-muted-foreground'}`}>{d}</span>
-              </div>
-            )
-          })}
-        </div>
-
-        <div className="grid grid-cols-7 gap-1">
-          {days.map(day => {
-            const key = toLocalDateKey(day)
-            const isCurrentMonth = day.getMonth() === month.getMonth()
-            const isToday = key === todayKey
-            const isSelected = key === selectedDay
-            const dayEvents = eventsByDate.get(key) ?? []
-            const dayIcsEvents = icsEventsByDate.get(key) ?? []
-            const totalDots = dayEvents.length + dayIcsEvents.length
-
-            return (
-              <motion.div
-                key={key}
-                data-testid={`calendar-day-${key}`}
-                role={isCurrentMonth ? 'button' : undefined}
-                aria-label={isCurrentMonth ? `Select ${formatAccessibleDate(day)}` : undefined}
-                tabIndex={isCurrentMonth ? 0 : -1}
-                onClick={() => { if (isCurrentMonth) handleDayClick(key) }}
-                onKeyDown={e => {
-                  if (isCurrentMonth && (e.key === 'Enter' || e.key === ' ')) {
-                    if (e.key === ' ') e.preventDefault()
-                    handleDayClick(key)
-                  }
-                }}
-                whileHover={isCurrentMonth ? { scale: 1.03 } : {}}
-                whileTap={isCurrentMonth ? { scale: 0.97 } : {}}
-                className={[
-                  'relative flex aspect-square flex-col items-center justify-start rounded-xl pt-1 text-xs',
-                  isCurrentMonth ? 'text-foreground cursor-pointer' : 'text-muted-foreground/30 cursor-default',
-                  isSelected ? 'bg-muted shadow-sm' : '',
-                ].filter(Boolean).join(' ')}
-              >
-                <span className={[
-                  'relative z-10 flex h-6 w-6 items-center justify-center text-xs font-medium',
-                  isToday ? 'font-bold text-primary' : '',
-                  isSelected ? 'rounded-full bg-primary text-primary-foreground' : '',
-                ].filter(Boolean).join(' ')}>
-                  {day.getDate()}
-                </span>
-
-                {isToday && !isSelected && <span className="relative z-10 h-1 w-1 rounded-full bg-primary" />}
-
-                {totalDots > 0 && (
-                  <div className="relative z-10 mt-1 flex flex-wrap justify-center gap-0.5 px-1">
-                    {dayEvents.slice(0, 2).map((ev, i) => {
-                      const cat = categories.find(c => c.id === ev.categoryId)
-                      return <span key={`e${i}`} className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: ev.color ?? cat?.color ?? '#6366f1' }} />
-                    })}
-                    {dayIcsEvents.slice(0, 1).map((_, i) => <span key={`i${i}`} className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />)}
-                    {totalDots > 3 && <span className="text-[8px] text-muted-foreground">+{totalDots - 3}</span>}
+        {isCenter ? (
+          <>
+            <button
+              aria-label={isExpanded ? 'Collapse calendar' : 'Expand calendar'}
+              onClick={() => setIsExpanded(prev => !prev)}
+              className="absolute top-2 right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-muted/60 text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+            >
+              {isExpanded ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+            </button>
+            <div className="grid grid-cols-7 mb-1">
+              {DOW.map((d, i) => {
+                const isTodayCol = month.getMonth() === today.getMonth() && month.getFullYear() === today.getFullYear() && i === today.getDay()
+                return (
+                  <div key={d} className="text-center py-1">
+                    <span className={`text-[10px] font-mono ${isTodayCol ? 'text-primary font-bold' : 'text-muted-foreground'}`}>{d}</span>
                   </div>
-                )}
-              </motion.div>
-            )
-          })}
-        </div>
-      </motion.section>
+                )
+              })}
+            </div>
+
+            <div className="grid grid-cols-7 gap-1">
+              {days.map(day => {
+                const key = toLocalDateKey(day)
+                const isCurrentMonth = day.getMonth() === month.getMonth()
+                const isToday = key === todayKey
+                const isSelected = key === selectedDay
+                const dayEvents = eventsByDate.get(key) ?? []
+                const dayIcsEvents = icsEventsByDate.get(key) ?? []
+                const totalDots = dayEvents.length + dayIcsEvents.length
+
+                return (
+                  <motion.div
+                    key={key}
+                    data-testid={`calendar-day-${key}`}
+                    role={isCurrentMonth ? 'button' : undefined}
+                    aria-label={isCurrentMonth ? `Select ${formatAccessibleDate(day)}` : undefined}
+                    tabIndex={isCurrentMonth ? 0 : -1}
+                    onClick={() => { if (isCurrentMonth) handleDayClick(key) }}
+                    onKeyDown={e => {
+                      if (isCurrentMonth && (e.key === 'Enter' || e.key === ' ')) {
+                        if (e.key === ' ') e.preventDefault()
+                        handleDayClick(key)
+                      }
+                    }}
+                    whileHover={isCurrentMonth ? { scale: 1.03 } : {}}
+                    whileTap={isCurrentMonth ? { scale: 0.97 } : {}}
+                    className={[
+                      'relative flex aspect-square flex-col items-center justify-start rounded-xl pt-1 text-xs',
+                      isCurrentMonth ? 'text-foreground cursor-pointer' : 'text-muted-foreground/30 cursor-default',
+                      isSelected ? 'bg-muted shadow-sm' : '',
+                    ].filter(Boolean).join(' ')}
+                  >
+                    <span className={[
+                      'relative z-10 flex h-6 w-6 items-center justify-center text-xs font-medium',
+                      isToday ? 'font-bold text-primary' : '',
+                      isSelected ? 'rounded-full bg-primary text-primary-foreground' : '',
+                    ].filter(Boolean).join(' ')}>
+                      {day.getDate()}
+                    </span>
+
+                    {isToday && !isSelected && <span className="relative z-10 h-1 w-1 rounded-full bg-primary" />}
+
+                    {totalDots > 0 && (
+                      <div className="relative z-10 mt-1 flex flex-wrap justify-center gap-0.5 px-1">
+                        {dayEvents.slice(0, 2).map((ev, i) => {
+                          const cat = categories.find(c => c.id === ev.categoryId)
+                          return <span key={`e${i}`} className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: ev.color ?? cat?.color ?? '#6366f1' }} />
+                        })}
+                        {dayIcsEvents.slice(0, 1).map((_, i) => <span key={`i${i}`} className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />)}
+                        {totalDots > 3 && <span className="text-[8px] text-muted-foreground">+{totalDots - 3}</span>}
+                      </div>
+                    )}
+                  </motion.div>
+                )
+              })}
+            </div>
+          </>
+        ) : (
+          <>
+            <motion.span
+              layoutId={`${monthKey}-label`}
+              transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+              className="mb-3 block text-xs font-medium text-muted-foreground/90"
+            >
+              {label}
+            </motion.span>
+            <span className="grid grid-cols-7 gap-1" aria-hidden="true">
+              {days.map(day => {
+                const key = toLocalDateKey(day)
+                const inMonth = day.getMonth() === month.getMonth()
+                const hasDots = (eventsByDate.get(key)?.length ?? 0) + (icsEventsByDate.get(key)?.length ?? 0) > 0
+                return (
+                  <span
+                    key={key}
+                    data-preview-day={key}
+                    className={[
+                      'relative flex h-7 items-center justify-center rounded-md text-[10px]',
+                      inMonth ? 'text-foreground' : 'text-muted-foreground/25',
+                    ].join(' ')}
+                  >
+                    {day.getDate()}
+                    {hasDots && inMonth && <span className="absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-primary" />}
+                  </span>
+                )
+              })}
+            </span>
+          </>
+        )}
+      </motion.div>
     )
   }
 
@@ -415,6 +451,7 @@ export function CalendarClient({
 
       <div className="flex-1 overflow-hidden px-3 py-2">
         <div data-testid="calendar-stack" className="mx-auto flex h-full max-w-7xl flex-col items-center gap-1">
+          <LayoutGroup id="calendar">
           <div
             data-testid="calendar-month-heading"
             className="mx-auto flex w-full max-w-xl shrink-0 items-center justify-center gap-3"
@@ -422,9 +459,21 @@ export function CalendarClient({
             <button aria-label="Previous month" onClick={() => navigate(-1)} className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background/90 shadow-sm transition-colors hover:bg-muted">
               <ChevronLeft className="h-5 w-5" />
             </button>
-            <h1 className="min-w-[15rem] origin-center scale-x-95 text-center text-4xl font-extrabold tracking-normal text-foreground">
-              {monthLabel(currentMonth)}
-            </h1>
+            <div className="min-w-[15rem]">
+              <AnimatePresence mode="popLayout" initial={false}>
+                <motion.h1
+                  key={currentMonth.toISOString()}
+                  layoutId={`${currentMonth.getFullYear()}-${currentMonth.getMonth()}-label`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+                  className="origin-center scale-x-95 text-center text-4xl font-extrabold tracking-normal text-foreground"
+                >
+                  {monthLabel(currentMonth)}
+                </motion.h1>
+              </AnimatePresence>
+            </div>
             <button aria-label="Next month" onClick={() => navigate(1)} className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background/90 shadow-sm transition-colors hover:bg-muted">
               <ChevronRight className="h-5 w-5" />
             </button>
@@ -436,14 +485,15 @@ export function CalendarClient({
             onPointerDown={handleCarouselPointerDown}
             onPointerUp={handleCarouselPointerUp}
             onPointerCancel={() => setDragStartX(null)}
-            className="flex min-h-0 shrink-0 cursor-grab touch-pan-y select-none items-start justify-center gap-4 overflow-visible pt-1 active:cursor-grabbing"
+            className={`flex min-h-0 shrink-0 cursor-grab touch-pan-y select-none items-start justify-center ${isExpanded ? 'gap-0' : 'gap-4'} overflow-visible pt-1 active:cursor-grabbing`}
           >
-            {renderPreviewMonth(carouselMonths[0], 'previous')}
-            <AnimatePresence mode="wait" initial={false}>
-              {renderCurrentMonth(carouselMonths[1])}
+            <AnimatePresence mode="popLayout" initial={false}>
+              {carouselMonths.map((month, idx) =>
+                renderCalendarCard(month, idx === 0 ? 'prev' : idx === 1 ? 'center' : 'next')
+              )}
             </AnimatePresence>
-            {renderPreviewMonth(carouselMonths[2], 'next')}
           </div>
+          </LayoutGroup>
 
           {selectedDay && selectedDate && (
             <motion.section

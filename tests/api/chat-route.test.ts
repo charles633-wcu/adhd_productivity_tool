@@ -149,4 +149,24 @@ describe('POST /api/chat', () => {
     const body = await res.json()
     expect(body.trace).toBeUndefined()
   })
+
+  it('returns an actionable quota error when the provider reports insufficient quota', async () => {
+    const quotaError = Object.assign(new Error('quota exceeded'), {
+      status: 429,
+      code: 'insufficient_quota',
+      type: 'insufficient_quota',
+    })
+    chatProvider.chat.mockRejectedValue(quotaError)
+
+    const res = await POST(new Request('http://localhost/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'hello' }] }),
+      headers: { 'Content-Type': 'application/json' },
+    }))
+
+    expect(res.status).toBe(402)
+    const body = await res.json()
+    expect(body.error).toBe('AI quota exhausted')
+    expect(body.message).toContain('OpenAI quota')
+  })
 })

@@ -47,6 +47,20 @@ describe('ChatSheet', () => {
     await waitFor(() => expect(screen.getByText(/something went wrong/i)).toBeInTheDocument())
   })
 
+  it('shows actionable server error messages when API returns one', async () => {
+    ;(fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({ message: 'The OpenAI quota for this API key is exhausted.' }),
+    })
+
+    render(<ChatSheet open={true} onOpenChange={onOpenChange} />)
+    const input = screen.getByPlaceholderText(/ask anything/i)
+    fireEvent.change(input, { target: { value: 'hello' } })
+    fireEvent.submit(input.closest('form')!)
+
+    await waitFor(() => expect(screen.getByText(/openai quota/i)).toBeInTheDocument())
+  })
+
   it('renders a dev toggle button', () => {
     render(<ChatSheet open={true} onOpenChange={onOpenChange} />)
     expect(screen.getByRole('button', { name: /dev/i })).toBeInTheDocument()

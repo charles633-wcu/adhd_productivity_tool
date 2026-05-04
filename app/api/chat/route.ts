@@ -45,6 +45,12 @@ const BodySchema = z.object({
 
 const MAX_TOOL_ITERATIONS = 5
 
+function isQuotaError(err: unknown) {
+  if (!err || typeof err !== 'object') return false
+  const record = err as { status?: unknown; code?: unknown; type?: unknown }
+  return record.status === 429 && (record.code === 'insufficient_quota' || record.type === 'insufficient_quota')
+}
+
 export async function POST(req: Request) {
   // Auth
   let user: { id: string }
@@ -140,6 +146,12 @@ export async function POST(req: Request) {
     }
   } catch (err) {
     console.error('[chat] provider error:', err)
+    if (isQuotaError(err)) {
+      return NextResponse.json({
+        error: 'AI quota exhausted',
+        message: 'The OpenAI quota for this API key is exhausted. Check billing or switch to a key with available credits.',
+      }, { status: 402 })
+    }
     return NextResponse.json({ error: 'AI service error' }, { status: 502 })
   }
 

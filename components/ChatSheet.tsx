@@ -67,14 +67,20 @@ export function ChatSheet({ open, onOpenChange }: ChatSheetProps) {
           ...(devMode ? { debug: true } : {}),
         }),
       })
-      if (!res.ok) throw new Error('API error')
+      if (!res.ok) {
+        const errorBody = typeof res.json === 'function'
+          ? await res.json().catch(() => null) as { message?: string; error?: string } | null
+          : null
+        throw new Error(errorBody?.message ?? errorBody?.error ?? 'API error')
+      }
       const data = await res.json() as { reply: string; trace?: TraceStep[] }
       setMessages(prev => [
         ...prev,
         { role: 'assistant', content: data.reply, trace: data.trace },
       ])
-    } catch {
-      setError('Something went wrong. Please try again.')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : null
+      setError(message && message !== 'API error' ? message : 'Something went wrong. Please try again.')
     } finally {
       setLoading(false)
     }
