@@ -10,6 +10,7 @@ export default defineConfig({
     globals: true,
     pool: 'threads',
     maxWorkers: 4,
+    testTimeout: 10000,
     exclude: ['node_modules', '.worktrees/**', '.claude/**'],
   },
   resolve: {
