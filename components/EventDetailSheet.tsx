@@ -8,6 +8,9 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
+import { DatePickerMini } from '@/components/DatePickerMini'
+import { RepeatPicker } from '@/components/RepeatPicker'
+import type { RepeatFrequency, RepeatValue } from '@/lib/types/calendar'
 
 interface CalendarEventItem {
   occurrenceId: string
@@ -17,6 +20,9 @@ interface CalendarEventItem {
   endAt: Date
   color?: string | null
   categoryId?: string | null
+  repeatFrequency?: RepeatFrequency | null
+  repeatInterval?: number | null
+  repeatEndsAt?: string | null
 }
 
 interface PatchedEvent {
@@ -35,13 +41,6 @@ export interface EventDetailSheetProps {
   onDeleted: (sourceEventId: string) => void
 }
 
-type RepeatMode = 'never' | 'daily' | 'weekly' | 'monthly' | 'yearly'
-type RepeatFrequency = 'day' | 'week' | 'month' | 'year'
-
-const repeatFrequencyByMode: Record<Exclude<RepeatMode, 'never'>, RepeatFrequency> = {
-  daily: 'day', weekly: 'week', monthly: 'month', yearly: 'year',
-}
-
 function toTimeStr(d: Date): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
@@ -58,7 +57,9 @@ export function EventDetailSheet({ event, onClose, onSaved, onDeleted }: EventDe
   const [title, setTitle] = useState('')
   const [startTime, setStartTime] = useState('09:00')
   const [endTime, setEndTime] = useState('10:00')
-  const [repeatMode, setRepeatMode] = useState<RepeatMode>('never')
+  const [repeat, setRepeat] = useState<RepeatValue>({ frequency: null, interval: 1 })
+  const [repeatEndsAt, setRepeatEndsAt] = useState<Date | null>(null)
+  const [showEndPicker, setShowEndPicker] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
@@ -69,7 +70,13 @@ export function EventDetailSheet({ event, onClose, onSaved, onDeleted }: EventDe
     setTitle(event.title)
     setStartTime(toTimeStr(event.startAt))
     setEndTime(toTimeStr(event.endAt))
-    setRepeatMode('never')
+    setRepeat(
+      event.repeatFrequency
+        ? { frequency: event.repeatFrequency, interval: event.repeatInterval ?? 1 }
+        : { frequency: null, interval: 1 },
+    )
+    setRepeatEndsAt(event.repeatEndsAt ? new Date(event.repeatEndsAt) : null)
+    setShowEndPicker(false)
     setDeleteConfirm(false)
   }, [event])
 
@@ -89,8 +96,9 @@ export function EventDetailSheet({ event, onClose, onSaved, onDeleted }: EventDe
           title: title.trim(),
           startAt: buildDateTime(event.startAt, startTime),
           endAt: buildDateTime(event.endAt, endTime),
-          repeatFrequency: repeatMode === 'never' ? null : repeatFrequencyByMode[repeatMode],
-          repeatInterval: repeatMode === 'never' ? null : 1,
+          repeatFrequency: repeat.frequency,
+          repeatInterval: repeat.frequency ? repeat.interval : null,
+          repeatEndsAt: repeatEndsAt?.toISOString() ?? null,
         }),
       })
       if (!res.ok) throw new Error(await res.text())
@@ -186,18 +194,34 @@ export function EventDetailSheet({ event, onClose, onSaved, onDeleted }: EventDe
               />
             </div>
           </div>
-          <select
-            value={repeatMode}
-            onChange={e => setRepeatMode(e.target.value as RepeatMode)}
-            className="w-full rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm"
-            aria-label="Repeat"
-          >
-            <option value="never">Never</option>
-            <option value="daily">Every day</option>
-            <option value="weekly">Every week</option>
-            <option value="monthly">Every month</option>
-            <option value="yearly">Every year</option>
-          </select>
+          <RepeatPicker value={repeat} onChange={setRepeat} />
+
+          <div>
+            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+              End repeat
+            </label>
+            <button
+              type="button"
+              onClick={() => setShowEndPicker(open => !open)}
+              aria-label="End repeat"
+              className="flex w-full items-center justify-between rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm hover:bg-muted/60"
+            >
+              <span className={repeatEndsAt ? '' : 'text-muted-foreground'}>
+                {repeatEndsAt ? repeatEndsAt.toLocaleDateString() : 'Never'}
+              </span>
+            </button>
+            {showEndPicker && (
+              <div className="mt-2">
+                <DatePickerMini
+                  value={repeatEndsAt}
+                  onChange={date => {
+                    setRepeatEndsAt(date)
+                    setShowEndPicker(false)
+                  }}
+                />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Delete footer — two-tap confirm, no dialog */}

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { EventDetailSheet } from '@/components/EventDetailSheet'
 
@@ -10,6 +10,9 @@ const baseEvent = {
   endAt: new Date('2026-04-15T09:30:00'),
   color: '#6366f1',
   categoryId: null,
+  repeatFrequency: null as null | 'day' | 'week' | 'month' | 'year',
+  repeatInterval: null as number | null,
+  repeatEndsAt: null as string | null,
 }
 
 const baseProps = {
@@ -31,8 +34,8 @@ describe('EventDetailSheet', () => {
   it('pre-fills title and times from the passed event', () => {
     render(<EventDetailSheet {...baseProps} />)
     expect((screen.getByPlaceholderText('Title') as HTMLInputElement).value).toBe('Team standup')
-    expect((screen.getByLabelText(/start/i) as HTMLInputElement).value).toBe('09:00')
-    expect((screen.getByLabelText(/end/i) as HTMLInputElement).value).toBe('09:30')
+    expect((screen.getByLabelText('Start') as HTMLInputElement).value).toBe('09:00')
+    expect((screen.getByLabelText('End') as HTMLInputElement).value).toBe('09:30')
   })
 
   it('renders nothing when event is null', () => {
@@ -40,15 +43,58 @@ describe('EventDetailSheet', () => {
     expect(container.firstChild).toBeNull()
   })
 
-  it('Done fires PATCH /api/calendar/events/e1 and calls onSaved on 200', async () => {
+  it('Done fires PATCH with repeat fields in body and calls onSaved on 200', async () => {
     const updated = { id: 'e1', title: 'Team standup', startAt: '2026-04-15T09:00:00.000Z', endAt: '2026-04-15T09:30:00.000Z' }
     vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify(updated), { status: 200 }))
     render(<EventDetailSheet {...baseProps} />)
     fireEvent.click(screen.getByText('Done'))
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith('/api/calendar/events/e1', expect.objectContaining({ method: 'PATCH' }))
+      const body = JSON.parse((fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body)
+      expect('repeatEndsAt' in body).toBe(true)
+      expect('repeatFrequency' in body).toBe(true)
       expect(baseProps.onSaved).toHaveBeenCalledWith(updated)
     })
+  })
+
+  it('shows RepeatPicker instead of a select element', () => {
+    render(<EventDetailSheet {...baseProps} />)
+    expect(screen.getByRole('button', { name: /^Repeat$/i })).toBeTruthy()
+    expect(screen.queryByRole('combobox')).toBeNull()
+  })
+
+  it('shows End repeat field', () => {
+    render(<EventDetailSheet {...baseProps} />)
+    expect(screen.getByLabelText('End repeat')).toBeTruthy()
+  })
+
+  it('pre-fills repeat from event.repeatFrequency and repeatInterval', () => {
+    const weeklyEvent = {
+      ...baseEvent,
+      repeatFrequency: 'week' as const,
+      repeatInterval: 2,
+    }
+    render(<EventDetailSheet {...baseProps} event={weeklyEvent} />)
+    expect(screen.getByText('Every 2 weeks')).toBeTruthy()
+  })
+
+  it('clicking End repeat field opens DatePickerMini', () => {
+    render(<EventDetailSheet {...baseProps} />)
+    fireEvent.click(screen.getByLabelText('End repeat'))
+    expect(screen.getByLabelText('Date picker')).toBeTruthy()
+  })
+
+  it('selecting a date from DatePickerMini closes the picker and updates display', () => {
+    const event = {
+      ...baseEvent,
+      repeatEndsAt: '2026-05-15T00:00:00.000Z',
+    }
+    render(<EventDetailSheet {...baseProps} event={event} />)
+    fireEvent.click(screen.getByLabelText('End repeat'))
+    const picker = screen.getByLabelText('Date picker')
+    fireEvent.click(within(picker).getByLabelText('May 20, 2026'))
+    expect(screen.queryByLabelText('Date picker')).toBeNull()
+    expect(screen.getByText('5/20/2026')).toBeTruthy()
   })
 
   it('first delete tap shows confirm text; second tap fires DELETE /api/calendar/events/e1 and calls onDeleted', async () => {
