@@ -4,6 +4,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import type { RepeatFrequency, RepeatValue } from '@/lib/types/calendar'
 
 interface RepeatPickerProps {
@@ -104,8 +105,11 @@ export function RepeatPicker({ value, onChange }: RepeatPickerProps) {
         }}
         className="flex w-full items-center justify-between rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm hover:bg-muted/60"
       >
-        <span>{repeatSummary(value)}</span>
-        <span className="text-muted-foreground" aria-hidden="true">v</span>
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Repeat</span>
+        <span className="flex items-center gap-1">
+          {repeatSummary(value)}
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+        </span>
       </button>
 
       {open && !customOpen && (

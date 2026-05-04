@@ -225,6 +225,7 @@ export function CalendarClient({
     setModalDay(key)
   }
 
+  // Repeat fields are intentionally not re-expanded here — repeat changes reflect after next month navigation (accepted tradeoff).
   function handleEventEdited(patched: { id: string; title: string; startAt: string; endAt: string; color?: string | null; categoryId?: string | null }) {
     setLocalEvents(prev => prev.map(e =>
       e.sourceEventId === patched.id

@@ -207,7 +207,7 @@ export function EventDetailSheet({ event, onClose, onSaved, onDeleted }: EventDe
               className="flex w-full items-center justify-between rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm hover:bg-muted/60"
             >
               <span className={repeatEndsAt ? '' : 'text-muted-foreground'}>
-                {repeatEndsAt ? repeatEndsAt.toLocaleDateString() : 'Never'}
+                {repeatEndsAt ? repeatEndsAt.toLocaleDateString('en-US') : 'Never'}
               </span>
             </button>
             {showEndPicker && (
