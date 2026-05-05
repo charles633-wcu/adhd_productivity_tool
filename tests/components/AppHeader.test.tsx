@@ -10,6 +10,7 @@ describe('AppHeader', () => {
     expect(screen.getByRole('link', { name: /triggers/i })).toHaveAttribute('href', '/')
     expect(screen.getByRole('link', { name: /calendar/i })).toHaveAttribute('href', '/calendar')
     expect(screen.getByRole('link', { name: /to-dos/i })).toHaveAttribute('href', '/todos')
+    expect(screen.getByRole('link', { name: /mind/i })).toHaveAttribute('href', '/heap')
 
     const pill = screen.getByTestId('app-header-pill')
     expect(pill.className).toContain('fixed')
@@ -27,9 +28,9 @@ describe('AppHeader', () => {
   })
 
   it('marks the current feature link as active', () => {
-    render(<AppHeader active="todos" />)
+    render(<AppHeader active="heap" />)
 
-    expect(screen.getByRole('link', { name: /to-dos/i })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: /mind/i })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: /calendar/i })).not.toHaveAttribute('aria-current')
   })
 

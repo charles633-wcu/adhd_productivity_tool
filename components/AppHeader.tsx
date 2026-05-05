@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import type { ComponentType } from 'react'
-import { CalendarDays, Target } from 'lucide-react'
+import { Brain, CalendarDays, Target } from 'lucide-react'
 import {
   Sheet,
   SheetContent,
@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 
-export type AppHeaderActive = 'triggers' | 'calendar' | 'todos' | 'review' | 'import' | 'chat'
+export type AppHeaderActive = 'triggers' | 'calendar' | 'todos' | 'heap' | 'review' | 'import' | 'chat'
 
 interface AppHeaderProps {
   active?: AppHeaderActive
@@ -29,6 +29,7 @@ const featureLinks: Array<{
   { key: 'triggers', label: 'Triggers', href: '/', icon: Target },
   { key: 'calendar', label: 'Calendar', href: '/calendar', icon: CalendarDays },
   { key: 'todos', label: '✓ To-Dos', href: '/todos' },
+  { key: 'heap', label: 'Mind', href: '/heap', icon: Brain },
 ]
 
 export function AppHeader({ active, className }: AppHeaderProps) {
