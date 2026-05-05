@@ -97,7 +97,12 @@ function splitOptions(event: CalendarEvent, occurrenceDate: string) {
   }
 }
 
-async function purgeForwardData(db: ReturnType<typeof getDb>, event: CalendarEvent, occurrenceDate: string) {
+async function purgeForwardData(
+  db: ReturnType<typeof getDb>,
+  event: CalendarEvent,
+  occurrenceDate: string,
+  extraPatch: Partial<NewCalendarEvent> = {},
+) {
   await db
     .delete(calendarEventOverrides)
     .where(and(
@@ -106,9 +111,10 @@ async function purgeForwardData(db: ReturnType<typeof getDb>, event: CalendarEve
     ))
 
   const exdates = (event.exdates ?? []).filter(date => date < occurrenceDate)
+  // Merge exdates + any caller-supplied fields (e.g. rrule) into a single UPDATE
   await db
     .update(calendarEvents)
-    .set({ exdates: exdates.length > 0 ? exdates : null })
+    .set({ exdates: exdates.length > 0 ? exdates : null, ...extraPatch })
     .where(eq(calendarEvents.id, event.id))
 }
 
@@ -143,34 +149,35 @@ async function applyThisAndFollowingPatch(
     return row
   }
 
-  await purgeForwardData(db, event, occurrenceDate)
-
   if (split.mode === 'deleteMaster') {
+    await purgeForwardData(db, event, occurrenceDate)
     await deleteCalendarEvent(db, event.id, event.userId)
     const [row] = await db.insert(calendarEvents).values(buildSplitRow(event, occurrenceDate, patch, serializeOptions(RRule.parseString(event.rrule!)))).returning()
     return row
   }
 
-  await updateCalendarEvent(db, event.id, event.userId, { rrule: split.masterRrule })
+  // Single UPDATE: exdates trim + new master rrule in one round-trip
+  await purgeForwardData(db, event, occurrenceDate, { rrule: split.masterRrule })
   const [row] = await db.insert(calendarEvents).values(buildSplitRow(event, occurrenceDate, patch, split.newRrule)).returning()
   return row
 }
 
 async function truncateThisAndFollowing(db: ReturnType<typeof getDb>, event: CalendarEvent, occurrenceDate: string) {
   const split = splitOptions(event, occurrenceDate)
+
   if (split.mode === 'all') {
     await deleteCalendarEvent(db, event.id, event.userId)
     return
   }
 
-  await purgeForwardData(db, event, occurrenceDate)
-
   if (split.mode === 'deleteMaster') {
+    await purgeForwardData(db, event, occurrenceDate)
     await deleteCalendarEvent(db, event.id, event.userId)
     return
   }
 
-  await updateCalendarEvent(db, event.id, event.userId, { rrule: split.masterRrule })
+  // Single UPDATE: exdates trim + truncated rrule in one round-trip
+  await purgeForwardData(db, event, occurrenceDate, { rrule: split.masterRrule })
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {

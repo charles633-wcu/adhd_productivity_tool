@@ -83,8 +83,6 @@ export function deleteCalendarEvent(db: DrizzleDb, id: string, userId: string) {
     .returning()
 }
 
-// ── ICS Subscriptions ─────────────────────────────────────────────────────────
-
 export function listEventOverridesForIds(
   db: DrizzleDb,
   ids: string[],

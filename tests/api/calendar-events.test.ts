@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DELETE, PATCH } from '@/app/api/calendar/events/[id]/route'
 import { GET, POST } from '@/app/api/calendar/events/route'
 import { listEventOverridesForIds } from '@/lib/db/calendar'
-import { calendarEvents } from '@/lib/db/schema'
+import { calendarEventOverrides, calendarEvents } from '@/lib/db/schema'
 
 const { getCurrentUser, getDb } = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
@@ -171,6 +171,48 @@ describe('PATCH /api/calendar/events/[id]', () => {
   })
 })
 
+describe('PATCH /api/calendar/events/[id] — thisAndFollowing', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getCurrentUser.mockResolvedValue({ id: 'u1' })
+  })
+
+  it('deletes master and inserts new row when all COUNT occurrences follow the split point', async () => {
+    // COUNT=2 starting 2026-05-04; splitting at the first occurrence means N_before=0 → deleteMaster branch
+    const event = mockEvent({
+      rrule: 'FREQ=WEEKLY;INTERVAL=1;COUNT=2',
+      startAt: new Date('2026-05-04T09:00:00.000Z'),
+      endAt: new Date('2026-05-04T09:30:00.000Z'),
+    })
+    const insertValues = vi.fn(() => ({ returning: vi.fn().mockResolvedValue([{ id: 'new-ev' }]) }))
+    getDb.mockReturnValue({
+      select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ limit: vi.fn(() => [event]) })) })) })),
+      // delete is called twice: once for overrides, once for the master event row
+      delete: vi.fn(table => table === calendarEventOverrides
+        ? { where: vi.fn(() => Promise.resolve()) }
+        : { where: vi.fn(() => ({ returning: vi.fn().mockResolvedValue([]) })) }
+      ),
+      update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve()) })) })),
+      insert: vi.fn(() => ({ values: insertValues })),
+    })
+
+    const res = await PATCH(
+      new Request('http://localhost', {
+        method: 'PATCH',
+        body: JSON.stringify({ title: 'Renamed series', scope: 'thisAndFollowing', occurrenceDate: '2026-05-04T09:00:00.000Z' }),
+      }),
+      { params: Promise.resolve({ id: 'ev-1' }) },
+    )
+
+    expect(res.status).toBe(200)
+    // New row inherits COUNT=2 (all original occurrences are in the new series)
+    expect(insertValues).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Renamed series',
+      rrule: expect.stringContaining('COUNT=2'),
+    }))
+  })
+})
+
 describe('DELETE /api/calendar/events/[id]', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -191,5 +233,27 @@ describe('DELETE /api/calendar/events/[id]', () => {
 
     expect(res.status).toBe(204)
     expect(set).toHaveBeenCalledWith({ exdates: ['2026-05-04T09:00:00.000Z'] })
+  })
+
+  it('truncates a series at thisAndFollowing by adding UNTIL to the master rrule in a single update', async () => {
+    // Infinite weekly series; splitting at 2026-05-11 adds UNTIL = 2026-05-10T09:00:00.000Z to master
+    const event = mockEvent({ rrule: 'FREQ=WEEKLY;INTERVAL=1' })
+    const set = vi.fn(() => ({ where: vi.fn(() => Promise.resolve()) }))
+    getDb.mockReturnValue({
+      select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ limit: vi.fn(() => [event]) })) })) })),
+      delete: vi.fn(() => ({ where: vi.fn(() => Promise.resolve()) })),
+      update: vi.fn(() => ({ set })),
+    })
+
+    const res = await DELETE(
+      new Request('http://localhost/api/calendar/events/ev-1?scope=thisAndFollowing&occurrenceDate=2026-05-11T09:00:00.000Z'),
+      { params: Promise.resolve({ id: 'ev-1' }) },
+    )
+
+    expect(res.status).toBe(204)
+    // Single SET call with both exdates (null, no prior exdates) and truncated rrule
+    expect(set).toHaveBeenCalledWith(expect.objectContaining({
+      rrule: expect.stringContaining('UNTIL='),
+    }))
   })
 })
