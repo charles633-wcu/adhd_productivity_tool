@@ -268,6 +268,62 @@ describe('CalendarClient', () => {
     expect(screen.getByText('Edit Event')).toBeTruthy()
   })
 
+  it('closes the edit event panel and updates the visible event after Done', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-05-03T12:00:00'))
+
+    const today = new Date('2026-05-03T12:00:00')
+    const todayIso = today.toISOString().slice(0, 10)
+    const event = {
+      occurrenceId: `ev1::${todayIso}T09:00:00.000Z`,
+      sourceEventId: 'ev1',
+      title: 'Morning run',
+      startAt: `${todayIso}T09:00:00.000Z`,
+      endAt: `${todayIso}T09:30:00.000Z`,
+      color: '#6366f1',
+      categoryId: null,
+      repeatFrequency: null,
+      repeatInterval: null,
+      repeatEndsAt: null,
+    }
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({
+      id: 'ev1',
+      title: 'Morning walk',
+      startAt: `${todayIso}T09:00:00.000Z`,
+      endAt: `${todayIso}T09:30:00.000Z`,
+      color: '#6366f1',
+      categoryId: null,
+      rrule: null,
+    }), { status: 200 })).mockResolvedValueOnce(new Response(JSON.stringify([{
+      occurrenceId: `ev1::${todayIso}T09:00:00.000Z`,
+      sourceEventId: 'ev1',
+      title: 'Morning walk',
+      startAt: `${todayIso}T09:00:00.000Z`,
+      endAt: `${todayIso}T09:30:00.000Z`,
+      notes: null,
+      color: '#6366f1',
+      categoryId: null,
+      rrule: null,
+      isOverride: false,
+      originalDate: null,
+    }]), { status: 200 }))
+
+    render(<CalendarClient {...baseProps} initialEvents={[event]} />)
+
+    fireEvent.click(screen.getByTestId(`calendar-day-${todayIso}`))
+    fireEvent.click(screen.getByRole('button', { name: /Morning run/i }))
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Morning walk' } })
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /done/i }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(screen.queryByText('Edit Event')).toBeNull()
+    expect(within(screen.getByTestId('selected-day-dock')).getByText('Morning walk')).toBeTruthy()
+  })
+
   it('clicking an adjacent month preview moves that month into the center', () => {
     render(<CalendarClient {...baseProps} />)
     const now = new Date()
@@ -291,7 +347,7 @@ describe('CalendarClient', () => {
     expect(screen.getByRole('heading', { name: nextMonthLabel })).toBeTruthy()
   })
 
-  it('normalizes created rows and expands recurring events locally after save', async () => {
+  it('refetches expanded recurring events after save', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-15T12:00:00'))
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({
@@ -301,24 +357,50 @@ describe('CalendarClient', () => {
       endAt: '2026-04-15T14:00:00.000Z',
       color: null,
       categoryId: null,
-      repeatFrequency: 'day',
-      repeatInterval: 1,
-      repeatEndsAt: null,
-    }), { status: 201 })))
+      rrule: 'FREQ=DAILY;INTERVAL=1',
+    }), { status: 201 })).mockResolvedValueOnce(new Response(JSON.stringify([
+      {
+        occurrenceId: 'ev-1::2026-04-15T13:00:00.000Z',
+        sourceEventId: 'ev-1',
+        title: 'Planning',
+        startAt: '2026-04-15T13:00:00.000Z',
+        endAt: '2026-04-15T14:00:00.000Z',
+        notes: null,
+        color: null,
+        categoryId: null,
+        rrule: 'FREQ=DAILY;INTERVAL=1',
+        isOverride: false,
+        originalDate: null,
+      },
+      {
+        occurrenceId: 'ev-1::2026-04-16T13:00:00.000Z',
+        sourceEventId: 'ev-1',
+        title: 'Planning',
+        startAt: '2026-04-16T13:00:00.000Z',
+        endAt: '2026-04-16T14:00:00.000Z',
+        notes: null,
+        color: null,
+        categoryId: null,
+        rrule: 'FREQ=DAILY;INTERVAL=1',
+        isOverride: false,
+        originalDate: null,
+      },
+    ]), { status: 200 })))
 
     render(<CalendarClient {...baseProps} />)
     fireEvent.click(screen.getByTestId('calendar-day-2026-04-15'))
     fireEvent.click(screen.getByRole('button', { name: /add event/i }))
     fireEvent.change(screen.getByPlaceholderText(/title/i), { target: { value: 'Planning' } })
-    fireEvent.click(screen.getByRole('button', { name: /repeat never/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^repeat$/i }))
     fireEvent.click(screen.getByRole('button', { name: /every day/i }))
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /save/i }))
+      fireEvent.click(screen.getByRole('button', { name: /done/i }))
       await Promise.resolve()
     })
 
     await act(async () => {
       await vi.runAllTimersAsync()
+      await Promise.resolve()
     })
     expect(screen.queryByPlaceholderText(/title/i)).toBeNull()
 

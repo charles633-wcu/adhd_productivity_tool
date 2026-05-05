@@ -1,8 +1,8 @@
 // CRUD helpers for calendar tables. No imports from triggers.ts or categories.ts.
-import { eq, and, lte } from 'drizzle-orm'
-import { eventCategories, calendarEvents, icsSubscriptions } from './schema'
+import { eq, and, lte, inArray } from 'drizzle-orm'
+import { eventCategories, calendarEvents, calendarEventOverrides, icsSubscriptions } from './schema'
 import type { DrizzleDb } from './client'
-import type { NewEventCategory, NewCalendarEvent } from './schema'
+import type { CalendarEventOverride, NewEventCategory, NewCalendarEvent } from './schema'
 
 // ── Event Categories ──────────────────────────────────────────────────────────
 
@@ -55,6 +55,14 @@ export function createCalendarEvent(db: DrizzleDb, data: NewCalendarEvent) {
   return db.insert(calendarEvents).values(data).returning()
 }
 
+export function getCalendarEvent(db: DrizzleDb, id: string, userId: string) {
+  return db
+    .select()
+    .from(calendarEvents)
+    .where(and(eq(calendarEvents.id, id), eq(calendarEvents.userId, userId)))
+    .limit(1)
+}
+
 export function updateCalendarEvent(
   db: DrizzleDb,
   id: string,
@@ -76,6 +84,18 @@ export function deleteCalendarEvent(db: DrizzleDb, id: string, userId: string) {
 }
 
 // ── ICS Subscriptions ─────────────────────────────────────────────────────────
+
+export function listEventOverridesForIds(
+  db: DrizzleDb,
+  ids: string[],
+): CalendarEventOverride[] {
+  if (ids.length === 0) return []
+  return db
+    .select()
+    .from(calendarEventOverrides)
+    .where(inArray(calendarEventOverrides.masterEventId, ids))
+    .all()
+}
 
 export function getIcsSubscription(db: DrizzleDb, userId: string) {
   return db.select().from(icsSubscriptions).where(eq(icsSubscriptions.userId, userId)).limit(1)

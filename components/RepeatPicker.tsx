@@ -1,68 +1,204 @@
 /**
- * RepeatPicker selects a repeat schedule from presets or a custom interval panel.
+ * RepeatPicker selects and edits an RRULE recurrence string.
  */
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
-import type { RepeatFrequency, RepeatValue } from '@/lib/types/calendar'
+import { RRule, Weekday } from 'rrule'
+import { DatePickerMini } from '@/components/DatePickerMini'
 
 interface RepeatPickerProps {
-  value: RepeatValue
-  onChange: (value: RepeatValue) => void
+  value: string | null
+  onChange: (rrule: string | null) => void
 }
 
-type TabMode = RepeatFrequency
+type Freq = typeof RRule.DAILY | typeof RRule.WEEKLY | typeof RRule.MONTHLY | typeof RRule.YEARLY
+type EndMode = 'never' | 'until' | 'count'
+type PatternMode = 'date' | 'weekday'
 
-const PRESET_OPTIONS: Array<{ label: string; value: RepeatValue }> = [
-  { label: 'Never', value: { frequency: null, interval: 1 } },
-  { label: 'Every day', value: { frequency: 'day', interval: 1 } },
-  { label: 'Every week', value: { frequency: 'week', interval: 1 } },
-  { label: 'Every 2 weeks', value: { frequency: 'week', interval: 2 } },
-  { label: 'Every month', value: { frequency: 'month', interval: 1 } },
-  { label: 'Every year', value: { frequency: 'year', interval: 1 } },
+interface PickerState {
+  freq: Freq
+  interval: number
+  byweekday: Weekday[]
+  bymonthday: number | null
+  bysetpos: number | null
+  bymonth: number | null
+  endMode: EndMode
+  until: Date | null
+  count: number | null
+  patternMode: PatternMode
+}
+
+const WEEKDAYS = [RRule.SU, RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR, RRule.SA]
+const WEEKDAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
+const SETPOS_OPTIONS = [
+  { label: 'first', value: 1 },
+  { label: 'second', value: 2 },
+  { label: 'third', value: 3 },
+  { label: 'fourth', value: 4 },
+  { label: 'last', value: -1 },
 ]
 
-const TAB_MODES: TabMode[] = ['day', 'week', 'month', 'year']
-const TAB_LABELS: Record<TabMode, string> = {
-  day: 'Daily',
-  week: 'Weekly',
-  month: 'Monthly',
-  year: 'Yearly',
+const DEFAULT_STATE: PickerState = {
+  freq: RRule.DAILY,
+  interval: 1,
+  byweekday: [],
+  bymonthday: 1,
+  bysetpos: null,
+  bymonth: null,
+  endMode: 'never',
+  until: null,
+  count: null,
+  patternMode: 'date',
 }
 
-const UNIT_LABELS: Record<TabMode, { singular: string; plural: string }> = {
-  day: { singular: 'day', plural: 'days' },
-  week: { singular: 'week', plural: 'weeks' },
-  month: { singular: 'month', plural: 'months' },
-  year: { singular: 'year', plural: 'years' },
+function stripRRulePrefix(value: string) {
+  return value.replace(/^DTSTART[^\n]*\n/, '').replace(/^RRULE:/, '')
 }
 
-function valuesMatch(a: RepeatValue, b: RepeatValue) {
-  return a.frequency === b.frequency && a.interval === b.interval
+function normalizeWeekdays(value: unknown): Weekday[] {
+  if (!value) return []
+  const values = Array.isArray(value) ? value : [value]
+  return values.map(item => {
+    if (item instanceof Weekday) return item
+    if (typeof item === 'number') return [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR, RRule.SA, RRule.SU][item]
+    return null
+  }).filter((item): item is Weekday => item != null)
 }
 
-function unitLabel(frequency: RepeatFrequency, interval: number) {
-  const unit = UNIT_LABELS[frequency]
-  return `${interval} ${interval === 1 ? unit.singular : unit.plural}`
+function parseValue(value: string | null): PickerState {
+  if (!value) return DEFAULT_STATE
+  try {
+    const opts = RRule.parseString(value)
+    const byweekday = normalizeWeekdays(opts.byweekday)
+    const bymonthday = Array.isArray(opts.bymonthday) ? opts.bymonthday[0] : opts.bymonthday ?? null
+    const bysetpos = Array.isArray(opts.bysetpos) ? opts.bysetpos[0] : opts.bysetpos ?? null
+    const bymonth = Array.isArray(opts.bymonth) ? opts.bymonth[0] : opts.bymonth ?? null
+    return {
+      freq: (opts.freq ?? RRule.DAILY) as Freq,
+      interval: opts.interval ?? 1,
+      byweekday,
+      bymonthday,
+      bysetpos,
+      bymonth,
+      endMode: opts.until ? 'until' : opts.count ? 'count' : 'never',
+      until: opts.until ?? null,
+      count: opts.count ?? null,
+      patternMode: bysetpos != null ? 'weekday' : 'date',
+    }
+  } catch {
+    return DEFAULT_STATE
+  }
 }
 
-function repeatSummary(value: RepeatValue) {
-  if (value.frequency === null) return 'Never'
-  if (value.interval === 1) return `Every ${UNIT_LABELS[value.frequency].singular}`
-  return `Every ${value.interval} ${UNIT_LABELS[value.frequency].plural}`
+function buildRRule(state: PickerState): string {
+  const opts: ConstructorParameters<typeof RRule>[0] = {
+    freq: state.freq,
+    interval: state.interval,
+  }
+
+  if (state.freq === RRule.WEEKLY && state.byweekday.length > 0) {
+    opts.byweekday = state.byweekday
+  }
+
+  if (state.freq === RRule.MONTHLY) {
+    if (state.patternMode === 'weekday') {
+      opts.byweekday = state.byweekday[0] ? [state.byweekday[0]] : [RRule.MO]
+      opts.bysetpos = state.bysetpos ?? 1
+    } else if (state.bymonthday) {
+      opts.bymonthday = state.bymonthday
+    }
+  }
+
+  if (state.freq === RRule.YEARLY) {
+    opts.bymonth = state.bymonth ?? 1
+    if (state.patternMode === 'weekday') {
+      opts.byweekday = state.byweekday[0] ? [state.byweekday[0]] : [RRule.MO]
+      opts.bysetpos = state.bysetpos ?? 1
+    } else if (state.bymonthday) {
+      opts.bymonthday = state.bymonthday
+    }
+  }
+
+  if (state.endMode === 'until' && state.until) opts.until = state.until
+  if (state.endMode === 'count' && state.count) opts.count = state.count
+
+  return stripRRulePrefix(new RRule(opts).toString())
 }
 
-function initialTab(value: RepeatValue): TabMode {
-  return value.frequency ?? 'day'
+function summary(value: string | null) {
+  if (!value) return 'Never'
+  const state = parseValue(value)
+  const freq = state.freq === RRule.DAILY ? 'day'
+    : state.freq === RRule.WEEKLY ? 'week'
+      : state.freq === RRule.MONTHLY ? 'month'
+        : 'year'
+  return state.interval === 1 ? `Every ${freq}` : `Every ${state.interval} ${freq}s`
+}
+
+function freqLabel(freq: Freq) {
+  if (freq === RRule.DAILY) return 'Daily'
+  if (freq === RRule.WEEKLY) return 'Weekly'
+  if (freq === RRule.MONTHLY) return 'Monthly'
+  return 'Yearly'
+}
+
+function freqUnitLabel(freq: Freq) {
+  if (freq === RRule.DAILY) return 'days'
+  if (freq === RRule.WEEKLY) return 'weeks'
+  if (freq === RRule.MONTHLY) return 'months'
+  return 'years'
+}
+
+function NumberScroller({
+  label,
+  value,
+  max = 120,
+  onSelect,
+  buttonLabel,
+}: {
+  label: string
+  value: number
+  max?: number
+  onSelect: (value: number) => void
+  buttonLabel?: (value: number) => string
+}) {
+  return (
+    <div
+      aria-label={label}
+      className="h-24 w-20 overflow-y-auto rounded-lg border border-border bg-muted/30"
+      style={{ scrollSnapType: 'y mandatory' }}
+    >
+      {Array.from({ length: max }, (_, index) => index + 1).map(number => (
+        <button
+          key={number}
+          type="button"
+          aria-label={buttonLabel?.(number)}
+          onClick={() => onSelect(number)}
+          style={{ scrollSnapAlign: 'start' }}
+          className={`flex h-8 w-full items-center justify-center text-sm transition-colors ${
+            number === value ? 'bg-primary font-semibold text-primary-foreground' : 'hover:bg-muted'
+          }`}
+        >
+          {number}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 export function RepeatPicker({ value, onChange }: RepeatPickerProps) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const [open, setOpen] = useState(false)
   const [customOpen, setCustomOpen] = useState(false)
-  const [tab, setTab] = useState<TabMode>(() => initialTab(value))
-  const [localInterval, setLocalInterval] = useState(value.frequency ? value.interval : 1)
+  const [state, setState] = useState<PickerState>(() => parseValue(value))
+
+  useEffect(() => setState(parseValue(value)), [value])
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -71,27 +207,30 @@ export function RepeatPicker({ value, onChange }: RepeatPickerProps) {
         setCustomOpen(false)
       }
     }
-
     document.addEventListener('mousedown', handlePointerDown)
     return () => document.removeEventListener('mousedown', handlePointerDown)
   }, [])
 
-  function selectPreset(next: RepeatValue) {
-    onChange(next)
-    setOpen(false)
-    setCustomOpen(false)
+  const presetOptions = useMemo(() => [
+    { label: 'Never', value: null },
+    { label: 'Every day', value: buildRRule({ ...DEFAULT_STATE, freq: RRule.DAILY }) },
+    { label: 'Every week', value: buildRRule({ ...DEFAULT_STATE, freq: RRule.WEEKLY }) },
+    { label: 'Every 2 weeks', value: buildRRule({ ...DEFAULT_STATE, freq: RRule.WEEKLY, interval: 2 }) },
+    { label: 'Every month', value: buildRRule({ ...DEFAULT_STATE, freq: RRule.MONTHLY, bymonthday: 1 }) },
+    { label: 'Every year', value: buildRRule({ ...DEFAULT_STATE, freq: RRule.YEARLY, bymonth: 1, bymonthday: 1 }) },
+  ], [])
+
+  function commit(next: PickerState) {
+    setState(next)
+    onChange(buildRRule(next))
   }
 
-  function showCustomPanel() {
-    setTab(initialTab(value))
-    setLocalInterval(value.frequency ? value.interval : 1)
-    setCustomOpen(true)
-  }
-
-  function confirmCustom() {
-    onChange({ frequency: tab, interval: localInterval })
-    setOpen(false)
-    setCustomOpen(false)
+  function toggleWeekday(day: Weekday) {
+    const exists = state.byweekday.some(item => item.weekday === day.weekday)
+    const byweekday = exists
+      ? state.byweekday.filter(item => item.weekday !== day.weekday)
+      : [...state.byweekday, day]
+    commit({ ...state, byweekday })
   }
 
   return (
@@ -107,20 +246,23 @@ export function RepeatPicker({ value, onChange }: RepeatPickerProps) {
       >
         <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Repeat</span>
         <span className="flex items-center gap-1">
-          {repeatSummary(value)}
+          {summary(value)}
           <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
         </span>
       </button>
 
       {open && !customOpen && (
         <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-border bg-background shadow-lg">
-          {PRESET_OPTIONS.map(option => (
+          {presetOptions.map(option => (
             <button
               key={option.label}
               type="button"
-              onClick={() => selectPreset(option.value)}
+              onClick={() => {
+                onChange(option.value)
+                setOpen(false)
+              }}
               className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-muted ${
-                valuesMatch(value, option.value) ? 'font-semibold text-primary' : ''
+                value === option.value ? 'font-semibold text-primary' : ''
               }`}
             >
               {option.label}
@@ -128,7 +270,7 @@ export function RepeatPicker({ value, onChange }: RepeatPickerProps) {
           ))}
           <button
             type="button"
-            onClick={showCustomPanel}
+            onClick={() => setCustomOpen(true)}
             className="flex w-full items-center justify-between border-t border-border px-3 py-2 text-left text-sm hover:bg-muted"
           >
             Custom
@@ -137,56 +279,154 @@ export function RepeatPicker({ value, onChange }: RepeatPickerProps) {
       )}
 
       {open && customOpen && (
-        <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-border bg-background shadow-lg">
-          <div className="flex gap-0.5 border-b border-border p-2">
-            {TAB_MODES.map(mode => (
+        <div className="absolute z-50 mt-2 w-[min(24rem,calc(100vw-2rem))] space-y-3 rounded-xl border border-border bg-background p-3 shadow-lg">
+          <div className="grid grid-cols-4 gap-1 rounded-lg bg-muted/60 p-1">
+            {[RRule.DAILY, RRule.WEEKLY, RRule.MONTHLY, RRule.YEARLY].map(freq => (
               <button
-                key={mode}
+                key={freq}
                 type="button"
-                onClick={() => setTab(mode)}
-                className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
-                  tab === mode ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                onClick={() => commit({ ...state, freq: freq as Freq })}
+                className={`rounded-md px-2 py-1.5 text-xs font-medium ${
+                  state.freq === freq ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {TAB_LABELS[mode]}
+                {freqLabel(freq as Freq)}
               </button>
             ))}
           </div>
 
-          <div className="px-4 py-3">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-semibold">Every</span>
-              <div
-                className="h-24 flex-1 overflow-y-auto rounded-lg border border-border bg-muted/30"
-                style={{ scrollSnapType: 'y mandatory' }}
-                aria-label="Interval"
-              >
-                {Array.from({ length: 120 }, (_, index) => index + 1).map(interval => (
-                  <button
-                    key={interval}
-                    type="button"
-                    onClick={() => setLocalInterval(interval)}
-                    style={{ scrollSnapAlign: 'start' }}
-                    className={`flex h-8 w-full items-center justify-center text-sm transition-colors ${
-                      interval === localInterval ? 'bg-primary font-semibold text-primary-foreground' : 'hover:bg-muted'
-                    }`}
-                  >
-                    {unitLabel(tab, interval)}
-                  </button>
-                ))}
-              </div>
-            </div>
+          <div className="flex items-center justify-center gap-3">
+            <span className="text-sm text-muted-foreground">Every</span>
+            <NumberScroller
+              label="Repeat interval scroller"
+              value={state.interval}
+              onSelect={interval => commit({ ...state, interval })}
+              buttonLabel={interval => `Repeat every ${interval}`}
+            />
+            <span className="min-w-14 text-sm text-muted-foreground">{freqUnitLabel(state.freq)}</span>
           </div>
 
-          <div className="border-t border-border p-2">
-            <button
-              type="button"
-              onClick={confirmCustom}
-              className="w-full rounded-lg bg-primary py-2 text-sm font-semibold text-primary-foreground"
-            >
-              Done
-            </button>
+          {state.freq === RRule.WEEKLY && (
+            <div className="flex gap-1">
+              {WEEKDAYS.map((day, index) => {
+                const selected = state.byweekday.some(item => item.weekday === day.weekday)
+                return (
+                  <button
+                    key={day.weekday}
+                    type="button"
+                    onClick={() => toggleWeekday(day)}
+                    className={`h-8 flex-1 rounded-md text-xs font-semibold ${selected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
+                  >
+                    {WEEKDAY_LABELS[index]}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {(state.freq === RRule.MONTHLY || state.freq === RRule.YEARLY) && (
+            <div className="space-y-2">
+              {state.freq === RRule.YEARLY && (
+                <select
+                  aria-label="Month"
+                  value={state.bymonth ?? 1}
+                  onChange={event => commit({ ...state, bymonth: Number(event.target.value) })}
+                  className="w-full rounded-lg border border-input bg-muted/40 px-2 py-1.5 text-sm"
+                >
+                  {MONTHS.map((month, index) => (
+                    <option key={month} value={index + 1}>{month}</option>
+                  ))}
+                </select>
+              )}
+              <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted/60 p-1">
+                <button type="button" onClick={() => commit({ ...state, patternMode: 'date' })} className={`rounded-md py-1.5 text-xs ${state.patternMode === 'date' ? 'bg-background shadow-sm' : ''}`}>
+                  On date
+                </button>
+                <button type="button" onClick={() => commit({ ...state, patternMode: 'weekday' })} className={`rounded-md py-1.5 text-xs ${state.patternMode === 'weekday' ? 'bg-background shadow-sm' : ''}`}>
+                  On weekday
+                </button>
+              </div>
+              {state.patternMode === 'date' ? (
+                <input
+                  aria-label="Month day"
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={state.bymonthday ?? 1}
+                  onChange={event => commit({ ...state, bymonthday: Number(event.target.value) })}
+                  className="w-full rounded-lg border border-input bg-muted/40 px-2 py-1.5 text-sm"
+                />
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    aria-label="Week position"
+                    value={state.bysetpos ?? 1}
+                    onChange={event => commit({ ...state, bysetpos: Number(event.target.value) })}
+                    className="rounded-lg border border-input bg-muted/40 px-2 py-1.5 text-sm"
+                  >
+                    {SETPOS_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label="Weekday"
+                    value={state.byweekday[0]?.weekday ?? RRule.MO.weekday}
+                    onChange={event => commit({
+                      ...state,
+                      byweekday: [[RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR, RRule.SA, RRule.SU][Number(event.target.value)]],
+                    })}
+                    className="rounded-lg border border-input bg-muted/40 px-2 py-1.5 text-sm"
+                  >
+                    {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day, index) => (
+                      <option key={day} value={index}>{day}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted/60 p-1">
+            {(['never', 'until', 'count'] as EndMode[]).map(mode => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => commit({ ...state, endMode: mode })}
+                className={`rounded-md py-1.5 text-xs ${state.endMode === mode ? 'bg-background shadow-sm' : ''}`}
+              >
+                {mode === 'count' ? 'For' : mode === 'until' ? 'Until' : 'Never'}
+              </button>
+            ))}
           </div>
+
+          {state.endMode === 'until' && (
+            <DatePickerMini value={state.until} onChange={date => commit({ ...state, until: date })} />
+          )}
+
+          {state.endMode === 'count' && (
+            <div className="flex items-center justify-center gap-3">
+              <span className="text-sm text-muted-foreground">For</span>
+              <NumberScroller
+              label="Occurrence count scroller"
+              value={state.count ?? 10}
+                onSelect={count => commit({ ...state, count })}
+                buttonLabel={count => String(count)}
+              />
+              <span className="min-w-14 text-sm text-muted-foreground">times</span>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              onChange(buildRRule(state))
+              setOpen(false)
+              setCustomOpen(false)
+            }}
+            className="w-full rounded-lg bg-primary py-2 text-sm font-semibold text-primary-foreground"
+          >
+            Done
+          </button>
         </div>
       )}
     </div>

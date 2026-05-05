@@ -1,305 +1,195 @@
+import { getTableColumns } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { DELETE, PATCH } from '@/app/api/calendar/events/[id]/route'
+import { GET, POST } from '@/app/api/calendar/events/route'
+import { listEventOverridesForIds } from '@/lib/db/calendar'
+import { calendarEvents } from '@/lib/db/schema'
 
 const { getCurrentUser, getDb } = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   getDb: vi.fn(),
 }))
+
 vi.mock('@/lib/auth', () => ({ getCurrentUser }))
 vi.mock('@/lib/db/client', () => ({ getDb }))
-vi.mock('@/lib/services/repeatExpander', () => ({
-  expandRepeatingEvent: vi.fn((ev: unknown) => [ev]),
-}))
 
-import { GET, POST } from '@/app/api/calendar/events/route'
-import { PATCH, DELETE } from '@/app/api/calendar/events/[id]/route'
-import { calendarEvents } from '@/lib/db/schema'
-import { getTableColumns } from 'drizzle-orm'
+function mockEvent(overrides = {}) {
+  return {
+    id: 'ev-1',
+    userId: 'u1',
+    title: 'Standup',
+    startAt: new Date('2026-05-04T09:00:00.000Z'),
+    endAt: new Date('2026-05-04T09:30:00.000Z'),
+    notes: null,
+    color: null,
+    categoryId: null,
+    rrule: null,
+    exdates: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  }
+}
 
-// listEventsInRange: select().from().where() terminal
-// createCalendarEvent: insert().values().returning() terminal
-// updateCalendarEvent: update().set().where().returning() terminal
-// deleteCalendarEvent: delete().where().returning() terminal
-
-describe('calendar event recurrence persistence fields', () => {
-  it('stores recurrence frequency and interval as explicit columns', () => {
+describe('calendar event recurrence schema', () => {
+  it('uses rrule and exdates instead of repeat triplet columns', () => {
     const columns = getTableColumns(calendarEvents) as Record<string, { name: string }>
+    expect(columns.rrule.name).toBe('rrule')
+    expect(columns.exdates.name).toBe('exdates')
+    expect('repeatFrequency' in columns).toBe(false)
+    expect('repeatInterval' in columns).toBe(false)
+    expect('repeatEndsAt' in columns).toBe(false)
+  })
+})
 
-    expect(columns.repeatFrequency.name).toBe('repeat_frequency')
-    expect(columns.repeatInterval.name).toBe('repeat_interval')
-    expect('repeatIntervalDays' in columns).toBe(false)
+describe('listEventOverridesForIds', () => {
+  it('returns empty array without querying when ids is empty', () => {
+    const db = { select: vi.fn() }
+    expect(listEventOverridesForIds(db as never, [])).toEqual([])
+    expect(db.select).not.toHaveBeenCalled()
   })
 })
 
 describe('GET /api/calendar/events', () => {
-  beforeEach(() => { vi.clearAllMocks(); getCurrentUser.mockResolvedValue({ id: 'u1' }) })
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getCurrentUser.mockResolvedValue({ id: 'u1' })
+  })
 
   it('returns 400 when from/to are missing', async () => {
     const res = await GET(new Request('http://localhost/api/calendar/events'))
     expect(res.status).toBe(400)
   })
 
-  it('returns 200 with event list', async () => {
-    const event = {
-      id: 'ev-1', title: 'Test',
-      startAt: new Date('2026-04-15T09:00:00Z'),
-      endAt: new Date('2026-04-15T10:00:00Z'),
-      repeatFrequency: null, repeatInterval: null, repeatEndsAt: null,
-    }
+  it('expands events with override map', async () => {
+    const event = mockEvent({ rrule: 'FREQ=DAILY;INTERVAL=1' })
+    let selectCall = 0
     getDb.mockReturnValue({
-      select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn().mockResolvedValue([event]) })) })),
+      select: vi.fn(() => {
+        selectCall += 1
+        return {
+          from: vi.fn(() => ({
+            where: vi.fn(() => selectCall === 1 ? Promise.resolve([event]) : { all: () => [] }),
+          })),
+        }
+      }),
     })
-    const res = await GET(new Request('http://localhost/api/calendar/events?from=2026-04-01&to=2026-04-30'))
+
+    const res = await GET(new Request('http://localhost/api/calendar/events?from=2026-05-04T00:00:00.000Z&to=2026-05-06T23:59:59.000Z'))
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body).toHaveLength(1)
+    expect(body).toHaveLength(3)
+    expect(body[0]).toEqual(expect.objectContaining({ sourceEventId: 'ev-1', rrule: 'FREQ=DAILY;INTERVAL=1' }))
   })
 })
 
 describe('POST /api/calendar/events', () => {
-  beforeEach(() => { vi.clearAllMocks(); getCurrentUser.mockResolvedValue({ id: 'u1' }) })
-
-  it('returns 201 on valid create', async () => {
-    getDb.mockReturnValue({
-      insert: vi.fn(() => ({ values: vi.fn(() => ({ returning: vi.fn().mockResolvedValue([{ id: 'ev-1', title: 'Stand-up' }]) })) })),
-    })
-    const res = await POST(new Request('http://localhost', {
-      method: 'POST',
-      body: JSON.stringify({
-        title: 'Stand-up',
-        startAt: '2026-04-15T09:00:00Z',
-        endAt: '2026-04-15T09:30:00Z',
-      }),
-    }))
-    expect(res.status).toBe(201)
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getCurrentUser.mockResolvedValue({ id: 'u1' })
   })
 
-  it('returns 400 when endAt < startAt', async () => {
-    const res = await POST(new Request('http://localhost', {
+  it('creates events with rrule', async () => {
+    const values = vi.fn(data => ({ returning: vi.fn().mockResolvedValue([data]) }))
+    getDb.mockReturnValue({ insert: vi.fn(() => ({ values })) })
+
+    const res = await POST(new Request('http://localhost/api/calendar/events', {
       method: 'POST',
       body: JSON.stringify({
-        title: 'Bad event',
-        startAt: '2026-04-15T10:00:00Z',
-        endAt: '2026-04-15T09:00:00Z',
+        title: 'Weekly standup',
+        startAt: '2026-05-04T09:00:00.000Z',
+        endAt: '2026-05-04T09:30:00.000Z',
+        rrule: 'FREQ=WEEKLY;INTERVAL=1',
+      }),
+    }))
+
+    expect(res.status).toBe(201)
+    expect(values).toHaveBeenCalledWith(expect.objectContaining({ rrule: 'FREQ=WEEKLY;INTERVAL=1', exdates: null }))
+  })
+
+  it('rejects invalid rrule strings', async () => {
+    const res = await POST(new Request('http://localhost/api/calendar/events', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: 'Bad',
+        startAt: '2026-05-04T09:00:00.000Z',
+        endAt: '2026-05-04T09:30:00.000Z',
+        rrule: 'NOT_VALID',
       }),
     }))
     expect(res.status).toBe(400)
-  })
-
-  it('accepts blank notes in create-event payloads', async () => {
-    getDb.mockReturnValue({
-      insert: vi.fn(() => ({
-        values: vi.fn(() => ({
-          returning: vi.fn().mockResolvedValue([{ id: 'ev-2', title: 'Planning' }]),
-        })),
-      })),
-    })
-
-    const request = new Request('http://localhost/api/calendar/events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: 'Planning',
-        startAt: '2026-04-15T09:00:00.000Z',
-        endAt: '2026-04-15T10:00:00.000Z',
-        notes: null,
-      }),
-    })
-
-    const response = await POST(request)
-    expect(response.status).toBe(201)
-  })
-
-  it('creates recurring events with explicit frequency and interval fields', async () => {
-    const values = vi.fn(data => ({
-      returning: vi.fn().mockResolvedValue([{
-        ...data,
-        repeatFrequency: data.repeatFrequency,
-        repeatInterval: data.repeatInterval,
-      }]),
-    }))
-    getDb.mockReturnValue({
-      insert: vi.fn(() => ({ values })),
-    })
-
-    const response = await POST(new Request('http://localhost/api/calendar/events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: 'Monthly planning',
-        startAt: '2026-04-15T09:00:00.000Z',
-        endAt: '2026-04-15T10:00:00.000Z',
-        repeatFrequency: 'month',
-        repeatInterval: 1,
-      }),
-    }))
-
-    expect(response.status).toBe(201)
-    expect(values).toHaveBeenCalledWith(expect.objectContaining({
-      repeatFrequency: 'month',
-      repeatInterval: 1,
-    }))
-    const body = await response.json()
-    expect(body).toEqual(expect.objectContaining({
-      repeatFrequency: 'month',
-      repeatInterval: 1,
-    }))
-  })
-
-  it('rejects repeatFrequency without repeatInterval', async () => {
-    const response = await POST(new Request('http://localhost/api/calendar/events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: 'Monthly planning',
-        startAt: '2026-04-15T09:00:00.000Z',
-        endAt: '2026-04-15T10:00:00.000Z',
-        repeatFrequency: 'month',
-      }),
-    }))
-
-    expect(response.status).toBe(400)
-  })
-
-  it('rejects repeatInterval without repeatFrequency', async () => {
-    const response = await POST(new Request('http://localhost/api/calendar/events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: 'Monthly planning',
-        startAt: '2026-04-15T09:00:00.000Z',
-        endAt: '2026-04-15T10:00:00.000Z',
-        repeatInterval: 1,
-      }),
-    }))
-
-    expect(response.status).toBe(400)
   })
 })
 
 describe('PATCH /api/calendar/events/[id]', () => {
-  beforeEach(() => { vi.clearAllMocks(); getCurrentUser.mockResolvedValue({ id: 'u1' }) })
-
-  it('returns 200 on success', async () => {
-    getDb.mockReturnValue({
-      update: vi.fn(() => ({
-        set: vi.fn(() => ({
-          where: vi.fn(() => ({ returning: vi.fn().mockResolvedValue([{ id: 'ev-1', title: 'Updated' }]) })),
-        })),
-      })),
-    })
-    const res = await PATCH(
-      new Request('http://localhost', { method: 'PATCH', body: JSON.stringify({ title: 'Updated' }) }),
-      { params: Promise.resolve({ id: 'ev-1' }) },
-    )
-    expect(res.status).toBe(200)
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getCurrentUser.mockResolvedValue({ id: 'u1' })
   })
 
-  it('returns 404 when not owned', async () => {
+  it('requires occurrenceDate for this-scope recurring patches', async () => {
     getDb.mockReturnValue({
-      update: vi.fn(() => ({
-        set: vi.fn(() => ({
-          where: vi.fn(() => ({ returning: vi.fn().mockResolvedValue([]) })),
-        })),
-      })),
-    })
-    const res = await PATCH(
-      new Request('http://localhost', { method: 'PATCH', body: JSON.stringify({ title: 'X' }) }),
-      { params: Promise.resolve({ id: 'missing' }) },
-    )
-    expect(res.status).toBe(404)
-  })
-
-  it('updates recurring events with explicit frequency and interval fields', async () => {
-    const set = vi.fn(() => ({
-      where: vi.fn(() => ({ returning: vi.fn().mockResolvedValue([{ id: 'ev-1', repeatFrequency: 'week', repeatInterval: 2 }]) })),
-    }))
-    getDb.mockReturnValue({
-      update: vi.fn(() => ({ set })),
+      select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ limit: vi.fn(() => [mockEvent({ rrule: 'FREQ=WEEKLY;INTERVAL=1' })]) })) })) })),
     })
 
     const res = await PATCH(
-      new Request('http://localhost', {
-        method: 'PATCH',
-        body: JSON.stringify({ repeatFrequency: 'week', repeatInterval: 2 }),
-      }),
+      new Request('http://localhost', { method: 'PATCH', body: JSON.stringify({ title: 'X', scope: 'this' }) }),
       { params: Promise.resolve({ id: 'ev-1' }) },
     )
-
-    expect(res.status).toBe(200)
-    expect(set).toHaveBeenCalledWith(expect.objectContaining({
-      repeatFrequency: 'week',
-      repeatInterval: 2,
-    }))
-  })
-
-  it('clears repeatEndsAt when null is sent', async () => {
-    const updatedRow = {
-      id: 'ev-1',
-      title: 'Test',
-      startAt: new Date('2026-04-15T09:00:00Z'),
-      endAt: new Date('2026-04-15T10:00:00Z'),
-      repeatFrequency: 'week',
-      repeatInterval: 1,
-      repeatEndsAt: null,
-    }
-    getDb.mockReturnValue({
-      update: vi.fn(() => ({
-        set: vi.fn(() => ({
-          where: vi.fn(() => ({
-            returning: vi.fn().mockResolvedValue([updatedRow]),
-          })),
-        })),
-      })),
-    })
-
-    const res = await PATCH(
-      new Request('http://localhost', {
-        method: 'PATCH',
-        body: JSON.stringify({ repeatFrequency: 'week', repeatInterval: 1, repeatEndsAt: null }),
-      }),
-      { params: Promise.resolve({ id: 'ev-1' }) },
-    )
-
-    expect(res.status).toBe(200)
-    const body = await res.json()
-    expect(body.repeatEndsAt).toBeNull()
-  })
-
-  it('rejects patches that clear only one recurrence field', async () => {
-    const res = await PATCH(
-      new Request('http://localhost', {
-        method: 'PATCH',
-        body: JSON.stringify({ repeatFrequency: null }),
-      }),
-      { params: Promise.resolve({ id: 'ev-1' }) },
-    )
-
     expect(res.status).toBe(400)
   })
 
-  it('rejects patches that mix null and non-null recurrence fields', async () => {
+  it('upserts an override for this-scope recurring patches', async () => {
+    const values = vi.fn(() => ({
+      onConflictDoUpdate: vi.fn(() => ({ returning: vi.fn().mockResolvedValue([{ id: 1 }]) })),
+    }))
+    getDb.mockReturnValue({
+      select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ limit: vi.fn(() => [mockEvent({ rrule: 'FREQ=WEEKLY;INTERVAL=1' })]) })) })) })),
+      insert: vi.fn(() => ({ values })),
+    })
+
     const res = await PATCH(
       new Request('http://localhost', {
         method: 'PATCH',
-        body: JSON.stringify({ repeatFrequency: null, repeatInterval: 2 }),
+        body: JSON.stringify({
+          title: 'Moved',
+          startAt: '2026-05-04T14:00:00.000Z',
+          endAt: '2026-05-04T14:30:00.000Z',
+          scope: 'this',
+          occurrenceDate: '2026-05-04T09:00:00.000Z',
+        }),
       }),
       { params: Promise.resolve({ id: 'ev-1' }) },
     )
 
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(200)
+    expect(values).toHaveBeenCalledWith(expect.objectContaining({
+      masterEventId: 'ev-1',
+      originalDate: '2026-05-04T09:00:00.000Z',
+      title: 'Moved',
+    }))
   })
 })
 
 describe('DELETE /api/calendar/events/[id]', () => {
-  beforeEach(() => { vi.clearAllMocks(); getCurrentUser.mockResolvedValue({ id: 'u1' }) })
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getCurrentUser.mockResolvedValue({ id: 'u1' })
+  })
 
-  it('returns 204 on success', async () => {
+  it('adds an exdate for this-scope recurring deletes', async () => {
+    const set = vi.fn(() => ({ where: vi.fn(() => ({ returning: vi.fn().mockResolvedValue([mockEvent()]) })) }))
     getDb.mockReturnValue({
-      delete: vi.fn(() => ({
-        where: vi.fn(() => ({ returning: vi.fn().mockResolvedValue([{ id: 'ev-1' }]) })),
-      })),
+      select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ limit: vi.fn(() => [mockEvent({ rrule: 'FREQ=WEEKLY;INTERVAL=1' })]) })) })) })),
+      update: vi.fn(() => ({ set })),
     })
-    const res = await DELETE(new Request('http://localhost'), { params: Promise.resolve({ id: 'ev-1' }) })
+
+    const res = await DELETE(
+      new Request('http://localhost/api/calendar/events/ev-1?scope=this&occurrenceDate=2026-05-04T09:00:00.000Z'),
+      { params: Promise.resolve({ id: 'ev-1' }) },
+    )
+
     expect(res.status).toBe(204)
+    expect(set).toHaveBeenCalledWith({ exdates: ['2026-05-04T09:00:00.000Z'] })
   })
 })

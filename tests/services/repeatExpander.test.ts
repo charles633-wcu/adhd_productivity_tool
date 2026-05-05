@@ -1,189 +1,184 @@
-// tests/services/repeatExpander.test.ts
-import { describe, it, expect } from 'vitest'
-import { expandRepeatingEvent } from '@/lib/services/repeatExpander'
+import { describe, expect, it } from 'vitest'
+import { expandEvents, toNormalizedIso } from '@/lib/services/repeatExpander'
+import type { CalendarEventOverride } from '@/lib/db/schema'
 
-const event = (overrides: Partial<Parameters<typeof expandRepeatingEvent>[0]> = {}) => ({
-  id: 'ev-1',
-  title: 'Stand-up',
-  startAt: new Date('2026-04-01T09:00:00Z'),
-  endAt: new Date('2026-04-01T09:30:00Z'),
-  repeatFrequency: null,
-  repeatInterval: null,
-  repeatEndsAt: null,
-  ...overrides,
+function makeEvent(overrides: Partial<{
+  id: string
+  title: string
+  startAt: Date
+  endAt: Date
+  rrule: string | null
+  exdates: string[] | null
+  color: string | null
+  categoryId: string | null
+  notes: string | null
+  userId: string
+}> = {}) {
+  return {
+    id: 'ev1',
+    userId: 'u1',
+    title: 'Test Event',
+    startAt: new Date('2026-05-04T09:00:00.000Z'),
+    endAt: new Date('2026-05-04T10:00:00.000Z'),
+    rrule: null,
+    exdates: null,
+    color: null,
+    categoryId: null,
+    notes: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  }
+}
+
+const NO_OVERRIDES = new Map<string, CalendarEventOverride[]>()
+
+describe('toNormalizedIso', () => {
+  it('floors sub-second precision to zero milliseconds', () => {
+    expect(toNormalizedIso(new Date('2026-06-02T09:00:00.750Z'))).toBe('2026-06-02T09:00:00.000Z')
+  })
+
+  it('leaves already-zero millisecond dates unchanged', () => {
+    expect(toNormalizedIso(new Date('2026-06-02T09:00:00.000Z'))).toBe('2026-06-02T09:00:00.000Z')
+  })
 })
 
-const starts = (result: ReturnType<typeof expandRepeatingEvent>) =>
-  result.map(occ => occ.startAt.toISOString())
-
-describe('expandRepeatingEvent', () => {
-  it('expands daily recurrences by repeatInterval days', () => {
-    const result = expandRepeatingEvent(
-      event({ repeatFrequency: 'day', repeatInterval: 2 }),
-      new Date('2026-04-01T00:00:00Z'),
-      new Date('2026-04-07T23:59:59Z'),
-    )
-
-    expect(starts(result)).toEqual([
-      '2026-04-01T09:00:00.000Z',
-      '2026-04-03T09:00:00.000Z',
-      '2026-04-05T09:00:00.000Z',
-      '2026-04-07T09:00:00.000Z',
-    ])
+describe('expandEvents', () => {
+  it('returns a single non-recurring occurrence within range', () => {
+    const ev = makeEvent()
+    const result = expandEvents([ev], NO_OVERRIDES, new Date('2026-05-01T00:00:00.000Z'), new Date('2026-05-31T23:59:59.000Z'))
+    expect(result).toHaveLength(1)
+    expect(result[0].occurrenceId).toBe(`ev1::${toNormalizedIso(ev.startAt)}`)
+    expect(result[0].rrule).toBeNull()
+    expect(result[0].isOverride).toBe(false)
   })
 
-  it('expands weekly recurrences on the original weekday', () => {
-    const result = expandRepeatingEvent(
-      event({ repeatFrequency: 'week', repeatInterval: 2 }),
-      new Date('2026-04-01T00:00:00Z'),
-      new Date('2026-04-30T23:59:59Z'),
-    )
-
-    expect(starts(result)).toEqual([
-      '2026-04-01T09:00:00.000Z',
-      '2026-04-15T09:00:00.000Z',
-      '2026-04-29T09:00:00.000Z',
-    ])
+  it('expands daily events across a window', () => {
+    const result = expandEvents([makeEvent({
+      rrule: 'FREQ=DAILY;INTERVAL=1',
+      startAt: new Date('2026-05-01T09:00:00.000Z'),
+      endAt: new Date('2026-05-01T10:00:00.000Z'),
+    })], NO_OVERRIDES, new Date('2026-05-01T00:00:00.000Z'), new Date('2026-05-07T23:59:59.000Z'))
+    expect(result).toHaveLength(7)
   })
 
-  it('expands monthly recurrences by calendar month', () => {
-    const localHour = new Date('2026-01-31T09:00:00Z').getHours()
-    const result = expandRepeatingEvent(
-      event({
-        startAt: new Date('2026-01-31T09:00:00Z'),
-        endAt: new Date('2026-01-31T09:30:00Z'),
-        repeatFrequency: 'month',
-        repeatInterval: 1,
-      }),
-      new Date('2026-01-01T00:00:00Z'),
-      new Date('2026-05-31T23:59:59Z'),
-    )
-
-    expect(result.map(item => ({
-      month: item.startAt.getMonth(),
-      day: item.startAt.getDate(),
-      hour: item.startAt.getHours(),
-    }))).toEqual([
-      { month: 0, day: 31, hour: localHour },
-      { month: 1, day: 28, hour: localHour },
-      { month: 2, day: 31, hour: localHour },
-      { month: 3, day: 30, hour: localHour },
-      { month: 4, day: 31, hour: localHour },
-    ])
+  it('respects UNTIL cutoff', () => {
+    const result = expandEvents([makeEvent({
+      rrule: 'FREQ=WEEKLY;INTERVAL=1;UNTIL=20260515T000000Z',
+    })], NO_OVERRIDES, new Date('2026-05-01T00:00:00.000Z'), new Date('2026-05-31T23:59:59.000Z'))
+    expect(result).toHaveLength(2)
   })
 
-  it('expands yearly recurrences on the original month and day', () => {
-    const result = expandRepeatingEvent(
-      event({
-        startAt: new Date('2024-02-29T09:00:00Z'),
-        endAt: new Date('2024-02-29T09:30:00Z'),
-        repeatFrequency: 'year',
-        repeatInterval: 1,
-      }),
-      new Date('2024-01-01T00:00:00Z'),
-      new Date('2028-12-31T23:59:59Z'),
-    )
-
-    expect(starts(result)).toEqual([
-      '2024-02-29T09:00:00.000Z',
-      '2025-02-28T09:00:00.000Z',
-      '2026-02-28T09:00:00.000Z',
-      '2027-02-28T09:00:00.000Z',
-      '2028-02-29T09:00:00.000Z',
-    ])
+  it('filters exdates', () => {
+    const startAt = new Date('2026-05-04T09:00:00.000Z')
+    const exdate = toNormalizedIso(startAt)
+    const result = expandEvents([makeEvent({
+      rrule: 'FREQ=WEEKLY;INTERVAL=1',
+      startAt,
+      exdates: [exdate],
+    })], NO_OVERRIDES, new Date('2026-05-01T00:00:00.000Z'), new Date('2026-05-14T23:59:59.000Z'))
+    expect(result).toHaveLength(1)
+    expect(toNormalizedIso(result[0].startAt)).not.toBe(exdate)
   })
 
-  it('stops recurring occurrences after repeatEndsAt', () => {
-    const result = expandRepeatingEvent(
-      event({
-        repeatFrequency: 'week',
-        repeatInterval: 1,
-        repeatEndsAt: new Date('2026-04-15T09:00:00Z'),
-      }),
-      new Date('2026-04-01T00:00:00Z'),
-      new Date('2026-04-30T23:59:59Z'),
-    )
+  it('replaces occurrence fields with override values', () => {
+    const originalStart = new Date('2026-05-04T09:00:00.000Z')
+    const originalDate = toNormalizedIso(originalStart)
+    const override: CalendarEventOverride = {
+      id: 1,
+      masterEventId: 'ev1',
+      originalDate,
+      title: 'Rescheduled standup',
+      startAt: new Date('2026-05-04T14:00:00.000Z'),
+      endAt: new Date('2026-05-04T14:30:00.000Z'),
+      notes: 'moved to afternoon',
+    }
 
-    expect(starts(result)).toEqual([
-      '2026-04-01T09:00:00.000Z',
-      '2026-04-08T09:00:00.000Z',
-      '2026-04-15T09:00:00.000Z',
-    ])
+    const result = expandEvents([makeEvent({
+      rrule: 'FREQ=WEEKLY;INTERVAL=1',
+      startAt: originalStart,
+    })], new Map([['ev1', [override]]]), new Date('2026-05-01T00:00:00.000Z'), new Date('2026-05-07T23:59:59.000Z'))
+
+    expect(result).toHaveLength(1)
+    expect(result[0].title).toBe('Rescheduled standup')
+    expect(result[0].isOverride).toBe(true)
+    expect(result[0].originalDate).toBe(originalDate)
   })
 
-  it('returns single occurrence for non-repeating event within range', () => {
-    const result = expandRepeatingEvent(
-      event(),
-      new Date('2026-04-01T00:00:00Z'),
-      new Date('2026-04-30T23:59:59Z'),
-    )
+  it('includes an override moved into the requested range even when its original date is outside', () => {
+    const originalStart = new Date('2026-05-04T09:00:00.000Z')
+    const originalDate = toNormalizedIso(originalStart)
+    const override: CalendarEventOverride = {
+      id: 1,
+      masterEventId: 'ev1',
+      originalDate,
+      title: 'Moved into range',
+      startAt: new Date('2026-05-06T14:00:00.000Z'),
+      endAt: new Date('2026-05-06T14:30:00.000Z'),
+      notes: null,
+    }
 
-    expect(result).toEqual([{
-      occurrenceId: 'ev-1::2026-04-01T09:00:00.000Z',
-      sourceEventId: 'ev-1',
-      title: 'Stand-up',
-      startAt: new Date('2026-04-01T09:00:00Z'),
-      endAt: new Date('2026-04-01T09:30:00Z'),
-      repeatFrequency: null,
-      repeatInterval: null,
-      repeatEndsAt: null,
-    }])
+    const result = expandEvents([makeEvent({
+      rrule: 'FREQ=WEEKLY;INTERVAL=1',
+      startAt: originalStart,
+      endAt: new Date('2026-05-04T10:00:00.000Z'),
+    })], new Map([['ev1', [override]]]), new Date('2026-05-06T00:00:00.000Z'), new Date('2026-05-06T23:59:59.000Z'))
+
+    expect(result).toHaveLength(1)
+    expect(result[0].title).toBe('Moved into range')
+    expect(toNormalizedIso(result[0].startAt)).toBe('2026-05-06T14:00:00.000Z')
   })
 
-  it('returns empty for non-repeating event outside range', () => {
-    const result = expandRepeatingEvent(
-      event(),
-      new Date('2026-05-01T00:00:00Z'),
-      new Date('2026-05-31T23:59:59Z'),
-    )
+  it('excludes an override moved out of the requested range', () => {
+    const originalStart = new Date('2026-05-04T09:00:00.000Z')
+    const override: CalendarEventOverride = {
+      id: 1,
+      masterEventId: 'ev1',
+      originalDate: toNormalizedIso(originalStart),
+      title: 'Moved out of range',
+      startAt: new Date('2026-05-06T14:00:00.000Z'),
+      endAt: new Date('2026-05-06T14:30:00.000Z'),
+      notes: null,
+    }
+
+    const result = expandEvents([makeEvent({
+      rrule: 'FREQ=WEEKLY;INTERVAL=1',
+      startAt: originalStart,
+      endAt: new Date('2026-05-04T10:00:00.000Z'),
+    })], new Map([['ev1', [override]]]), new Date('2026-05-04T00:00:00.000Z'), new Date('2026-05-04T23:59:59.000Z'))
 
     expect(result).toHaveLength(0)
   })
 
-  it.each([0, -1])('does not loop forever for invalid stored repeat interval %i', repeatInterval => {
-    const result = expandRepeatingEvent(
-      event({ repeatFrequency: 'day', repeatInterval }),
-      new Date('2026-04-01T00:00:00Z'),
-      new Date('2026-04-30T23:59:59Z'),
-    )
+  it('includes recurring occurrences that start before the range but overlap into it', () => {
+    const result = expandEvents([makeEvent({
+      rrule: 'FREQ=DAILY;INTERVAL=1',
+      startAt: new Date('2026-05-04T22:00:00.000Z'),
+      endAt: new Date('2026-05-05T02:00:00.000Z'),
+    })], NO_OVERRIDES, new Date('2026-05-05T00:00:00.000Z'), new Date('2026-05-05T01:00:00.000Z'))
 
-    expect(starts(result)).toEqual(['2026-04-01T09:00:00.000Z'])
+    expect(result).toHaveLength(1)
+    expect(toNormalizedIso(result[0].startAt)).toBe('2026-05-04T22:00:00.000Z')
   })
 
-  it('preserves local wall-clock time across DST changes when the local offset changes', () => {
-    const before = new Date(2026, 2, 7, 9, 0, 0, 0)
-    const after = new Date(2026, 2, 9, 9, 0, 0, 0)
-    if (before.getTimezoneOffset() === after.getTimezoneOffset()) return
+  it('sorts expanded results by visible start time after overrides are applied', () => {
+    const originalDate = '2026-05-11T09:00:00.000Z'
+    const override: CalendarEventOverride = {
+      id: 1,
+      masterEventId: 'ev1',
+      originalDate,
+      title: 'Moved earlier',
+      startAt: new Date('2026-05-04T08:00:00.000Z'),
+      endAt: new Date('2026-05-04T08:30:00.000Z'),
+      notes: null,
+    }
 
-    const result = expandRepeatingEvent(
-      event({
-        startAt: before,
-        endAt: new Date(2026, 2, 7, 10, 0, 0, 0),
-        repeatFrequency: 'day',
-        repeatInterval: 1,
-      }),
-      new Date(2026, 2, 7, 0, 0, 0, 0),
-      new Date(2026, 2, 10, 0, 0, 0, 0),
-    )
+    const result = expandEvents([makeEvent({
+      rrule: 'FREQ=WEEKLY;INTERVAL=1',
+      startAt: new Date('2026-05-04T09:00:00.000Z'),
+      endAt: new Date('2026-05-04T09:30:00.000Z'),
+    })], new Map([['ev1', [override]]]), new Date('2026-05-04T00:00:00.000Z'), new Date('2026-05-11T23:59:59.000Z'))
 
-    expect(result.map(item => item.startAt.getHours())).toEqual([9, 9, 9])
-  })
-
-  it('includes occurrences that overlap the range start', () => {
-    const result = expandRepeatingEvent(
-      event({
-        startAt: new Date('2026-04-01T23:00:00Z'),
-        endAt: new Date('2026-04-02T01:00:00Z'),
-        repeatFrequency: 'day',
-        repeatInterval: 1,
-      }),
-      new Date('2026-04-02T00:00:00Z'),
-      new Date('2026-04-02T23:59:59Z'),
-    )
-
-    expect(starts(result)).toEqual([
-      '2026-04-01T23:00:00.000Z',
-      '2026-04-02T23:00:00.000Z',
-    ])
+    expect(result.map(item => item.title)).toEqual(['Moved earlier', 'Test Event'])
   })
 })

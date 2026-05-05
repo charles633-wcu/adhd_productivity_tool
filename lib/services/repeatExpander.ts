@@ -1,104 +1,114 @@
-// lib/services/repeatExpander.ts
-// Expands a repeating calendar event into occurrence objects within a date range.
+// Expands calendar events into EventOccurrence objects using RRULE.
 
-import type { RepeatFrequency } from '@/lib/types/calendar'
+import { RRule } from 'rrule'
+import type { CalendarEventOverride } from '@/lib/db/schema'
+import type { EventOccurrence } from '@/lib/types/calendar'
 
-interface RepeatableEvent {
+interface ExpandableEvent {
   id: string
   title: string
   startAt: Date
   endAt: Date
-  repeatFrequency: RepeatFrequency | null
-  repeatInterval: number | null
-  repeatEndsAt: Date | null
-  [key: string]: unknown
+  notes: string | null
+  color: string | null
+  categoryId: string | null
+  rrule: string | null
+  exdates: string[] | null
 }
 
-export interface EventOccurrence {
-  occurrenceId: string  // `${event.id}::${startAt.toISOString()}`
-  sourceEventId: string
-  title: string
-  startAt: Date
-  endAt: Date
-  repeatFrequency: RepeatFrequency | null
-  repeatInterval: number | null
-  repeatEndsAt: Date | null
+export function toNormalizedIso(date: Date): string {
+  return new Date(Math.floor(date.getTime() / 1000) * 1000).toISOString()
 }
 
-function lastLocalDayOfMonth(year: number, month: number) {
-  return new Date(year, month + 1, 0).getDate()
-}
-
-function buildLocalDateLike(source: Date, year: number, month: number, day: number) {
-  const next = new Date(source)
-  next.setDate(1)
-  next.setFullYear(year, month, Math.min(day, lastLocalDayOfMonth(year, month)))
-  return next
-}
-
-function advanceCursor(
-  cursor: Date,
-  frequency: RepeatFrequency,
-  interval: number,
-  anchor: { day: number; month: number },
-) {
-  if (frequency === 'day' || frequency === 'week') {
-    const next = new Date(cursor)
-    next.setDate(next.getDate() + interval * (frequency === 'week' ? 7 : 1))
-    return next
-  }
-
-  if (frequency === 'month') {
-    const monthIndex = cursor.getFullYear() * 12 + cursor.getMonth() + interval
-    const year = Math.floor(monthIndex / 12)
-    const month = monthIndex % 12
-    return buildLocalDateLike(cursor, year, month, anchor.day)
-  }
-
-  return buildLocalDateLike(cursor, cursor.getFullYear() + interval, anchor.month, anchor.day)
-}
-
-export function expandRepeatingEvent(
-  event: RepeatableEvent,
-  rangeFrom: Date,
-  rangeTo: Date,
+export function expandEvents(
+  events: ExpandableEvent[],
+  overridesByMasterId: Map<string, CalendarEventOverride[]>,
+  rangeStart: Date,
+  rangeEnd: Date,
 ): EventOccurrence[] {
-  const occurrences: EventOccurrence[] = []
+  return events
+    .flatMap(event => expandOne(event, overridesByMasterId, rangeStart, rangeEnd))
+    .sort((a, b) =>
+      a.startAt.getTime() - b.startAt.getTime() ||
+      a.endAt.getTime() - b.endAt.getTime() ||
+      a.occurrenceId.localeCompare(b.occurrenceId)
+    )
+}
+
+function expandOne(
+  event: ExpandableEvent,
+  overridesByMasterId: Map<string, CalendarEventOverride[]>,
+  rangeStart: Date,
+  rangeEnd: Date,
+): EventOccurrence[] {
+  if (!event.rrule) {
+    const occurrence = buildOccurrence(event, event.startAt, event.endAt, overridesByMasterId)
+    return occurrence.endAt >= rangeStart && occurrence.startAt <= rangeEnd ? [occurrence] : []
+  }
+
+  const rule = new RRule({ ...RRule.parseString(event.rrule), dtstart: event.startAt })
   const durationMs = event.endAt.getTime() - event.startAt.getTime()
-  const repeatFrequency = event.repeatFrequency
-  const repeatInterval = event.repeatInterval
-  const isRepeating = repeatFrequency !== null && repeatInterval !== null && repeatInterval > 0
-  const anchor = {
-    day: event.startAt.getDate(),
-    month: event.startAt.getMonth(),
+  const exdatesSet = new Set(event.exdates ?? [])
+  const datesByKey = new Map<string, Date>()
+  const recurrenceRangeStart = new Date(rangeStart.getTime() - Math.max(0, durationMs))
+
+  for (const date of rule.between(recurrenceRangeStart, rangeEnd, true)) {
+    datesByKey.set(toNormalizedIso(date), date)
   }
 
-  let cursor = new Date(event.startAt)
-
-  while (cursor <= rangeTo) {
-    const occurrenceEnd = new Date(cursor.getTime() + durationMs)
-
-    // Respect repeat end boundary
-    if (event.repeatEndsAt && cursor > event.repeatEndsAt) break
-
-    // Only include if occurrence overlaps with range
-    if (cursor >= rangeFrom || occurrenceEnd >= rangeFrom) {
-      occurrences.push({
-        occurrenceId: `${event.id}::${cursor.toISOString()}`,
-        sourceEventId: event.id,
-        title: event.title,
-        startAt: new Date(cursor),
-        endAt: occurrenceEnd,
-        repeatFrequency: event.repeatFrequency,
-        repeatInterval: event.repeatInterval,
-        repeatEndsAt: event.repeatEndsAt,
-      })
+  for (const override of overridesByMasterId.get(event.id) ?? []) {
+    if (overlapsRange(override.startAt, override.endAt, rangeStart, rangeEnd)) {
+      datesByKey.set(override.originalDate, new Date(override.originalDate))
     }
-
-    // Advance or stop for non-repeating
-    if (!isRepeating) break
-    cursor = advanceCursor(cursor, repeatFrequency, repeatInterval, anchor)
   }
 
-  return occurrences
+  return Array.from(datesByKey.values())
+    .filter(date => !exdatesSet.has(toNormalizedIso(date)))
+    .map(date => buildOccurrence(event, date, new Date(date.getTime() + durationMs), overridesByMasterId))
+    .filter(occurrence => overlapsRange(occurrence.startAt, occurrence.endAt, rangeStart, rangeEnd))
+}
+
+function overlapsRange(startAt: Date, endAt: Date, rangeStart: Date, rangeEnd: Date) {
+  return endAt >= rangeStart && startAt <= rangeEnd
+}
+
+function buildOccurrence(
+  event: ExpandableEvent,
+  startAt: Date,
+  endAt: Date,
+  overridesByMasterId: Map<string, CalendarEventOverride[]>,
+): EventOccurrence {
+  const originalDate = toNormalizedIso(startAt)
+  const override = (overridesByMasterId.get(event.id) ?? [])
+    .find(item => item.originalDate === originalDate)
+
+  if (override) {
+    return {
+      occurrenceId: `${event.id}::${originalDate}`,
+      sourceEventId: event.id,
+      title: override.title,
+      startAt: override.startAt,
+      endAt: override.endAt,
+      notes: override.notes,
+      color: event.color,
+      categoryId: event.categoryId,
+      rrule: event.rrule,
+      isOverride: true,
+      originalDate,
+    }
+  }
+
+  return {
+    occurrenceId: `${event.id}::${originalDate}`,
+    sourceEventId: event.id,
+    title: event.title,
+    startAt,
+    endAt,
+    notes: event.notes,
+    color: event.color,
+    categoryId: event.categoryId,
+    rrule: event.rrule,
+    isOverride: false,
+    originalDate: null,
+  }
 }

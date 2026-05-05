@@ -46,10 +46,15 @@ sentinel.db-shm
 sentinel.db-wal
 context/
 .superpowers/
+graphify-out/
 
 # local agent/tooling config (not for public repo)
 .claude/
+.codex/
 CLAUDE.md
+AGENTS.md
+claudecontextmonday.txt
+how-to-make-faster.txt
 
 # internal planning/audit docs (contains process + AI notes)
 docs/superpowers/

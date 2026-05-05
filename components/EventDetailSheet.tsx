@@ -1,43 +1,20 @@
 /**
- * EventDetailSheet — nested bottom sheet for editing or deleting a single calendar event.
- * Slides up over DayDetailModal (z-60 > z-50). Informant iOS style: Cancel/Done header,
- * stacked form fields, red two-tap delete footer.
+ * EventDetailSheet - centered editor for editing/deleting calendar occurrences.
  */
 'use client'
 
-import { useEffect, useState } from 'react'
-import { toast } from 'sonner'
+import { useEffect, useState, type PointerEvent } from 'react'
 import { Loader2 } from 'lucide-react'
-import { DatePickerMini } from '@/components/DatePickerMini'
+import { toast } from 'sonner'
+import { RecurringEventScopeSheet, type RecurScope } from '@/components/RecurringEventScopeSheet'
 import { RepeatPicker } from '@/components/RepeatPicker'
-import type { RepeatFrequency, RepeatValue } from '@/lib/types/calendar'
-
-interface CalendarEventItem {
-  occurrenceId: string
-  sourceEventId: string
-  title: string
-  startAt: Date
-  endAt: Date
-  color?: string | null
-  categoryId?: string | null
-  repeatFrequency?: RepeatFrequency | null
-  repeatInterval?: number | null
-  repeatEndsAt?: string | null
-}
-
-interface PatchedEvent {
-  id: string
-  title: string
-  startAt: string
-  endAt: string
-  color?: string | null
-  categoryId?: string | null
-}
+import { toNormalizedIso } from '@/lib/services/repeatExpander'
+import type { EventOccurrence } from '@/lib/types/calendar'
 
 export interface EventDetailSheetProps {
-  event: CalendarEventItem | null
+  event: EventOccurrence | null
   onClose: () => void
-  onSaved: (updated: PatchedEvent) => void
+  onSaved: (sourceEventId: string) => void
   onDeleted: (sourceEventId: string) => void
 }
 
@@ -53,191 +30,227 @@ function buildDateTime(baseDate: Date, time: string): string {
   return d.toISOString()
 }
 
+function isInteractiveTarget(target: EventTarget | null) {
+  return target instanceof Element && target.closest('button, input, select, textarea, a, [role="button"]') !== null
+}
+
 export function EventDetailSheet({ event, onClose, onSaved, onDeleted }: EventDetailSheetProps) {
   const [title, setTitle] = useState('')
   const [startTime, setStartTime] = useState('09:00')
   const [endTime, setEndTime] = useState('10:00')
-  const [repeat, setRepeat] = useState<RepeatValue>({ frequency: null, interval: 1 })
-  const [repeatEndsAt, setRepeatEndsAt] = useState<Date | null>(null)
-  const [showEndPicker, setShowEndPicker] = useState(false)
+  const [rrule, setRrule] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [showScopeSheet, setShowScopeSheet] = useState(false)
+  const [scopeAction, setScopeAction] = useState<'edit' | 'delete'>('edit')
+  const [position, setPosition] = useState({ x: 0, y: 0 })
+  const [dragStart, setDragStart] = useState<{
+    pointerX: number
+    pointerY: number
+    originX: number
+    originY: number
+  } | null>(null)
 
-  // Pre-fill fields whenever a new event is selected
   useEffect(() => {
-    if (!event) { setDeleteConfirm(false); return }
+    if (!event) return
     setTitle(event.title)
     setStartTime(toTimeStr(event.startAt))
     setEndTime(toTimeStr(event.endAt))
-    setRepeat(
-      event.repeatFrequency
-        ? { frequency: event.repeatFrequency, interval: event.repeatInterval ?? 1 }
-        : { frequency: null, interval: 1 },
-    )
-    setRepeatEndsAt(event.repeatEndsAt ? new Date(event.repeatEndsAt) : null)
-    setShowEndPicker(false)
-    setDeleteConfirm(false)
+    setRrule(event.rrule)
+    setShowScopeSheet(false)
+    setError(null)
+    setPosition({ x: 0, y: 0 })
+    setDragStart(null)
   }, [event])
 
   if (!event) return null
+  const occurrence = event
 
-  // Resets transient UI state before delegating close to parent
-  function close() { setDeleteConfirm(false); onClose() }
+  function close() {
+    onClose()
+  }
 
-  async function handleSave() {
-    if (!event) return
+  function startDrag(e: PointerEvent<HTMLDivElement>) {
+    if (isInteractiveTarget(e.target)) return
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    setDragStart({ pointerX: e.clientX, pointerY: e.clientY, originX: position.x, originY: position.y })
+  }
+
+  function moveDrag(e: PointerEvent<HTMLDivElement>) {
+    if (!dragStart) return
+    setPosition({
+      x: dragStart.originX + e.clientX - dragStart.pointerX,
+      y: dragStart.originY + e.clientY - dragStart.pointerY,
+    })
+  }
+
+  function stopDrag(e: PointerEvent<HTMLDivElement>) {
+    e.currentTarget.releasePointerCapture?.(e.pointerId)
+    setDragStart(null)
+  }
+
+  function occurrenceDate() {
+    return occurrence.isOverride ? occurrence.originalDate! : toNormalizedIso(occurrence.startAt)
+  }
+
+  function handleDoneClick() {
+    if (!title.trim()) return
+    if (occurrence.rrule) {
+      setScopeAction('edit')
+      setShowScopeSheet(true)
+    } else {
+      void doSave('all')
+    }
+  }
+
+  function handleDeleteClick() {
+    if (occurrence.rrule) {
+      setScopeAction('delete')
+      setShowScopeSheet(true)
+    } else {
+      void doDelete('all')
+    }
+  }
+
+  async function doSave(scope: RecurScope) {
     setSaving(true)
+    setError(null)
+    setShowScopeSheet(false)
     try {
-      const res = await fetch(`/api/calendar/events/${event.sourceEventId}`, {
+      const body: Record<string, unknown> = {
+        title: title.trim(),
+        startAt: buildDateTime(occurrence.startAt, startTime),
+        endAt: buildDateTime(occurrence.endAt, endTime),
+        rrule,
+      }
+      if (occurrence.rrule) {
+        body.scope = scope
+        body.occurrenceDate = occurrenceDate()
+      }
+
+      const res = await fetch(`/api/calendar/events/${occurrence.sourceEventId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: title.trim(),
-          startAt: buildDateTime(event.startAt, startTime),
-          endAt: buildDateTime(event.endAt, endTime),
-          repeatFrequency: repeat.frequency,
-          repeatInterval: repeat.frequency ? repeat.interval : null,
-          repeatEndsAt: repeatEndsAt?.toISOString() ?? null,
-        }),
+        body: JSON.stringify(body),
       })
       if (!res.ok) throw new Error(await res.text())
-      const updated: PatchedEvent = await res.json()
-      onSaved(updated)
-      // onClose is NOT called here — the parent's onSaved handler owns closing
+      onSaved(occurrence.sourceEventId)
+      close()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to save event')
+      const message = err instanceof Error ? err.message : 'Failed to save event'
+      setError(message)
+      toast.error(message)
     } finally {
       setSaving(false)
     }
   }
 
-  async function handleDelete() {
-    if (!event) return
-    if (!deleteConfirm) { setDeleteConfirm(true); return }
+  async function doDelete(scope: RecurScope) {
     setDeleting(true)
+    setError(null)
+    setShowScopeSheet(false)
     try {
-      const res = await fetch(`/api/calendar/events/${event.sourceEventId}`, { method: 'DELETE' })
+      const params = occurrence.rrule
+        ? `?scope=${scope}&occurrenceDate=${encodeURIComponent(occurrenceDate())}`
+        : ''
+      const res = await fetch(`/api/calendar/events/${occurrence.sourceEventId}${params}`, { method: 'DELETE' })
       if (!res.ok) throw new Error(await res.text())
-      onDeleted(event.sourceEventId)
+      onDeleted(occurrence.sourceEventId)
       onClose()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to delete event')
-      setDeleteConfirm(false)
     } finally {
       setDeleting(false)
     }
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 backdrop-blur-sm"
-      onClick={e => { if (e.target === e.currentTarget) close() }}
-    >
-      <div className="w-full max-w-md rounded-t-2xl border border-border bg-background shadow-2xl animate-in slide-in-from-bottom duration-200">
-
-        {/* Header: Cancel · Edit Event · Done */}
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <button
-            type="button"
-            onClick={close}
-            className="text-sm text-muted-foreground hover:text-foreground"
+    <>
+      <div
+        data-testid="event-editor-overlay"
+        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+        onClick={e => { if (e.target === e.currentTarget) close() }}
+      >
+        <div
+          data-testid="event-editor-panel"
+          style={{ transform: `translate(${position.x}px, ${position.y}px)` }}
+          className="w-full max-w-md rounded-2xl border border-border bg-background shadow-2xl animate-in fade-in zoom-in-95 duration-200"
+        >
+          <div
+            data-testid="event-editor-drag-handle"
+            onPointerDown={startDrag}
+            onPointerMove={moveDrag}
+            onPointerUp={stopDrag}
+            onPointerCancel={stopDrag}
+            className="flex cursor-move touch-none select-none items-center justify-between border-b border-border px-5 py-4"
           >
-            Cancel
-          </button>
-          <h2 className="text-sm font-semibold">Edit Event</h2>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || deleting || !title.trim()}
-            className="text-sm font-semibold text-primary disabled:opacity-50"
-            aria-label="Done"
-          >
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : 'Done'}
-          </button>
-        </div>
-
-        {/* Form fields */}
-        <div className="space-y-3 px-5 py-4">
-          <input
-            placeholder="Title"
-            aria-label="Title"
-            autoFocus
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            maxLength={100}
-            className="w-full rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/50"
-          />
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <label htmlFor="eds-start" className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                Start
-              </label>
-              <input
-                id="eds-start"
-                type="time"
-                value={startTime}
-                onChange={e => setStartTime(e.target.value)}
-                className="w-full rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm"
-              />
-            </div>
-            <div className="flex-1">
-              <label htmlFor="eds-end" className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                End
-              </label>
-              <input
-                id="eds-end"
-                type="time"
-                value={endTime}
-                onChange={e => setEndTime(e.target.value)}
-                className="w-full rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm"
-              />
-            </div>
-          </div>
-          <RepeatPicker value={repeat} onChange={setRepeat} />
-
-          <div>
-            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-              End repeat
-            </label>
+            <button type="button" onClick={close} className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
+              Cancel
+            </button>
+            <h2 className="text-sm font-semibold">Edit Event</h2>
             <button
               type="button"
-              onClick={() => setShowEndPicker(open => !open)}
-              aria-label="End repeat"
-              className="flex w-full items-center justify-between rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm hover:bg-muted/60"
+              onClick={handleDoneClick}
+              disabled={saving || deleting || !title.trim()}
+              className="cursor-pointer text-sm font-semibold text-primary disabled:opacity-50"
+              aria-label="Done"
             >
-              <span className={repeatEndsAt ? '' : 'text-muted-foreground'}>
-                {repeatEndsAt ? repeatEndsAt.toLocaleDateString('en-US') : 'Never'}
-              </span>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : 'Done'}
             </button>
-            {showEndPicker && (
-              <div className="mt-2">
-                <DatePickerMini
-                  value={repeatEndsAt}
-                  onChange={date => {
-                    setRepeatEndsAt(date)
-                    setShowEndPicker(false)
-                  }}
-                />
+          </div>
+
+          <div className="space-y-3 px-5 py-4">
+            <input
+              placeholder="Title"
+              aria-label="Title"
+              autoFocus
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              maxLength={100}
+              className="w-full rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/50"
+            />
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label htmlFor="eds-start" className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  Start
+                </label>
+                <input id="eds-start" type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm" />
               </div>
-            )}
+              <div className="flex-1">
+                <label htmlFor="eds-end" className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  End
+                </label>
+                <input id="eds-end" type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="w-full rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm" />
+              </div>
+            </div>
+            <RepeatPicker value={rrule} onChange={setRrule} />
+            {error && <p className="text-xs text-destructive">{error}</p>}
+          </div>
+
+          <div className="border-t border-border px-5 py-4">
+            <button
+              type="button"
+              onClick={handleDeleteClick}
+              disabled={deleting || saving}
+              className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : 'Delete event'}
+            </button>
           </div>
         </div>
-
-        {/* Delete footer — two-tap confirm, no dialog */}
-        <div className="border-t border-border px-5 py-4">
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={deleting || saving}
-            className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
-          >
-            {deleting
-              ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              : deleteConfirm ? 'Tap again to confirm' : 'Delete event'}
-          </button>
-        </div>
       </div>
-    </div>
+
+      {showScopeSheet && (
+        <RecurringEventScopeSheet
+          action={scopeAction}
+          onSelect={scope => {
+            if (scopeAction === 'edit') void doSave(scope)
+            else void doDelete(scope)
+          }}
+          onCancel={() => setShowScopeSheet(false)}
+        />
+      )}
+    </>
   )
 }

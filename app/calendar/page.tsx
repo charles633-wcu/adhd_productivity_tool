@@ -5,11 +5,12 @@ export const dynamic = 'force-dynamic'
 import { getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db/client'
 import {
-  listEventCategories, listEventsInRange,
+  listEventCategories, listEventOverridesForIds, listEventsInRange,
   getIcsSubscription, upsertIcsSubscription,
 } from '@/lib/db/calendar'
 import { fetchAndParseIcs } from '@/lib/services/icsParser'
-import { expandRepeatingEvent } from '@/lib/services/repeatExpander'
+import { expandEvents } from '@/lib/services/repeatExpander'
+import type { CalendarEventOverride } from '@/lib/db/schema'
 import { CalendarClient } from '@/components/CalendarClient'
 
 export default async function CalendarPage() {
@@ -27,6 +28,13 @@ export default async function CalendarPage() {
     listEventCategories(db, user.id),
     getIcsSubscription(db, user.id),
   ])
+  const overrides = listEventOverridesForIds(db, eventRows.map(event => event.id))
+  const overridesByMasterId = new Map<string, CalendarEventOverride[]>()
+  for (const override of overrides) {
+    const group = overridesByMasterId.get(override.masterEventId) ?? []
+    group.push(override)
+    overridesByMasterId.set(override.masterEventId, group)
+  }
 
   // Background ICS re-fetch if stale (>1 hour) — fire-and-forget, don't block page render
   let icsEvents: { uid: string; title: string; startAt: string; endAt: string }[] = []
@@ -46,28 +54,12 @@ export default async function CalendarPage() {
     }
   }
 
-  // Expand repeating events into occurrences within range
-  const expandedEvents = eventRows.flatMap(ev =>
-    expandRepeatingEvent(
-      {
-        ...ev,
-        startAt: ev.startAt,
-        endAt: ev.endAt,
-        repeatFrequency: ev.repeatFrequency ?? null,
-        repeatInterval: ev.repeatInterval ?? null,
-        repeatEndsAt: ev.repeatEndsAt ?? null,
-      },
-      rangeFrom,
-      rangeTo,
-    ).map(occ => ({
+  const expandedEvents = expandEvents(eventRows, overridesByMasterId, rangeFrom, rangeTo)
+    .map(occ => ({
       ...occ,
       startAt: occ.startAt.toISOString(),
       endAt: occ.endAt.toISOString(),
-      repeatEndsAt: occ.repeatEndsAt?.toISOString() ?? null,
-      color: ev.color ?? null,
-      categoryId: ev.categoryId ?? null,
-    })),
-  )
+    }))
 
   return (
     <CalendarClient

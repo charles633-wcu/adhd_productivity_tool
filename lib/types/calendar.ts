@@ -1,6 +1,15 @@
-export type RepeatFrequency = 'day' | 'week' | 'month' | 'year'
+// Shared calendar types. RepeatFrequency and RepeatValue are retired; use RRULE strings.
 
-export interface RepeatValue {
-  frequency: RepeatFrequency | null
-  interval: number
+export interface EventOccurrence {
+  occurrenceId: string
+  sourceEventId: string
+  title: string
+  startAt: Date
+  endAt: Date
+  notes: string | null
+  color: string | null
+  categoryId: string | null
+  rrule: string | null
+  isOverride: boolean
+  originalDate: string | null
 }

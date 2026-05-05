@@ -1,7 +1,7 @@
 // Database schema — Drizzle ORM table definitions and inferred TypeScript types.
 // Single source of truth for all DB column shapes; consumed by lib/db/client.ts,
 // lib/db/triggers.ts, and all API route and service functions.
-import { sqliteTable, text, integer, primaryKey } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, primaryKey, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { createId } from '@paralleldrive/cuid2'
 import { sql } from 'drizzle-orm'
 
@@ -105,7 +105,7 @@ export const eventCategories = sqliteTable('event_categories', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`).$onUpdate(() => new Date()),
 })
 
-// Calendar: personal events with optional repeat rules
+// Calendar: personal events with optional RRULE repeat rules
 export const calendarEvents = sqliteTable('calendar_events', {
   id: text('id').primaryKey().$defaultFn(() => createId()),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -114,13 +114,32 @@ export const calendarEvents = sqliteTable('calendar_events', {
   endAt: integer('end_at', { mode: 'timestamp' }).notNull(),
   color: text('color'),
   notes: text('notes'),
-  repeatFrequency: text('repeat_frequency', { enum: ['day', 'week', 'month', 'year'] }),
-  repeatInterval: integer('repeat_interval'),
-  repeatEndsAt: integer('repeat_ends_at', { mode: 'timestamp' }),
+  rrule: text('rrule'),
+  exdates: text('exdates', { mode: 'json' }).$type<string[]>(),
   categoryId: text('category_id').references(() => eventCategories.id, { onDelete: 'set null' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`).$onUpdate(() => new Date()),
 })
+
+// Calendar: per-occurrence overrides for recurring events (RECURRENCE-ID model)
+export const calendarEventOverrides = sqliteTable(
+  'calendar_event_overrides',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    masterEventId: text('master_event_id')
+      .notNull()
+      .references(() => calendarEvents.id, { onDelete: 'cascade' }),
+    originalDate: text('original_date').notNull(),
+    title: text('title').notNull(),
+    startAt: integer('start_at', { mode: 'timestamp' }).notNull(),
+    endAt: integer('end_at', { mode: 'timestamp' }).notNull(),
+    notes: text('notes'),
+  },
+  (t) => ({
+    masterOriginalUniq: uniqueIndex('cal_evt_override_master_original_uniq')
+      .on(t.masterEventId, t.originalDate),
+  }),
+)
 
 // Calendar: ICS subscription — one per user
 export const icsSubscriptions = sqliteTable('ics_subscriptions', {
@@ -206,6 +225,8 @@ export type EventCategory = typeof eventCategories.$inferSelect
 export type NewEventCategory = typeof eventCategories.$inferInsert
 export type CalendarEvent = typeof calendarEvents.$inferSelect
 export type NewCalendarEvent = typeof calendarEvents.$inferInsert
+export type CalendarEventOverride = typeof calendarEventOverrides.$inferSelect
+export type NewCalendarEventOverride = typeof calendarEventOverrides.$inferInsert
 export type IcsSubscription = typeof icsSubscriptions.$inferSelect
 export type NewIcsSubscription = typeof icsSubscriptions.$inferInsert
 export type TodoList = typeof todoLists.$inferSelect

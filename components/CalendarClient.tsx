@@ -12,20 +12,20 @@ import { DayDetailModal } from '@/components/DayDetailModal'
 import { EventCategoryModal } from '@/components/EventCategoryModal'
 import { EventDetailSheet } from '@/components/EventDetailSheet'
 import { IcsModal } from '@/components/IcsModal'
-import { expandRepeatingEvent } from '@/lib/services/repeatExpander'
-import type { RepeatFrequency } from '@/lib/types/calendar'
+import type { EventOccurrence } from '@/lib/types/calendar'
 
-interface CalendarEventItem {
+type CalendarEventItem = {
   occurrenceId: string
   sourceEventId: string
   title: string
   startAt: string
   endAt: string
+  notes?: string | null
   color?: string | null
   categoryId?: string | null
-  repeatFrequency?: RepeatFrequency | null
-  repeatInterval?: number | null
-  repeatEndsAt?: string | null
+  rrule?: string | null
+  isOverride?: boolean
+  originalDate?: string | null
 }
 
 interface IcsEventItem {
@@ -41,19 +41,6 @@ interface EventCategory {
   color: string
 }
 
-type EditableEvent = {
-  occurrenceId: string
-  sourceEventId: string
-  title: string
-  startAt: Date
-  endAt: Date
-  color?: string | null
-  categoryId?: string | null
-  repeatFrequency?: RepeatFrequency | null
-  repeatInterval?: number | null
-  repeatEndsAt?: string | null
-}
-
 interface CreatedCalendarEventItem {
   id: string
   title: string
@@ -61,9 +48,8 @@ interface CreatedCalendarEventItem {
   endAt: string
   color?: string | null
   categoryId?: string | null
-  repeatFrequency?: RepeatFrequency | null
-  repeatInterval?: number | null
-  repeatEndsAt?: string | null
+  rrule?: string | null
+  exdates?: string[] | null
 }
 
 interface CalendarClientProps {
@@ -147,7 +133,7 @@ export function CalendarClient({
   const [localEvents, setLocalEvents] = useState(initialEvents)
   const [icsUrl, setIcsUrl] = useState(initialIcsUrl)
   const [direction, setDirection] = useState(1)
-  const [editingEvent, setEditingEvent] = useState<EditableEvent | null>(null)
+  const [editingEvent, setEditingEvent] = useState<EventOccurrence | null>(null)
   const [dragStartX, setDragStartX] = useState<number | null>(null)
   const [isExpanded, setIsExpanded] = useState(false)
 
@@ -227,37 +213,14 @@ export function CalendarClient({
   }
 
   // Repeat fields are intentionally not re-expanded here — repeat changes reflect after next month navigation (accepted tradeoff).
-  function handleEventEdited(patched: { id: string; title: string; startAt: string; endAt: string; color?: string | null; categoryId?: string | null }) {
-    setLocalEvents(prev => prev.map(e =>
-      e.sourceEventId === patched.id
-        ? { ...e, title: patched.title, startAt: patched.startAt, endAt: patched.endAt, color: patched.color ?? null, categoryId: patched.categoryId ?? null }
-        : e
-    ))
-  }
-
-  function expandCreatedEvent(event: CreatedCalendarEventItem): CalendarEventItem[] {
-    const rangeFrom = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 3, 1)
-    const rangeTo = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 7, 0, 23, 59, 59, 999)
-    return expandRepeatingEvent({
-      id: event.id,
-      title: event.title,
-      startAt: new Date(event.startAt),
-      endAt: new Date(event.endAt),
-      repeatFrequency: event.repeatFrequency ?? null,
-      repeatInterval: event.repeatInterval ?? null,
-      repeatEndsAt: event.repeatEndsAt ? new Date(event.repeatEndsAt) : null,
-    }, rangeFrom, rangeTo).map(occurrence => ({
-      occurrenceId: occurrence.occurrenceId,
-      sourceEventId: occurrence.sourceEventId,
-      title: occurrence.title,
-      startAt: occurrence.startAt.toISOString(),
-      endAt: occurrence.endAt.toISOString(),
-      repeatFrequency: occurrence.repeatFrequency,
-      repeatInterval: occurrence.repeatInterval,
-      repeatEndsAt: occurrence.repeatEndsAt?.toISOString() ?? null,
-      color: event.color ?? null,
-      categoryId: event.categoryId ?? null,
-    }))
+  async function loadMonth(month: Date) {
+    const rangeFrom = new Date(month.getFullYear(), month.getMonth() - 3, 1)
+    const rangeTo = new Date(month.getFullYear(), month.getMonth() + 7, 0, 23, 59, 59, 999)
+    const params = new URLSearchParams({ from: rangeFrom.toISOString(), to: rangeTo.toISOString() })
+    const res = await fetch(`/api/calendar/events?${params}`)
+    if (!res?.ok) return
+    const events = await res.json() as CalendarEventItem[]
+    setLocalEvents(events)
   }
 
   function renderCalendarCard(month: Date, role: 'prev' | 'center' | 'next') {
@@ -538,11 +501,12 @@ export function CalendarClient({
                       title: ev.title,
                       startAt: ev.startAtDate,
                       endAt: ev.endAtDate,
-                      color: ev.color,
-                      categoryId: ev.categoryId,
-                      repeatFrequency: ev.repeatFrequency ?? null,
-                      repeatInterval: ev.repeatInterval ?? null,
-                      repeatEndsAt: ev.repeatEndsAt ?? null,
+                      notes: ev.notes ?? null,
+                      color: ev.color ?? null,
+                      categoryId: ev.categoryId ?? null,
+                      rrule: ev.rrule ?? null,
+                      isOverride: ev.isOverride ?? false,
+                      originalDate: ev.originalDate ?? null,
                     })}
                     aria-label={ev.title}
                     className="flex items-center gap-2 rounded-lg border border-border/70 bg-background px-3 py-2 text-left text-xs transition-colors hover:bg-muted/50"
@@ -574,7 +538,19 @@ export function CalendarClient({
       {modalDay && modalDate && (
         <DayDetailModal
           date={modalDate}
-          events={modalEvents.map(ev => ({ ...ev, startAt: new Date(ev.startAt), endAt: new Date(ev.endAt) }))}
+          events={modalEvents.map(ev => ({
+            occurrenceId: ev.occurrenceId,
+            sourceEventId: ev.sourceEventId,
+            title: ev.title,
+            startAt: new Date(ev.startAt),
+            endAt: new Date(ev.endAt),
+            notes: ev.notes ?? null,
+            color: ev.color ?? null,
+            categoryId: ev.categoryId ?? null,
+            rrule: ev.rrule ?? null,
+            isOverride: ev.isOverride ?? false,
+            originalDate: ev.originalDate ?? null,
+          }))}
           icsEvents={modalIcsEvents.map(ev => ({ ...ev, startAt: new Date(ev.startAt), endAt: new Date(ev.endAt) }))}
           eventCategories={categories}
           startInAddMode={modalStartsInAddMode}
@@ -584,7 +560,7 @@ export function CalendarClient({
             setModalStartsInAddMode(false)
             setEditingEvent(null)
           }}
-          onEventCreated={event => setLocalEvents(prev => [...prev, ...expandCreatedEvent(event)])}
+          onEventCreated={() => { void loadMonth(currentMonth) }}
           onEditEvent={ev => setEditingEvent(ev)}
         />
       )}
@@ -592,12 +568,12 @@ export function CalendarClient({
       <EventDetailSheet
         event={editingEvent}
         onClose={() => setEditingEvent(null)}
-        onSaved={patched => {
-          handleEventEdited(patched)
+        onSaved={() => {
+          void loadMonth(currentMonth)
           setEditingEvent(null)
         }}
-        onDeleted={id => {
-          setLocalEvents(prev => prev.filter(e => e.sourceEventId !== id))
+        onDeleted={() => {
+          void loadMonth(currentMonth)
           setEditingEvent(null)
         }}
       />

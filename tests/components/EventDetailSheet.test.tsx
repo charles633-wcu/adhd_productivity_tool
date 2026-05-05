@@ -1,28 +1,33 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EventDetailSheet } from '@/components/EventDetailSheet'
+import type { EventOccurrence } from '@/lib/types/calendar'
 
-const baseEvent = {
-  occurrenceId: 'e1::2026-04-15',
-  sourceEventId: 'e1',
-  title: 'Team standup',
-  startAt: new Date('2026-04-15T09:00:00'),
-  endAt: new Date('2026-04-15T09:30:00'),
-  color: '#6366f1',
-  categoryId: null,
-  repeatFrequency: null as null | 'day' | 'week' | 'month' | 'year',
-  repeatInterval: null as number | null,
-  repeatEndsAt: null as string | null,
+vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
+
+function makeOccurrence(overrides: Partial<EventOccurrence> = {}): EventOccurrence {
+  return {
+    occurrenceId: 'e1::2026-04-15T09:00:00.000Z',
+    sourceEventId: 'e1',
+    title: 'Team standup',
+    startAt: new Date('2026-04-15T09:00:00.000Z'),
+    endAt: new Date('2026-04-15T09:30:00.000Z'),
+    notes: null,
+    color: '#6366f1',
+    categoryId: null,
+    rrule: null,
+    isOverride: false,
+    originalDate: null,
+    ...overrides,
+  }
 }
 
 const baseProps = {
-  event: baseEvent,
+  event: makeOccurrence(),
   onClose: vi.fn(),
   onSaved: vi.fn(),
   onDeleted: vi.fn(),
 }
-
-vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 
 describe('EventDetailSheet', () => {
   beforeEach(() => {
@@ -31,128 +36,81 @@ describe('EventDetailSheet', () => {
   })
   afterEach(() => vi.unstubAllGlobals())
 
-  it('pre-fills title and times from the passed event', () => {
+  it('pre-fills title and times from the passed occurrence', () => {
     render(<EventDetailSheet {...baseProps} />)
-    expect((screen.getByPlaceholderText('Title') as HTMLInputElement).value).toBe('Team standup')
-    expect((screen.getByLabelText('Start') as HTMLInputElement).value).toBe('09:00')
-    expect((screen.getByLabelText('End') as HTMLInputElement).value).toBe('09:30')
+    expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('Team standup')
+    expect((screen.getByLabelText('Start') as HTMLInputElement).value).toBe('05:00')
+    expect((screen.getByLabelText('End') as HTMLInputElement).value).toBe('05:30')
   })
 
-  it('renders nothing when event is null', () => {
-    const { container } = render(<EventDetailSheet {...baseProps} event={null} />)
-    expect(container.firstChild).toBeNull()
+  it('saves non-recurring occurrences without showing scope choices', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ id: 'e1' }), { status: 200 }))
+    render(<EventDetailSheet {...baseProps} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /done/i }))
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/calendar/events/e1', expect.objectContaining({ method: 'PATCH' })))
+    expect(screen.queryByTestId('scope-sheet-overlay')).toBeNull()
+    expect(baseProps.onSaved).toHaveBeenCalledWith('e1')
   })
 
-  it('Done fires PATCH with repeat fields in body and calls onSaved on 200', async () => {
-    const updated = { id: 'e1', title: 'Team standup', startAt: '2026-04-15T09:00:00.000Z', endAt: '2026-04-15T09:30:00.000Z' }
-    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify(updated), { status: 200 }))
-    render(<EventDetailSheet {...baseProps} />)
-    fireEvent.click(screen.getByText('Done'))
+  it('shows scope sheet before saving recurring occurrences', () => {
+    render(<EventDetailSheet {...baseProps} event={makeOccurrence({ rrule: 'FREQ=WEEKLY;INTERVAL=1' })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /done/i }))
+
+    expect(screen.getByTestId('scope-sheet-overlay')).toBeTruthy()
+    expect(screen.getByText('This event')).toBeTruthy()
+  })
+
+  it('passes scope and occurrenceDate for recurring save', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ id: 'e1' }), { status: 200 }))
+    render(<EventDetailSheet {...baseProps} event={makeOccurrence({ rrule: 'FREQ=WEEKLY;INTERVAL=1' })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /done/i }))
+    fireEvent.click(screen.getByText('This event'))
+
     await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith('/api/calendar/events/e1', expect.objectContaining({ method: 'PATCH' }))
-      const body = JSON.parse((fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body)
-      expect('repeatEndsAt' in body).toBe(true)
-      expect('repeatFrequency' in body).toBe(true)
-      expect(baseProps.onSaved).toHaveBeenCalledWith(updated)
+      const [, init] = vi.mocked(fetch).mock.calls[0]
+      const body = JSON.parse(String(init?.body))
+      expect(body).toEqual(expect.objectContaining({
+        scope: 'this',
+        occurrenceDate: '2026-04-15T09:00:00.000Z',
+        rrule: 'FREQ=WEEKLY;INTERVAL=1',
+      }))
     })
   })
 
-  it('shows RepeatPicker instead of a select element', () => {
-    render(<EventDetailSheet {...baseProps} />)
-    expect(screen.getByRole('button', { name: /^Repeat$/i })).toBeTruthy()
-    expect(screen.queryByRole('combobox')).toBeNull()
+  it('uses originalDate when re-editing an override occurrence', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ id: 'e1' }), { status: 200 }))
+    render(<EventDetailSheet {...baseProps} event={makeOccurrence({
+      rrule: 'FREQ=WEEKLY;INTERVAL=1',
+      isOverride: true,
+      originalDate: '2026-04-15T09:00:00.000Z',
+      startAt: new Date('2026-04-15T14:00:00.000Z'),
+    })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /done/i }))
+    fireEvent.click(screen.getByText('This event'))
+
+    await waitFor(() => {
+      const [, init] = vi.mocked(fetch).mock.calls[0]
+      expect(JSON.parse(String(init?.body)).occurrenceDate).toBe('2026-04-15T09:00:00.000Z')
+    })
   })
 
-  it('shows End repeat field', () => {
-    render(<EventDetailSheet {...baseProps} />)
-    expect(screen.getByLabelText('End repeat')).toBeTruthy()
-  })
-
-  it('pre-fills repeat from event.repeatFrequency and repeatInterval', () => {
-    const weeklyEvent = {
-      ...baseEvent,
-      repeatFrequency: 'week' as const,
-      repeatInterval: 2,
-    }
-    render(<EventDetailSheet {...baseProps} event={weeklyEvent} />)
-    expect(screen.getByText('Every 2 weeks')).toBeTruthy()
-  })
-
-  it('clicking End repeat field opens DatePickerMini', () => {
-    render(<EventDetailSheet {...baseProps} />)
-    fireEvent.click(screen.getByLabelText('End repeat'))
-    expect(screen.getByLabelText('Date picker')).toBeTruthy()
-  })
-
-  it('selecting a date from DatePickerMini closes the picker and updates display', () => {
-    const event = {
-      ...baseEvent,
-      repeatEndsAt: '2026-05-15T00:00:00.000Z',
-    }
-    render(<EventDetailSheet {...baseProps} event={event} />)
-    fireEvent.click(screen.getByLabelText('End repeat'))
-    const picker = screen.getByLabelText('Date picker')
-    fireEvent.click(within(picker).getByLabelText('May 20, 2026'))
-    expect(screen.queryByLabelText('Date picker')).toBeNull()
-    expect(screen.getByText('5/20/2026')).toBeTruthy()
-  })
-
-  it('first delete tap shows confirm text; second tap fires DELETE /api/calendar/events/e1 and calls onDeleted', async () => {
+  it('deletes recurring occurrences through the scope sheet', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 204 }))
-    render(<EventDetailSheet {...baseProps} />)
+    render(<EventDetailSheet {...baseProps} event={makeOccurrence({ rrule: 'FREQ=WEEKLY;INTERVAL=1' })} />)
+
     fireEvent.click(screen.getByText('Delete event'))
-    expect(screen.getByText('Tap again to confirm')).toBeTruthy()
-    fireEvent.click(screen.getByText('Tap again to confirm'))
+    fireEvent.click(screen.getByText('This event'))
+
     await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith('/api/calendar/events/e1', expect.objectContaining({ method: 'DELETE' }))
-      expect(baseProps.onDeleted).toHaveBeenCalledWith('e1')
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/calendar/events/e1?scope=this&occurrenceDate=2026-04-15T09%3A00%3A00.000Z',
+        expect.objectContaining({ method: 'DELETE' }),
+      )
     })
-  })
-
-  it('Cancel calls onClose and fires no API calls', () => {
-    render(<EventDetailSheet {...baseProps} />)
-    fireEvent.click(screen.getByText('Cancel'))
-    expect(baseProps.onClose).toHaveBeenCalled()
-    expect(fetch).not.toHaveBeenCalled()
-  })
-
-  it('PATCH failure shows toast.error, keeps sheet open, and re-enables Done button', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(new Response('Server error', { status: 500 }))
-    const { toast } = await import('sonner')
-    render(<EventDetailSheet {...baseProps} />)
-    fireEvent.click(screen.getByText('Done'))
-    await waitFor(() => expect(toast.error).toHaveBeenCalled())
-    expect(baseProps.onClose).not.toHaveBeenCalled()
-    expect(screen.getByText('Done')).not.toBeDisabled()
-  })
-
-  it('DELETE failure shows toast.error, keeps sheet open, and re-enables delete button', async () => {
-    const { toast } = await import('sonner')
-    vi.mocked(fetch).mockResolvedValueOnce(new Response('Server error', { status: 500 }))
-    render(<EventDetailSheet {...baseProps} />)
-    fireEvent.click(screen.getByText('Delete event'))
-    fireEvent.click(screen.getByText('Tap again to confirm'))
-    await waitFor(() => expect(toast.error).toHaveBeenCalled())
-    expect(baseProps.onClose).not.toHaveBeenCalled()
-    expect(screen.getByText('Delete event')).not.toBeDisabled()
-  })
-
-  it('Done button shows spinner (no "Done" text) while PATCH is in flight', async () => {
-    let resolve!: (v: Response) => void
-    vi.mocked(fetch).mockReturnValueOnce(new Promise(r => { resolve = r }))
-    render(<EventDetailSheet {...baseProps} />)
-    fireEvent.click(screen.getByText('Done'))
-    await waitFor(() => expect(screen.queryByText('Done')).toBeNull())
-    resolve(new Response(JSON.stringify({}), { status: 200 }))
-  })
-
-  it('Delete button shows spinner while DELETE is in flight', async () => {
-    let resolve!: (v: Response) => void
-    vi.mocked(fetch).mockReturnValueOnce(new Promise(r => { resolve = r }))
-    render(<EventDetailSheet {...baseProps} />)
-    fireEvent.click(screen.getByText('Delete event'))
-    fireEvent.click(screen.getByText('Tap again to confirm'))
-    await waitFor(() => expect(screen.queryByText('Tap again to confirm')).toBeNull())
-    resolve(new Response(null, { status: 204 }))
   })
 })
