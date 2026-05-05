@@ -1,7 +1,7 @@
 // Database schema — Drizzle ORM table definitions and inferred TypeScript types.
 // Single source of truth for all DB column shapes; consumed by lib/db/client.ts,
 // lib/db/triggers.ts, and all API route and service functions.
-import { sqliteTable, text, integer, primaryKey, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, real, primaryKey, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { createId } from '@paralleldrive/cuid2'
 import { sql } from 'drizzle-orm'
 
@@ -212,6 +212,43 @@ export const todoTaskLabels = sqliteTable('todo_task_labels', {
   pk: primaryKey({ columns: [table.todoId, table.labelId] }),
 }))
 
+// Heap Knowledge Graph
+export type HeapNodeType = 'task_cluster' | 'note' | 'goal' | 'reference' | 'brain_dump'
+
+// heap_nodes - spatial knowledge graph nodes; posX/posY are canvas coordinates
+export const heapNodes = sqliteTable('heap_nodes', {
+  id: text('id').primaryKey().$defaultFn(() => createId()),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  type: text('type').$type<HeapNodeType>().notNull().default('brain_dump'),
+  title: text('title').notNull(),
+  body: text('body'),
+  color: text('color'),
+  posX: real('pos_x').notNull().default(0),
+  posY: real('pos_y').notNull().default(0),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`).$onUpdate(() => new Date()),
+})
+
+// heap_edges - directed connections between nodes; unique per user+source+target
+export const heapEdges = sqliteTable('heap_edges', {
+  id: text('id').primaryKey().$defaultFn(() => createId()),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  sourceId: text('source_id').notNull().references(() => heapNodes.id, { onDelete: 'cascade' }),
+  targetId: text('target_id').notNull().references(() => heapNodes.id, { onDelete: 'cascade' }),
+  label: text('label'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+}, (t) => ({
+  uniqueSourceTarget: uniqueIndex('heap_edges_user_source_target_idx').on(t.userId, t.sourceId, t.targetId),
+}))
+
+// heap_node_todos - junction: many heap_nodes to many todos (cascade on both sides)
+export const heapNodeTodos = sqliteTable('heap_node_todos', {
+  nodeId: text('node_id').notNull().references(() => heapNodes.id, { onDelete: 'cascade' }),
+  todoId: text('todo_id').notNull().references(() => todos.id, { onDelete: 'cascade' }),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.nodeId, t.todoId] }),
+}))
+
 // Infer TypeScript types from schema
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
@@ -238,3 +275,8 @@ export type NewTodo = typeof todos.$inferInsert
 export type TodoTaskLabel = typeof todoTaskLabels.$inferSelect
 export type NewTodoTaskLabel = typeof todoTaskLabels.$inferInsert
 export type TodoPriority = 'high' | 'medium' | 'low' | 'none'
+export type HeapNode = typeof heapNodes.$inferSelect
+export type NewHeapNode = typeof heapNodes.$inferInsert
+export type HeapEdge = typeof heapEdges.$inferSelect
+export type NewHeapEdge = typeof heapEdges.$inferInsert
+export type HeapNodeTodo = typeof heapNodeTodos.$inferSelect
