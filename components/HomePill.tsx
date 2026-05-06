@@ -14,7 +14,7 @@
 import { useState, useEffect, useRef, FormEvent } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FileUp, CalendarDays, FolderPlus, Plus, MessageCircle } from 'lucide-react'
+import { Brain, CalendarDays, FileUp, FolderPlus, MessageCircle, Plus } from 'lucide-react'
 import {
   Sheet,
   SheetContent,
@@ -242,6 +242,15 @@ export function HomePill({ categories, triggers, todayTodoCount }: HomePillProps
               {todayTodoCount}
             </span>
           )}
+        </Link>
+
+        {/* Mind app — navigates to /heap */}
+        <Link
+          href="/heap"
+          className="flex items-center gap-1.5 rounded-xl px-4 min-h-[44px] text-[13px] font-medium text-muted-foreground hover:bg-muted/60 transition-colors"
+        >
+          <Brain className="h-4 w-4" aria-hidden="true" />
+          Mind
         </Link>
 
         {/* Divider */}
