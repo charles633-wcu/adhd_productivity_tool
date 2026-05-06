@@ -24,6 +24,10 @@ function localDateKey(date: Date) {
   return `${y}-${m}-${d}`
 }
 
+function localIso(year: number, monthIndex: number, day: number, hour: number, minute: number) {
+  return new Date(year, monthIndex, day, hour, minute).toISOString()
+}
+
 describe('CalendarClient', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [] }))
@@ -59,14 +63,15 @@ describe('CalendarClient', () => {
   it('shows current month and year in header', () => {
     render(<CalendarClient {...baseProps} />)
     const now = new Date()
-    const heading = screen.getByRole('heading', {
-      name: now.toLocaleString('default', { month: 'long', year: 'numeric' }),
-    })
+    const monthLabel = now.toLocaleString('default', { month: 'long', year: 'numeric' })
+    const heading = screen.getByRole('button', { name: `Expand ${monthLabel} calendar` })
 
-    expect(heading.className).toContain('text-4xl')
-    expect(heading.className).toContain('scale-x-95')
-    expect(within(screen.getByTestId('calendar-month-heading')).getByLabelText('Previous month')).toBeTruthy()
-    expect(within(screen.getByTestId('calendar-month-heading')).getByLabelText('Next month')).toBeTruthy()
+    expect(heading.textContent).toBe(monthLabel)
+    expect(heading.className).toContain('whitespace-nowrap')
+    expect(heading.className).toContain('hover:bg-muted')
+    expect(screen.getByTestId('calendar-bottom-navigation')).toBeTruthy()
+    expect(within(screen.getByTestId('calendar-bottom-navigation')).getByLabelText('Previous month')).toBeTruthy()
+    expect(within(screen.getByTestId('calendar-bottom-navigation')).getByLabelText('Next month')).toBeTruthy()
   })
 
   it('does not show a Today control in the calendar header', () => {
@@ -95,8 +100,71 @@ describe('CalendarClient', () => {
     })
 
     expect(calendar.className).toContain('max-w-xl')
-    expect(screen.getByTestId('calendar-month-heading').className).toContain('max-w-xl')
     expect(screen.getByTestId(`calendar-day-${todayKey()}`).className).toContain('aspect-square')
+  })
+
+  it('expands the month grid and shows time-first event labels that truncate by day-box width', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-15T12:00:00'))
+
+    render(
+      <CalendarClient
+        {...baseProps}
+        initialEvents={[{
+          occurrenceId: 'event-1::2026-04-15',
+          sourceEventId: 'event-1',
+          title: 'Very Long Planning Meeting',
+          startAt: localIso(2026, 3, 15, 20, 30),
+          endAt: localIso(2026, 3, 15, 21, 30),
+          color: '#2563eb',
+        }]}
+      />,
+    )
+
+    const dayCell = screen.getByTestId('calendar-day-2026-04-15')
+    expect(dayCell.textContent).not.toContain('Very Long Planning Meeting')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand April 2026 calendar' }))
+
+    const calendar = screen.getByRole('region', { name: 'April 2026 calendar' })
+    expect(calendar.className).toContain('max-w-6xl')
+    expect(dayCell.className).not.toContain('aspect-square')
+    expect(dayCell.textContent).toContain('8:30pm')
+    expect(dayCell.textContent).not.toContain('20:30')
+
+    const title = within(dayCell).getByTestId('calendar-event-title-event-1::2026-04-15')
+    expect(title.textContent).toBe('Very Long Planning Meeting')
+    expect(title.className).toContain('truncate')
+    expect(title.parentElement?.className).toContain('min-w-0')
+  })
+
+  it('keeps expanded month and heading dimensions stable when navigating months', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-15T12:00:00'))
+
+    render(<CalendarClient {...baseProps} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand April 2026 calendar' }))
+
+    const aprilCalendar = screen.getByRole('region', { name: 'April 2026 calendar' })
+    expect(aprilCalendar.className).toContain('max-w-6xl')
+    expect(aprilCalendar.className).toContain('h-[min(42rem,calc(100vh-14rem))]')
+    expect(aprilCalendar.className).toContain('pb-8')
+    expect(screen.getByTestId('month-carousel').className).toContain('max-w-6xl')
+    expect(screen.queryByTestId('calendar-bottom-navigation')).toBeNull()
+
+    const label = screen.getByRole('button', { name: 'Collapse April 2026 calendar' })
+    expect(label.className).toContain('whitespace-nowrap')
+    expect(label.className).toContain('hover:bg-muted')
+
+    fireEvent.keyDown(screen.getByTestId('month-carousel'), { key: 'ArrowRight' })
+
+    const mayCalendar = screen.getByRole('region', { name: 'May 2026 calendar' })
+    expect(mayCalendar.className).toContain('max-w-6xl')
+    expect(mayCalendar.className).toContain('h-[min(42rem,calc(100vh-14rem))]')
+    expect(mayCalendar.className).toContain('pb-8')
+    expect(screen.getByTestId('month-carousel').className).toContain('max-w-6xl')
+    expect(screen.getByRole('button', { name: 'Collapse May 2026 calendar' }).className).toContain('whitespace-nowrap')
   })
 
   it('places the month heading directly above the calendar grid', () => {
@@ -112,7 +180,7 @@ describe('CalendarClient', () => {
     render(<CalendarClient {...baseProps} />)
     const now = new Date()
     const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-    fireEvent.click(screen.getByLabelText('Next month'))
+    fireEvent.click(within(screen.getByTestId('calendar-bottom-navigation')).getByLabelText('Next month'))
     expect(screen.getByText(nextMonth.toLocaleString('default', { month: 'long', year: 'numeric' }))).toBeTruthy()
   })
 
@@ -159,7 +227,7 @@ describe('CalendarClient', () => {
     fireEvent.pointerDown(screen.getByTestId('month-carousel'), { clientX: 260 })
     fireEvent.pointerUp(screen.getByTestId('month-carousel'), { clientX: 90 })
 
-    expect(screen.getByRole('heading', { name: nextMonthLabel })).toBeTruthy()
+    expect(screen.getByRole('button', { name: `Expand ${nextMonthLabel} calendar` })).toBeTruthy()
   })
 
   it('selects a day on first click and shows a selected-day dock with add-event action', () => {
@@ -332,7 +400,7 @@ describe('CalendarClient', () => {
 
     fireEvent.click(screen.getByLabelText(`Next month preview: ${nextMonthLabel}`))
 
-    expect(screen.getByRole('heading', { name: nextMonthLabel })).toBeTruthy()
+    expect(screen.getByRole('button', { name: `Expand ${nextMonthLabel} calendar` })).toBeTruthy()
     expect(screen.getByTestId(`calendar-day-${localDateKey(nextMonth)}`)).toBeTruthy()
   })
 
@@ -344,7 +412,22 @@ describe('CalendarClient', () => {
 
     fireEvent.wheel(screen.getByTestId('month-carousel'), { deltaX: 120, deltaY: 0 })
 
-    expect(screen.getByRole('heading', { name: nextMonthLabel })).toBeTruthy()
+    expect(screen.getByRole('button', { name: `Expand ${nextMonthLabel} calendar` })).toBeTruthy()
+  })
+
+  it('accumulates small horizontal wheel gestures into a sticky month flip', () => {
+    render(<CalendarClient {...baseProps} />)
+    const now = new Date()
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    const nextMonthLabel = nextMonth.toLocaleString('default', { month: 'long', year: 'numeric' })
+
+    fireEvent.wheel(screen.getByTestId('month-carousel'), { deltaX: 35, deltaY: 0 })
+    expect(screen.queryByRole('button', { name: `Expand ${nextMonthLabel} calendar` })).toBeNull()
+
+    fireEvent.wheel(screen.getByTestId('month-carousel'), { deltaX: 35, deltaY: 0 })
+    fireEvent.wheel(screen.getByTestId('month-carousel'), { deltaX: 35, deltaY: 0 })
+
+    expect(screen.getByRole('button', { name: `Expand ${nextMonthLabel} calendar` })).toBeTruthy()
   })
 
   it('refetches expanded recurring events after save', async () => {

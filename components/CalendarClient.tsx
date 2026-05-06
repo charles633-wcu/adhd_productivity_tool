@@ -4,9 +4,9 @@
  */
 'use client'
 
-import React, { useMemo, useState, type PointerEvent, type WheelEvent } from 'react'
+import React, { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react'
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion'
-import { ChevronLeft, ChevronRight, FolderOpen, Link2, Maximize2, Minimize2, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FolderOpen, Link2, Plus } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { DayDetailModal } from '@/components/DayDetailModal'
 import { EventCategoryModal } from '@/components/EventCategoryModal'
@@ -101,6 +101,12 @@ function timeLabel(d: Date) {
   return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 }
 
+function compactTimeLabel(value: string) {
+  const d = new Date(value)
+  const [time, period] = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true }).split(' ')
+  return `${time}${period?.toLowerCase() ?? ''}`
+}
+
 function dateFromKey(key: string) {
   const [year, month, day] = key.split('-').map(Number)
   return new Date(year, month - 1, day)
@@ -136,6 +142,7 @@ export function CalendarClient({
   const [editingEvent, setEditingEvent] = useState<EventOccurrence | null>(null)
   const [dragStartX, setDragStartX] = useState<number | null>(null)
   const [isExpanded, setIsExpanded] = useState(false)
+  const wheelState = useRef({ amount: 0, direction: 0, lastFlipAt: 0, streak: 0 })
 
   const todayKey = toLocalDateKey(today)
 
@@ -184,9 +191,34 @@ export function CalendarClient({
     setCurrentMonth(new Date(month.getFullYear(), month.getMonth(), 1))
   }
 
+  function navigateFromScroll(direction: 1 | -1) {
+    const now = Date.now()
+    const state = wheelState.current
+    if (state.direction === direction && now - state.lastFlipAt < 900) {
+      state.streak += 1
+    } else {
+      state.streak = 1
+    }
+    state.direction = direction
+    state.lastFlipAt = now
+    navigate(direction * (state.streak >= 4 ? 2 : 1))
+  }
+
   function handleCarouselWheel(event: WheelEvent<HTMLDivElement>) {
-    if (Math.abs(event.deltaX) <= Math.abs(event.deltaY) || Math.abs(event.deltaX) < 40) return
-    navigate(event.deltaX > 0 ? 1 : -1)
+    if (Math.abs(event.deltaX) < Math.abs(event.deltaY) * 0.8) return
+
+    const direction = event.deltaX > 0 ? 1 : -1
+    const state = wheelState.current
+    if (state.direction !== direction) {
+      state.amount = 0
+      state.direction = direction
+    }
+
+    state.amount += Math.abs(event.deltaX)
+    if (state.amount < 90) return
+
+    state.amount = 0
+    navigateFromScroll(direction)
   }
 
   function handleCarouselPointerDown(event: PointerEvent<HTMLDivElement>) {
@@ -201,6 +233,17 @@ export function CalendarClient({
     if (Math.abs(deltaX) < 80) return
 
     navigate(deltaX < 0 ? 1 : -1)
+  }
+
+  function handleCarouselKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (!isExpanded) return
+    if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      navigate(1)
+    } else if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      navigate(-1)
+    }
   }
 
   function handleDayClick(key: string) {
@@ -262,7 +305,7 @@ export function CalendarClient({
         className={[
           'rounded-2xl border border-border bg-card shadow-sm',
           isCenter
-            ? `relative shrink-0 w-full p-3 sm:p-4 ${isExpanded ? '' : 'max-w-xl'}`
+            ? `relative shrink-0 w-full p-3 sm:p-4 ${isExpanded ? 'h-[min(42rem,calc(100vh-14rem))] max-w-6xl pb-8' : 'max-w-xl'}`
             : isExpanded
               ? 'w-0 overflow-hidden p-0'
               : 'hidden w-[18rem] shrink-0 flex-col p-3 opacity-70 cursor-pointer hover:bg-muted/50 hover:opacity-90 md:flex',
@@ -271,11 +314,12 @@ export function CalendarClient({
         {isCenter ? (
           <>
             <button
-              aria-label={isExpanded ? 'Collapse calendar' : 'Expand calendar'}
+              type="button"
+              aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${label} calendar`}
               onClick={() => setIsExpanded(prev => !prev)}
-              className="absolute top-2 right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-muted/60 text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+              className="mb-2 inline-flex max-w-full whitespace-nowrap rounded-lg px-2 py-1 text-left text-base font-semibold tracking-normal text-foreground transition-colors hover:bg-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              {isExpanded ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+              {label}
             </button>
             <div className="grid grid-cols-7 mb-1">
               {DOW.map((d, i) => {
@@ -315,7 +359,8 @@ export function CalendarClient({
                     whileHover={isCurrentMonth ? { scale: 1.03 } : {}}
                     whileTap={isCurrentMonth ? { scale: 0.97 } : {}}
                     className={[
-                      'relative flex aspect-square flex-col items-center justify-start rounded-xl pt-1 text-xs',
+                      'relative flex flex-col items-center justify-start overflow-hidden rounded-xl text-xs',
+                      isExpanded ? 'h-24 px-1 py-1.5 sm:h-28' : 'aspect-square pt-1',
                       isCurrentMonth ? 'text-foreground cursor-pointer' : 'text-muted-foreground/30 cursor-default',
                       isSelected ? 'bg-muted shadow-sm' : '',
                     ].filter(Boolean).join(' ')}
@@ -330,7 +375,7 @@ export function CalendarClient({
 
                     {isToday && !isSelected && <span className="relative z-10 h-1 w-1 rounded-full bg-primary" />}
 
-                    {totalDots > 0 && (
+                    {totalDots > 0 && !isExpanded && (
                       <div className="relative z-10 mt-1 flex flex-wrap justify-center gap-0.5 px-1">
                         {dayEvents.slice(0, 2).map((ev, i) => {
                           const cat = categories.find(c => c.id === ev.categoryId)
@@ -338,6 +383,39 @@ export function CalendarClient({
                         })}
                         {dayIcsEvents.slice(0, 1).map((_, i) => <span key={`i${i}`} className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />)}
                         {totalDots > 3 && <span className="text-[8px] text-muted-foreground">+{totalDots - 3}</span>}
+                      </div>
+                    )}
+
+                    {totalDots > 0 && isExpanded && (
+                      <div className="relative z-10 mt-1 flex w-full min-w-0 flex-col gap-0.5 px-0.5">
+                        {dayEvents.slice(0, 2).map((ev, i) => {
+                          const cat = categories.find(c => c.id === ev.categoryId)
+                          return (
+                            <div
+                              key={`e${i}`}
+                              className="flex min-w-0 items-center gap-1 rounded bg-muted/55 px-1 py-0.5 text-[9px] leading-none text-foreground"
+                              title={`${compactTimeLabel(ev.startAt)} ${ev.title}`}
+                            >
+                              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: ev.color ?? cat?.color ?? '#6366f1' }} />
+                              <span className="shrink-0 font-medium tabular-nums">{compactTimeLabel(ev.startAt)}</span>
+                              <span data-testid={`calendar-event-title-${ev.occurrenceId}`} className="min-w-0 truncate text-left text-muted-foreground">
+                                {ev.title}
+                              </span>
+                            </div>
+                          )
+                        })}
+                        {dayIcsEvents.slice(0, 1).map((ev, i) => (
+                          <div
+                            key={`i${i}`}
+                            className="flex min-w-0 items-center gap-1 rounded bg-muted/45 px-1 py-0.5 text-[9px] leading-none text-foreground"
+                            title={`${compactTimeLabel(ev.startAt)} ${ev.title}`}
+                          >
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/40" />
+                            <span className="shrink-0 font-medium tabular-nums">{compactTimeLabel(ev.startAt)}</span>
+                            <span className="min-w-0 truncate text-left text-muted-foreground">{ev.title}</span>
+                          </div>
+                        ))}
+                        {totalDots > 3 && <span className="pl-1 text-[9px] leading-none text-muted-foreground">+{totalDots - 3}</span>}
                       </div>
                     )}
                   </motion.div>
@@ -426,39 +504,14 @@ export function CalendarClient({
         <div data-testid="calendar-stack" className="mx-auto flex h-full max-w-7xl flex-col items-center gap-1">
           <LayoutGroup id="calendar">
           <div
-            data-testid="calendar-month-heading"
-            className="mx-auto flex w-full max-w-xl shrink-0 items-center justify-center gap-3"
-          >
-            <button aria-label="Previous month" onClick={() => navigate(-1)} className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background/90 shadow-sm transition-colors hover:bg-muted">
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <div className="min-w-[15rem]">
-              <AnimatePresence mode="popLayout" initial={false}>
-                <motion.h1
-                  key={currentMonth.toISOString()}
-                  layoutId={`${currentMonth.getFullYear()}-${currentMonth.getMonth()}-label`}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
-                  className="origin-center scale-x-95 text-center text-4xl font-extrabold tracking-normal text-foreground"
-                >
-                  {monthLabel(currentMonth)}
-                </motion.h1>
-              </AnimatePresence>
-            </div>
-            <button aria-label="Next month" onClick={() => navigate(1)} className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background/90 shadow-sm transition-colors hover:bg-muted">
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
-
-          <div
             data-testid="month-carousel"
             onWheel={handleCarouselWheel}
             onPointerDown={handleCarouselPointerDown}
             onPointerUp={handleCarouselPointerUp}
             onPointerCancel={() => setDragStartX(null)}
-            className={`flex min-h-0 shrink-0 cursor-grab touch-pan-y select-none items-start justify-center ${isExpanded ? 'gap-0' : 'gap-4'} overflow-visible pt-1 active:cursor-grabbing`}
+            onKeyDown={handleCarouselKeyDown}
+            tabIndex={isExpanded ? 0 : -1}
+            className={`flex min-h-0 w-full ${isExpanded ? 'max-w-6xl gap-0' : 'gap-4'} shrink-0 cursor-grab touch-pan-y select-none items-start justify-center overflow-visible pt-1 active:cursor-grabbing`}
           >
             <AnimatePresence mode="popLayout" initial={false}>
               {carouselMonths.map((month, idx) =>
@@ -467,6 +520,20 @@ export function CalendarClient({
             </AnimatePresence>
           </div>
           </LayoutGroup>
+
+          {!isExpanded && (
+            <div
+              data-testid="calendar-bottom-navigation"
+              className="mx-auto flex w-full max-w-xl shrink-0 items-center justify-center gap-4 pt-2"
+            >
+              <button aria-label="Previous month" onClick={() => navigate(-1)} className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background/90 shadow-sm transition-colors hover:bg-muted">
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button aria-label="Next month" onClick={() => navigate(1)} className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background/90 shadow-sm transition-colors hover:bg-muted">
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
+          )}
 
           {selectedDay && selectedDate && (
             <motion.section
