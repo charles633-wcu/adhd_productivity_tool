@@ -5,7 +5,7 @@ import { HeapCanvas } from '@/components/heap/HeapCanvas'
 vi.mock('@xyflow/react', () => ({
   ReactFlow: ({ children }: { children: React.ReactNode }) => <div data-testid="react-flow-mock">{children}</div>,
   ReactFlowProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  useReactFlow: () => ({ screenToFlowPosition: (p: unknown) => p, addEdge: vi.fn() }),
+  useReactFlow: () => ({ screenToFlowPosition: (p: unknown) => p, addEdge: vi.fn(), fitView: vi.fn() }),
   Background: () => null,
   Controls: () => null,
   MiniMap: () => null,

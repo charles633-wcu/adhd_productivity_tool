@@ -7,9 +7,11 @@ import {
   Controls,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   addEdge,
   type Node,
   type Edge,
+  type EdgeChange,
   type Connection,
   type OnNodeDrag,
   type OnConnect,
@@ -44,6 +46,7 @@ export function HeapCanvas() {
   const [sheetNodeId, setSheetNodeId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const dragAbortRefs = useRef<Map<string, AbortController>>(new Map())
+  const { fitView } = useReactFlow()
 
   useEffect(() => {
     let cancelled = false
@@ -72,6 +75,24 @@ export function HeapCanvas() {
     load()
     return () => { cancelled = true }
   }, [setNodes, setEdges])
+
+  // Fit view after async load so nodes are always visible regardless of stored coordinates
+  useEffect(() => {
+    if (!isLoading) {
+      requestAnimationFrame(() => fitView({ padding: 0.15, duration: 300 }))
+    }
+  }, [isLoading, fitView])
+
+  const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
+    onEdgesChange(changes)
+    changes.forEach((change) => {
+      if (change.type === 'remove') {
+        fetch(`/api/heap/edges/${change.id}`, { method: 'DELETE' }).catch(() => {
+          toast.error('Failed to delete connection')
+        })
+      }
+    })
+  }, [onEdgesChange])
 
   const handleNodeDragStop: OnNodeDrag<Node> = useCallback((_event, node) => {
     const prev = dragAbortRefs.current.get(node.id)
@@ -146,12 +167,11 @@ export function HeapCanvas() {
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
+        onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
         onNodeDragStop={handleNodeDragStop}
         onNodeClick={handleNodeClick}
         nodeTypes={nodeTypes}
-        fitView
       >
         <Background />
         <Controls />
