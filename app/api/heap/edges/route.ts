@@ -9,9 +9,6 @@ import { heapEdges, heapNodes } from '@/lib/db/schema'
 const CreateEdgeSchema = z.object({
   sourceId: z.string().min(1),
   targetId: z.string().min(1),
-}).refine((data) => data.sourceId !== data.targetId, {
-  message: 'Source and target must differ',
-  path: ['targetId'],
 })
 
 function toReactFlowEdge(edge: { id: string; userId: string; sourceId: string; targetId: string; label: string | null; createdAt: Date }) {
@@ -49,6 +46,11 @@ export async function POST(request: Request) {
     const [targetNode] = await db.select().from(heapNodes)
       .where(and(eq(heapNodes.id, targetId), eq(heapNodes.userId, user.id)))
     if (!targetNode) return NextResponse.json({ error: 'Target node not found', code: 'NOT_FOUND' }, { status: 404 })
+
+    // Self-loop check after ownership verification to avoid leaking node existence
+    if (sourceId === targetId) {
+      return NextResponse.json({ error: 'Source and target must differ', code: 'VALIDATION_ERROR' }, { status: 400 })
+    }
 
     try {
       const [edge] = await db.insert(heapEdges).values({

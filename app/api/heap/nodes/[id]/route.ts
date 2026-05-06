@@ -45,12 +45,9 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       .where(and(eq(heapNodes.id, id), eq(heapNodes.userId, user.id)))
     if (!existing) return NextResponse.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 })
 
-    const updateQuery = db.update(heapNodes).set(parsed.data)
+    const [updated] = await db.update(heapNodes).set(parsed.data)
       .where(and(eq(heapNodes.id, id), eq(heapNodes.userId, user.id)))
-    const updatedRows = 'returning' in updateQuery
-      ? await updateQuery.returning()
-      : await updateQuery
-    const [updated] = updatedRows
+      .returning()
     return NextResponse.json(updated)
   } catch (error) {
     return NextResponse.json({ error: String(error), code: 'DB_ERROR' }, { status: 500 })

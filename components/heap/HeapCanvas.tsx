@@ -160,6 +160,7 @@ export function HeapCanvas() {
       <AddNodeFab onNodeCreated={handleNodeCreated} />
       <HeapTodoOverlay
         selectedNodeId={selectedNodeId}
+        selectedNodeTitle={selectedNodeId ? ((nodes.find(n => n.id === selectedNodeId)?.data as HeapNodeData | undefined)?.title ?? null) : null}
         onClose={() => setSelectedNodeId(null)}
       />
       <NodeDetailSheet

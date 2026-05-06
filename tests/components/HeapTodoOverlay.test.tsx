@@ -12,22 +12,23 @@ describe('HeapTodoOverlay', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('renders minimized pill by default', () => {
-    render(<HeapTodoOverlay selectedNodeId={null} onClose={vi.fn()} />)
+    render(<HeapTodoOverlay selectedNodeId={null} selectedNodeTitle={null} onClose={vi.fn()} />)
     expect(screen.getByRole('button', { name: /tasks/i })).toBeTruthy()
   })
 
   it('expands to half-open on pill click', async () => {
     ;(global.fetch as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({ ok: true, json: async () => mockTodos })
-    render(<HeapTodoOverlay selectedNodeId={null} onClose={vi.fn()} />)
+    render(<HeapTodoOverlay selectedNodeId={null} selectedNodeTitle={null} onClose={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: /tasks/i }))
     await waitFor(() => expect(screen.getByText('Fix bug')).toBeTruthy())
   })
 
-  it('shows node-filtered tasks when selectedNodeId is set', async () => {
+  it('shows node-filtered tasks and node title when selectedNodeId is set', async () => {
     ;(global.fetch as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({ ok: true, json: async () => mockTodos })
-    render(<HeapTodoOverlay selectedNodeId="n-1" onClose={vi.fn()} />)
+    render(<HeapTodoOverlay selectedNodeId="n-1" selectedNodeTitle="Side project" onClose={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('Fix bug')).toBeTruthy())
+    expect(screen.getByText('Side project')).toBeTruthy()
   })
 })

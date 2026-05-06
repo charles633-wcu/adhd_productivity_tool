@@ -134,6 +134,6 @@ describe('DELETE /api/heap/nodes/[id]/todos/[todoId]', () => {
       new Request('http://localhost/api/heap/nodes/n-1/todos/t-1', { method: 'DELETE' }),
       { params: Promise.resolve({ id: 'n-1', todoId: 't-1' }) }
     )
-    expect([204, 404]).toContain(res.status)
+    expect(res.status).toBe(204)
   })
 })

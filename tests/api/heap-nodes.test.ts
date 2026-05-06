@@ -170,7 +170,15 @@ describe('PATCH /api/heap/nodes/[id]', () => {
 
   it('updates node fields and returns 200', async () => {
     const node = mockNode({ title: 'New' })
+    // select chain (existing check) uses mockDb's where() → Promise
     const db = mockDb([node])
+    // update chain needs where() → chain so .returning() can be chained
+    const updateChain = {
+      set: vi.fn(() => updateChain),
+      where: vi.fn(() => updateChain),
+      returning: vi.fn(() => Promise.resolve([node])),
+    }
+    db.update = vi.fn(() => updateChain)
     getDb.mockReturnValue(db)
     const res = await PATCH(
       new Request('http://localhost/api/heap/nodes/node-1', {

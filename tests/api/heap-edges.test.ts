@@ -46,7 +46,10 @@ describe('GET /api/heap/edges', () => {
 describe('POST /api/heap/edges', () => {
   beforeEach(() => { vi.clearAllMocks(); getCurrentUser.mockResolvedValue({ id: 'u1' }) })
 
-  it('returns 400 when sourceId === targetId', async () => {
+  it('returns 400 when sourceId === targetId (after ownership verified)', async () => {
+    // Ownership check runs first — both lookups for the same id return the node
+    const db = mockDb([mockNode('n-1')])
+    getDb.mockReturnValue(db)
     const res = await POST(new Request('http://localhost/api/heap/edges', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sourceId: 'n-1', targetId: 'n-1' }),

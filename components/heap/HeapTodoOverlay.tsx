@@ -2,16 +2,18 @@
 
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp, X } from 'lucide-react'
+import { toast } from 'sonner'
 import type { Todo } from '@/lib/db/schema'
 
 interface HeapTodoOverlayProps {
   selectedNodeId: string | null
+  selectedNodeTitle: string | null
   onClose: () => void
 }
 
 type OverlayState = 'minimized' | 'open'
 
-export function HeapTodoOverlay({ selectedNodeId, onClose }: HeapTodoOverlayProps) {
+export function HeapTodoOverlay({ selectedNodeId, selectedNodeTitle, onClose }: HeapTodoOverlayProps) {
   const [panelState, setPanelState] = useState<OverlayState>('minimized')
   const [todos, setTodos] = useState<Todo[]>([])
   const [addInput, setAddInput] = useState('')
@@ -35,7 +37,10 @@ export function HeapTodoOverlay({ selectedNodeId, onClose }: HeapTodoOverlayProp
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: addInput.trim() }),
     })
-    if (!res.ok) return
+    if (!res.ok) {
+      toast.error('Set up your Inbox first')
+      return
+    }
     const newTodo: Todo = await res.json()
     if (selectedNodeId) {
       await fetch(`/api/heap/nodes/${selectedNodeId}/todos`, {
@@ -67,7 +72,7 @@ export function HeapTodoOverlay({ selectedNodeId, onClose }: HeapTodoOverlayProp
     <div className="absolute top-0 right-0 h-full w-72 bg-card/95 border-l border-border flex flex-col z-40 shadow-xl">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <span className="text-sm font-semibold text-foreground">
-          {selectedNodeId ? 'Node tasks' : 'Tasks'}
+          {selectedNodeId ? (selectedNodeTitle ?? 'Node tasks') : 'Tasks'}
         </span>
         <div className="flex items-center gap-2">
           <button type="button" aria-label="Minimize tasks" onClick={() => setPanelState('minimized')} className="text-muted-foreground hover:text-foreground">
