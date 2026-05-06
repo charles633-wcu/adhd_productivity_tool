@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 
+import { ReactFlowProvider } from '@xyflow/react'
 import { AppHeader } from '@/components/AppHeader'
 import { HeapCanvas } from '@/components/heap/HeapCanvas'
 import { getCurrentUser } from '@/lib/auth'
@@ -12,7 +13,9 @@ export default async function HeapPage() {
     <div className="flex h-screen flex-col overflow-hidden">
       <AppHeader active="heap" />
       <div className="relative flex-1 overflow-hidden">
-        <HeapCanvas />
+        <ReactFlowProvider>
+          <HeapCanvas />
+        </ReactFlowProvider>
       </div>
     </div>
   )

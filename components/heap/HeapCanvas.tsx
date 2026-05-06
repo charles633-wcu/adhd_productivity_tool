@@ -17,6 +17,8 @@ import {
 import { toast } from 'sonner'
 import { HeapNode, type HeapNodeData } from './HeapNode'
 import { AddNodeFab } from './AddNodeFab'
+import { HeapTodoOverlay } from './HeapTodoOverlay'
+import { NodeDetailSheet } from './NodeDetailSheet'
 import type { HeapNode as HeapNodeType } from '@/lib/db/schema'
 
 const nodeTypes = { heapNode: HeapNode }
@@ -39,6 +41,7 @@ export function HeapCanvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [sheetNodeId, setSheetNodeId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const dragAbortRefs = useRef<Map<string, AbortController>>(new Map())
 
@@ -110,11 +113,26 @@ export function HeapCanvas() {
 
   function handleNodeClick(_event: React.MouseEvent, node: Node) {
     setSelectedNodeId(node.id)
+    setSheetNodeId(node.id)
   }
 
   function handleNodeCreated(node: HeapNodeType) {
     setNodes((currentNodes) => [...currentNodes, toFlowNode(node)])
     setSelectedNodeId(node.id)
+    setSheetNodeId(node.id)
+  }
+
+  function handleNodeDeleted(nodeId: string) {
+    setNodes((currentNodes) => currentNodes.filter((node) => node.id !== nodeId))
+    setEdges((currentEdges) => currentEdges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId))
+    if (selectedNodeId === nodeId) setSelectedNodeId(null)
+    setSheetNodeId(null)
+  }
+
+  function handleNodeUpdated(nodeId: string, data: Partial<HeapNodeData>) {
+    setNodes((currentNodes) => currentNodes.map((node) => (
+      node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node
+    )))
   }
 
   return (
@@ -140,6 +158,16 @@ export function HeapCanvas() {
       </ReactFlow>
 
       <AddNodeFab onNodeCreated={handleNodeCreated} />
+      <HeapTodoOverlay
+        selectedNodeId={selectedNodeId}
+        onClose={() => setSelectedNodeId(null)}
+      />
+      <NodeDetailSheet
+        nodeId={sheetNodeId}
+        onClose={() => setSheetNodeId(null)}
+        onDeleted={handleNodeDeleted}
+        onUpdated={handleNodeUpdated}
+      />
     </div>
   )
 }
