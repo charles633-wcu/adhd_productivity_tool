@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getDb } from '@/lib/db/client'
 import { triggers, categories } from '@/lib/db/schema'
+import type { TriggerStatus } from '@/lib/db/schema'
 import { createTrigger } from '@/lib/db/triggers'
 import { getCurrentUser } from '@/lib/auth'
 import { eq, and } from 'drizzle-orm'
@@ -20,20 +21,26 @@ const CreateTriggerSchema = z.object({
 })
 
 /**
- * GET /api/triggers?categoryId=xxx — list triggers (optionally filtered by category)
+ * GET /api/triggers?categoryId=xxx&status=active — list triggers (optionally filtered by category and/or status)
  */
 export async function GET(request: Request) {
   try {
     const user = await getCurrentUser()
     const { searchParams } = new URL(request.url)
     const categoryId = searchParams.get('categoryId')
+    const statusParam = searchParams.get('status')
+
+    // Validate status param if provided
+    if (statusParam && !['active', 'snoozed', 'archived'].includes(statusParam)) {
+      return NextResponse.json({ error: 'Invalid status value', code: 'VALIDATION_ERROR' }, { status: 400 })
+    }
+
     const db = getDb()
+    const conditions = [eq(triggers.userId, user.id)]
+    if (categoryId) conditions.push(eq(triggers.categoryId, categoryId))
+    if (statusParam) conditions.push(eq(triggers.status, statusParam as TriggerStatus))
 
-    // Filter by categoryId if provided, otherwise return all user's triggers
-    const rows = categoryId
-      ? await db.select().from(triggers).where(and(eq(triggers.userId, user.id), eq(triggers.categoryId, categoryId)))
-      : await db.select().from(triggers).where(eq(triggers.userId, user.id))
-
+    const rows = await db.select().from(triggers).where(and(...conditions))
     return NextResponse.json(rows)
   } catch (error) {
     return NextResponse.json({ error: String(error), code: 'DB_ERROR' }, { status: 500 })
