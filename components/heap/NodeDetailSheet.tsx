@@ -24,6 +24,11 @@ interface NodeDetailSheetProps {
   onUpdated: (nodeId: string, data: Partial<HeapNodeData>) => void
 }
 
+/**
+ * NodeDetailSheet — right-side drawer for a Heap (Mind) canvas node.
+ * Handles node editing (title, type, color, body), linked tasks (create-and-link
+ * or detach), and linked triggers (lazy picker with single-focus fetch, detach).
+ */
 export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeDetailSheetProps) {
   const [node, setNode] = useState<HeapNode | null>(null)
   const [title, setTitle] = useState('')
@@ -32,6 +37,7 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
   const [newTodoInput, setNewTodoInput] = useState('')
   const [deleteConfirm, setConfirm] = useState(false)
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pickerBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Linked triggers state
   const [linkedTriggers, setLinkedTriggers] = useState<{
@@ -43,7 +49,10 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
   const [pickerOpen, setPickerOpen] = useState(false)
 
   useEffect(() => {
-    return () => { if (resetTimerRef.current) clearTimeout(resetTimerRef.current) }
+    return () => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current)
+      if (pickerBlurTimerRef.current) clearTimeout(pickerBlurTimerRef.current)
+    }
   }, [])
 
   useEffect(() => {
@@ -322,7 +331,10 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
               value={triggerInput}
               onChange={(e) => { setTriggerInput(e.target.value); setPickerOpen(true) }}
               onFocus={() => { setPickerOpen(true); void handleTriggerPickerFocus() }}
-              onBlur={() => setTimeout(() => setPickerOpen(false), 150)}
+              onBlur={() => {
+                if (pickerBlurTimerRef.current) clearTimeout(pickerBlurTimerRef.current)
+                pickerBlurTimerRef.current = setTimeout(() => setPickerOpen(false), 150)
+              }}
               placeholder="Link a trigger..."
               aria-label="Link a trigger"
               className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
