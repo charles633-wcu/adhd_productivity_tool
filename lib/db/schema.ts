@@ -249,6 +249,14 @@ export const heapNodeTodos = sqliteTable('heap_node_todos', {
   pk: primaryKey({ columns: [t.nodeId, t.todoId] }),
 }))
 
+// heap_node_triggers - junction: many heap_nodes to many triggers (cascade on both sides)
+export const heapNodeTriggers = sqliteTable('heap_node_triggers', {
+  nodeId: text('node_id').notNull().references(() => heapNodes.id, { onDelete: 'cascade' }),
+  triggerId: text('trigger_id').notNull().references(() => triggers.id, { onDelete: 'cascade' }),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.nodeId, t.triggerId] }),
+}))
+
 // Infer TypeScript types from schema
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
@@ -280,3 +288,5 @@ export type NewHeapNode = typeof heapNodes.$inferInsert
 export type HeapEdge = typeof heapEdges.$inferSelect
 export type NewHeapEdge = typeof heapEdges.$inferInsert
 export type HeapNodeTodo = typeof heapNodeTodos.$inferSelect
+export type HeapNodeTrigger = typeof heapNodeTriggers.$inferSelect
+export type NewHeapNodeTrigger = typeof heapNodeTriggers.$inferInsert
