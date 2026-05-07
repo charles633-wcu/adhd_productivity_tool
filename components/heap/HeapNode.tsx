@@ -27,7 +27,8 @@ export function HeapNode({ data, selected }: NodeProps) {
       style={{ borderColor }}
       className={`bg-card border-2 rounded-xl px-3 py-2.5 min-w-[110px] max-w-[160px] shadow-md transition-shadow ${selected ? 'shadow-lg ring-1 ring-primary' : ''}`}
     >
-      <Handle type="target" position={Position.Left} className="!bg-border !w-2 !h-2" />
+      {/* target handle — drop here to receive a connection */}
+      <Handle type="target" position={Position.Left} title="Drop connection here" className="!bg-primary !border-2 !border-background !w-3 !h-3" />
 
       <div className="flex items-center gap-1.5">
         <span className="text-[10px] leading-none text-muted-foreground">{TYPE_ICON[d.type]}</span>
@@ -39,7 +40,8 @@ export function HeapNode({ data, selected }: NodeProps) {
         )}
       </div>
 
-      <Handle type="source" position={Position.Right} className="!bg-border !w-2 !h-2" />
+      {/* source handle — drag from here to connect to another node */}
+      <Handle type="source" position={Position.Right} title="Drag to connect" className="!bg-primary !border-2 !border-background !w-3 !h-3" />
     </div>
   )
 }

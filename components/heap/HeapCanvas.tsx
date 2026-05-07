@@ -16,10 +16,12 @@ import {
   type OnNodeDrag,
   type OnConnect,
 } from '@xyflow/react'
+import { HelpCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { HeapNode, type HeapNodeData } from './HeapNode'
 import { AddNodeFab } from './AddNodeFab'
 import { HeapTodoOverlay } from './HeapTodoOverlay'
+import { HeapTutorial } from './HeapTutorial'
 import { NodeDetailSheet } from './NodeDetailSheet'
 import type { HeapNode as HeapNodeType } from '@/lib/db/schema'
 
@@ -45,6 +47,7 @@ export function HeapCanvas() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [sheetNodeId, setSheetNodeId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [showTutorial, setShowTutorial] = useState(false)
   const dragAbortRefs = useRef<Map<string, AbortController>>(new Map())
   const { fitView } = useReactFlow()
 
@@ -172,12 +175,23 @@ export function HeapCanvas() {
         onNodeDragStop={handleNodeDragStop}
         onNodeClick={handleNodeClick}
         nodeTypes={nodeTypes}
+        colorMode="dark"
       >
         <Background />
-        <Controls />
+        {/* Move controls to top-left so they don't collide with the bottom FABs */}
+        <Controls position="top-left" />
       </ReactFlow>
 
       <AddNodeFab onNodeCreated={handleNodeCreated} />
+      <button
+        type="button"
+        onClick={() => setShowTutorial(true)}
+        aria-label="How to use Mind"
+        className="absolute bottom-6 left-20 z-30 bg-card border border-border text-muted-foreground rounded-full w-12 h-12 flex items-center justify-center shadow-lg hover:text-foreground hover:border-primary transition-colors"
+      >
+        <HelpCircle className="w-5 h-5" />
+      </button>
+      {showTutorial && <HeapTutorial onClose={() => setShowTutorial(false)} />}
       <HeapTodoOverlay
         selectedNodeId={selectedNodeId}
         selectedNodeTitle={selectedNodeId ? ((nodes.find(n => n.id === selectedNodeId)?.data as HeapNodeData | undefined)?.title ?? null) : null}
