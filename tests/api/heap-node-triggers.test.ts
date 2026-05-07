@@ -161,8 +161,14 @@ describe('DELETE /api/heap/nodes/[id]/triggers/[triggerId]', () => {
   })
 
   it('deletes junction row and returns 204', async () => {
+    let call = 0
     const db = mockDb()
-    db.where = vi.fn(() => Promise.resolve([mockNode()]))
+    db.where = vi.fn(() => {
+      call++
+      if (call === 1) return Promise.resolve([mockNode()])
+      if (call === 2) return Promise.resolve([mockTrigger()])
+      return Promise.resolve([{ nodeId: 'n-1', triggerId: 'tr-1' }])
+    })
     db.delete = vi.fn(() => db)
     getDb.mockReturnValue(db)
     const res = await DELETE(
@@ -170,5 +176,6 @@ describe('DELETE /api/heap/nodes/[id]/triggers/[triggerId]', () => {
       { params: Promise.resolve({ id: 'n-1', triggerId: 'tr-1' }) }
     )
     expect(res.status).toBe(204)
+    expect(db.delete).toHaveBeenCalledOnce()
   })
 })
