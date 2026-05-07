@@ -33,6 +33,15 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
   const [deleteConfirm, setConfirm] = useState(false)
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Linked triggers state
+  const [linkedTriggers, setLinkedTriggers] = useState<{
+    id: string; title: string; status: string; nextReviewAt: string | Date; categoryId: string
+  }[]>([])
+  const [allTriggers, setAllTriggers] = useState<{ id: string; title: string }[]>([])
+  const [triggerPickerFetched, setTriggerPickerFetched] = useState(false)
+  const [triggerInput, setTriggerInput] = useState('')
+  const [pickerOpen, setPickerOpen] = useState(false)
+
   useEffect(() => {
     return () => { if (resetTimerRef.current) clearTimeout(resetTimerRef.current) }
   }, [])
@@ -41,6 +50,11 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
     if (!nodeId) {
       setNode(null)
       setConfirm(false)
+      setLinkedTriggers([])
+      setAllTriggers([])
+      setTriggerPickerFetched(false)
+      setTriggerInput('')
+      setPickerOpen(false)
       return
     }
 
@@ -55,6 +69,15 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
     fetch(`/api/heap/nodes/${nodeId}/todos`)
       .then((res) => res.ok ? res.json() : [])
       .then(setLinkedTodos)
+    fetch(`/api/heap/nodes/${nodeId}/triggers`)
+      .then((res) => res.ok ? res.json() : [])
+      .then(setLinkedTriggers)
+
+    // Reset picker state on node change
+    setAllTriggers([])
+    setTriggerPickerFetched(false)
+    setTriggerInput('')
+    setPickerOpen(false)
 
     setConfirm(false)
     if (resetTimerRef.current) clearTimeout(resetTimerRef.current)
@@ -134,6 +157,38 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
     setLinkedTodos((current) => current.filter((todo) => todo.id !== todoId))
   }
 
+  // Unlink a trigger from this node
+  async function handleDetachTrigger(triggerId: string) {
+    await fetch(`/api/heap/nodes/${currentNodeId}/triggers/${triggerId}`, { method: 'DELETE' })
+    setLinkedTriggers((current) => current.filter((t) => t.id !== triggerId))
+  }
+
+  // Fetch all active triggers once when the picker is first focused
+  async function handleTriggerPickerFocus() {
+    if (triggerPickerFetched) return
+    const res = await fetch('/api/triggers?status=active')
+    if (res.ok) {
+      const data = await res.json()
+      setAllTriggers(data.map((t: { id: string; title: string }) => ({ id: t.id, title: t.title })))
+    }
+    setTriggerPickerFetched(true)
+  }
+
+  // Link a trigger to this node via POST
+  async function handleLinkTrigger(triggerId: string) {
+    const res = await fetch(`/api/heap/nodes/${currentNodeId}/triggers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ triggerId }),
+    })
+    if (res.ok) {
+      const linked = await res.json()
+      setLinkedTriggers((current) => [...current, linked])
+    }
+    setTriggerInput('')
+    setPickerOpen(false)
+  }
+
   function handleDeleteClick() {
     if (!deleteConfirm) {
       setConfirm(true)
@@ -151,6 +206,11 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
     if (resetTimerRef.current) clearTimeout(resetTimerRef.current)
     onClose()
   }
+
+  // Filter the picker list by whatever the user has typed
+  const filteredTriggers = triggerInput
+    ? allTriggers.filter((t) => t.title.toLowerCase().includes(triggerInput.toLowerCase()))
+    : allTriggers
 
   return (
     <div className="absolute top-0 right-0 h-full w-72 bg-card border-l border-border flex flex-col z-[60] shadow-xl">
@@ -231,6 +291,64 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
             className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50 mt-1"
             aria-label="Create and link task"
           />
+        </div>
+
+        {/* Linked triggers section */}
+        <div>
+          <p className="text-xs text-muted-foreground uppercase tracking-widest mb-2">Linked triggers</p>
+          {linkedTriggers.length === 0 && (
+            <p className="text-xs text-muted-foreground/50 italic mb-2">No linked triggers.</p>
+          )}
+          {linkedTriggers.map((trigger) => (
+            <div key={trigger.id} className="flex items-center justify-between py-1 gap-2">
+              <div className="flex flex-col min-w-0">
+                <span className="text-sm truncate">{trigger.title}</span>
+                <span className="text-[10px] text-muted-foreground/60">
+                  due {new Date(trigger.nextReviewAt as string).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </span>
+              </div>
+              <button
+                type="button"
+                aria-label="Unlink trigger"
+                onClick={() => handleDetachTrigger(trigger.id)}
+                className="text-muted-foreground hover:text-destructive flex-shrink-0 text-xs"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <div className="relative mt-1">
+            <input
+              value={triggerInput}
+              onChange={(e) => { setTriggerInput(e.target.value); setPickerOpen(true) }}
+              onFocus={() => { setPickerOpen(true); void handleTriggerPickerFocus() }}
+              onBlur={() => setTimeout(() => setPickerOpen(false), 150)}
+              placeholder="Link a trigger..."
+              aria-label="Link a trigger"
+              className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+            />
+            {pickerOpen && filteredTriggers.length > 0 && (
+              <div className="absolute left-0 right-0 top-full bg-popover border border-border rounded-md shadow-lg z-[70] max-h-48 overflow-y-auto">
+                {filteredTriggers.slice(0, 10).map((t) => {
+                  const isLinked = linkedTriggers.some((lt) => lt.id === t.id)
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onMouseDown={() => { if (!isLinked) void handleLinkTrigger(t.id) }}
+                      className={cn(
+                        'w-full text-left px-3 py-2 text-sm transition-colors',
+                        isLinked ? 'text-muted-foreground/50 cursor-default' : 'hover:bg-muted',
+                      )}
+                    >
+                      {t.title}
+                      {isLinked && <span className="ml-2 text-[10px]">linked</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
