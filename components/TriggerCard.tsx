@@ -41,6 +41,8 @@ interface TriggerCardProps {
   onDelete: (triggerId: string) => void
   onRetry?: (triggerId: string) => Promise<string | null> | string | null
   isProcessing?: boolean
+  /** Optional Mind canvas nodes linked to this trigger — shown as display-only badges */
+  linkedNodes?: { id: string; title: string }[]
 }
 
 function formatCardDate(date: Date): string {
@@ -55,6 +57,7 @@ export function TriggerCard({
   onDelete,
   onRetry,
   isProcessing = false,
+  linkedNodes,
 }: TriggerCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -132,6 +135,20 @@ export function TriggerCard({
           )}
         </div>
       </div>
+
+      {/* Mind canvas badges — display-only, shown only when linked nodes are present */}
+      {linkedNodes && linkedNodes.length > 0 && (
+        <div className="flex flex-wrap gap-1 px-4 pb-2 pl-4">
+          {linkedNodes.map((node) => (
+            <span
+              key={node.id}
+              className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-mono text-primary/70 ring-1 ring-primary/20"
+            >
+              Mind: {node.title}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="px-4 pb-3 flex items-center gap-2">
         <button

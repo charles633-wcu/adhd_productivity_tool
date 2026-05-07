@@ -168,4 +168,46 @@ describe('TriggerCard', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
     expect(screen.getByRole('alert').textContent).toContain('Not enough detail')
   })
+
+  it('renders Mind badges when linkedNodes is non-empty', () => {
+    render(
+      <TriggerCard
+        trigger={makeTrigger()}
+        categoryName="Health"
+        onSuccess={mockSuccess}
+        onEdit={mockEdit}
+        onDelete={vi.fn()}
+        linkedNodes={[{ id: 'n-1', title: 'Fitness goal' }, { id: 'n-2', title: 'Daily routine' }]}
+      />
+    )
+    expect(screen.getByText('Mind: Fitness goal')).toBeTruthy()
+    expect(screen.getByText('Mind: Daily routine')).toBeTruthy()
+  })
+
+  it('renders no Mind badges when linkedNodes is empty', () => {
+    render(
+      <TriggerCard
+        trigger={makeTrigger()}
+        categoryName="Health"
+        onSuccess={mockSuccess}
+        onEdit={mockEdit}
+        onDelete={vi.fn()}
+        linkedNodes={[]}
+      />
+    )
+    expect(screen.queryByText(/Mind:/)).toBeNull()
+  })
+
+  it('renders no Mind badges when linkedNodes is undefined', () => {
+    render(
+      <TriggerCard
+        trigger={makeTrigger()}
+        categoryName="Health"
+        onSuccess={mockSuccess}
+        onEdit={mockEdit}
+        onDelete={vi.fn()}
+      />
+    )
+    expect(screen.queryByText(/Mind:/)).toBeNull()
+  })
 })
