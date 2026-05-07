@@ -100,6 +100,7 @@ describe('POST /api/heap/nodes/[id]/triggers', () => {
     expect(body.title).toBe('My trigger')
     // Should NOT include userId or fullContent — lean subset only
     expect(body.userId).toBeUndefined()
+    expect(body.fullContent).toBeUndefined()
   })
 
   it('returns 409 when link already exists', async () => {
