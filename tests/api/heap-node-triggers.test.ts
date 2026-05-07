@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { GET, POST } from '@/app/api/heap/nodes/[id]/triggers/route'
+import { DELETE } from '@/app/api/heap/nodes/[id]/triggers/[triggerId]/route'
 
 const { getCurrentUser, getDb } = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
@@ -115,5 +116,59 @@ describe('POST /api/heap/nodes/[id]/triggers', () => {
       { params: Promise.resolve({ id: 'n-1' }) }
     )
     expect(res.status).toBe(409)
+  })
+})
+
+describe('DELETE /api/heap/nodes/[id]/triggers/[triggerId]', () => {
+  beforeEach(() => { vi.clearAllMocks(); getCurrentUser.mockResolvedValue({ id: 'u1' }) })
+
+  it('returns 404 when node not owned', async () => {
+    getDb.mockReturnValue(mockDb([]))
+    const res = await DELETE(
+      new Request('http://localhost/api/heap/nodes/n-1/triggers/tr-1', { method: 'DELETE' }),
+      { params: Promise.resolve({ id: 'n-1', triggerId: 'tr-1' }) }
+    )
+    expect(res.status).toBe(404)
+  })
+
+  it('returns 404 when trigger not owned', async () => {
+    let call = 0
+    const db = mockDb()
+    db.where = vi.fn(() => { call++; return Promise.resolve(call === 1 ? [mockNode()] : []) })
+    getDb.mockReturnValue(db)
+    const res = await DELETE(
+      new Request('http://localhost/api/heap/nodes/n-1/triggers/tr-1', { method: 'DELETE' }),
+      { params: Promise.resolve({ id: 'n-1', triggerId: 'tr-1' }) }
+    )
+    expect(res.status).toBe(404)
+  })
+
+  it('returns 404 when junction row does not exist', async () => {
+    let call = 0
+    const db = mockDb()
+    db.where = vi.fn(() => {
+      call++
+      if (call === 1) return Promise.resolve([mockNode()])
+      if (call === 2) return Promise.resolve([mockTrigger()])
+      return Promise.resolve([])
+    })
+    getDb.mockReturnValue(db)
+    const res = await DELETE(
+      new Request('http://localhost/api/heap/nodes/n-1/triggers/tr-1', { method: 'DELETE' }),
+      { params: Promise.resolve({ id: 'n-1', triggerId: 'tr-1' }) }
+    )
+    expect(res.status).toBe(404)
+  })
+
+  it('deletes junction row and returns 204', async () => {
+    const db = mockDb()
+    db.where = vi.fn(() => Promise.resolve([mockNode()]))
+    db.delete = vi.fn(() => db)
+    getDb.mockReturnValue(db)
+    const res = await DELETE(
+      new Request('http://localhost/api/heap/nodes/n-1/triggers/tr-1', { method: 'DELETE' }),
+      { params: Promise.resolve({ id: 'n-1', triggerId: 'tr-1' }) }
+    )
+    expect(res.status).toBe(204)
   })
 })
