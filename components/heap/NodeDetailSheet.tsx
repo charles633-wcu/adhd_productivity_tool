@@ -168,8 +168,10 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
 
   // Unlink a trigger from this node
   async function handleDetachTrigger(triggerId: string) {
-    await fetch(`/api/heap/nodes/${currentNodeId}/triggers/${triggerId}`, { method: 'DELETE' })
-    setLinkedTriggers((current) => current.filter((t) => t.id !== triggerId))
+    const res = await fetch(`/api/heap/nodes/${currentNodeId}/triggers/${triggerId}`, { method: 'DELETE' })
+    if (res.ok || res.status === 404) {
+      setLinkedTriggers((current) => current.filter((t) => t.id !== triggerId))
+    }
   }
 
   // Fetch all active triggers once when the picker is first focused
