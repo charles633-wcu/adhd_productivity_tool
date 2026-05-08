@@ -11,6 +11,7 @@ interface CategoryViewClientProps {
   currentFilter: string
   triggers: Trigger[]
   categoryName: string
+  nodeMap: Record<string, { id: string; title: string }[]>
 }
 
 export function CategoryViewClient({
@@ -18,6 +19,7 @@ export function CategoryViewClient({
   currentFilter,
   triggers,
   categoryName,
+  nodeMap,
 }: CategoryViewClientProps) {
   const router = useRouter()
   const [processingId, setProcessingId] = useState<string | null>(null)
@@ -102,6 +104,7 @@ export function CategoryViewClient({
                   onDelete={handleDelete}
                   onRetry={handleRetry}
                   isProcessing={processingId === trigger.id}
+                  linkedNodes={nodeMap[trigger.id] ?? []}
                 />
               </li>
             ))}
