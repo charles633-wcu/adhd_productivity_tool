@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 
 import { getDb } from '@/lib/db/client'
-import { categories, triggers } from '@/lib/db/schema'
+import { categories, triggers, heapNodeTriggers, heapNodes } from '@/lib/db/schema'
 import { eq, and, lte, asc } from 'drizzle-orm'
 import { getCurrentUser } from '@/lib/auth'
 import { ReviewQueueClient } from '@/components/ReviewQueueClient'
@@ -37,6 +37,22 @@ export default async function ReviewPage() {
     }))
     .filter(group => group.triggers.length > 0)
 
+  // Build a map of triggerId → linked heap nodes for badge display on TriggerCard
+  const nodeLinkRows = await db
+    .select({
+      triggerId: heapNodeTriggers.triggerId,
+      nodeId: heapNodes.id,
+      nodeTitle: heapNodes.title,
+    })
+    .from(heapNodeTriggers)
+    .innerJoin(heapNodes, eq(heapNodeTriggers.nodeId, heapNodes.id))
+    .where(eq(heapNodes.userId, user.id))
+
+  const nodeMap: Record<string, { id: string; title: string }[]> = {}
+  for (const row of nodeLinkRows) {
+    nodeMap[row.triggerId] = [...(nodeMap[row.triggerId] ?? []), { id: row.nodeId, title: row.nodeTitle }]
+  }
+
   return (
     <div className="min-h-screen flex flex-col pt-[60px]">
       <AppHeader active="triggers" />
@@ -51,7 +67,7 @@ export default async function ReviewPage() {
       </div>
 
       <main className="max-w-2xl mx-auto w-full px-4 py-6">
-        <ReviewQueueClient grouped={grouped} />
+        <ReviewQueueClient grouped={grouped} nodeMap={nodeMap} />
       </main>
     </div>
   )

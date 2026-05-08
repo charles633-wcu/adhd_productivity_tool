@@ -8,9 +8,10 @@ import type { Category, Trigger } from '@/lib/db/schema'
 
 interface ReviewQueueClientProps {
   grouped: Array<{ category: Category; triggers: Trigger[] }>
+  nodeMap: Record<string, { id: string; title: string }[]>
 }
 
-export function ReviewQueueClient({ grouped }: ReviewQueueClientProps) {
+export function ReviewQueueClient({ grouped, nodeMap }: ReviewQueueClientProps) {
   const router = useRouter()
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [editingTriggerId, setEditingTriggerId] = useState<string | null>(null)
@@ -84,6 +85,7 @@ export function ReviewQueueClient({ grouped }: ReviewQueueClientProps) {
                     onDelete={handleDelete}
                     onRetry={id => handleRetry(id, triggers)}
                     isProcessing={processingId === trigger.id}
+                    linkedNodes={nodeMap[trigger.id] ?? []}
                   />
                 </li>
               ))}
