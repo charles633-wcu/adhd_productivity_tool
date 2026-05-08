@@ -44,7 +44,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
     ))
     .orderBy(asc(triggers.priority), asc(triggers.nextReviewAt))
 
-  // Fetch heap node links for all triggers in this category
+  // Fetch heap node links for all triggers owned by this user (nodeMap is filtered client-side per trigger)
   const nodeLinkRows = await db
     .select({
       triggerId: heapNodeTriggers.triggerId,
