@@ -12,6 +12,9 @@ const PatchNodeSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
   posX: z.number().finite().optional(),
   posY: z.number().finite().optional(),
+  shape: z.enum(['rectangle', 'circle', 'diamond', 'pill']).optional(),
+  width: z.number().positive().optional(),
+  height: z.number().positive().optional(),
 })
 
 type RouteContext = { params: Promise<{ id: string }> }

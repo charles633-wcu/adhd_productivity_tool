@@ -53,6 +53,9 @@ function mockNode(overrides = {}) {
     color: null,
     posX: 0,
     posY: 0,
+    shape: 'rectangle',
+    width: null,
+    height: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -222,5 +225,73 @@ describe('DELETE /api/heap/nodes/[id]', () => {
       { params: Promise.resolve({ id: 'node-1' }) }
     )
     expect(res.status).toBe(204)
+  })
+})
+
+describe('PATCH /api/heap/nodes/[id] — shape and dimensions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getCurrentUser.mockResolvedValue({ id: 'u1' })
+  })
+
+  it('persists a valid shape change and returns updated node', async () => {
+    const existing = mockNode()
+    const updated = mockNode({ shape: 'circle' })
+    const db = mockDb([existing])
+    // The PATCH route calls db.update(...).set(...).where(...).returning()
+    // mockDb's chain.where() returns a Promise, so we need a separate updateChain
+    // where .where() stays chainable so .returning() can be called on it.
+    const updateChain = {
+      set: vi.fn(() => updateChain),
+      where: vi.fn(() => updateChain),
+      returning: vi.fn(() => Promise.resolve([updated])),
+    }
+    db.update = vi.fn(() => updateChain)
+    getDb.mockReturnValue(db)
+    const req = new Request('http://localhost', {
+      method: 'PATCH',
+      body: JSON.stringify({ shape: 'circle' }),
+      headers: { 'Content-Type': 'application/json' },
+    })
+    const res = await PATCH(req, { params: Promise.resolve({ id: 'node-1' }) })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.shape).toBe('circle')
+  })
+
+  it('returns 400 for an invalid shape value', async () => {
+    // Zod validation runs before any DB call — no updateChain needed
+    const db = mockDb([mockNode()])
+    getDb.mockReturnValue(db)
+    const req = new Request('http://localhost', {
+      method: 'PATCH',
+      body: JSON.stringify({ shape: 'hexagon' }),
+      headers: { 'Content-Type': 'application/json' },
+    })
+    const res = await PATCH(req, { params: Promise.resolve({ id: 'node-1' }) })
+    expect(res.status).toBe(400)
+  })
+
+  it('persists width and height and returns them', async () => {
+    const existing = mockNode()
+    const updated = mockNode({ width: 120, height: 120 })
+    const db = mockDb([existing])
+    const updateChain = {
+      set: vi.fn(() => updateChain),
+      where: vi.fn(() => updateChain),
+      returning: vi.fn(() => Promise.resolve([updated])),
+    }
+    db.update = vi.fn(() => updateChain)
+    getDb.mockReturnValue(db)
+    const req = new Request('http://localhost', {
+      method: 'PATCH',
+      body: JSON.stringify({ width: 120, height: 120 }),
+      headers: { 'Content-Type': 'application/json' },
+    })
+    const res = await PATCH(req, { params: Promise.resolve({ id: 'node-1' }) })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.width).toBe(120)
+    expect(body.height).toBe(120)
   })
 })
