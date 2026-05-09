@@ -54,7 +54,9 @@ function PreviewSlots({ data }: { data: HeapNodeData }) {
             event.stopPropagation()
             data.onPreviewClick?.(child.id)
           }}
-          className="max-w-20 truncate rounded-full border border-border bg-popover px-2 py-0.5 text-[10px] text-popover-foreground shadow"
+          onPointerDown={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
+          className="nodrag nopan max-w-20 truncate rounded-full border border-border bg-popover px-2 py-0.5 text-[10px] text-popover-foreground shadow"
         >
           {child.title}
         </button>
@@ -127,18 +129,26 @@ export function HeapNode({ data, selected }: NodeProps) {
     return (
       <div
         data-priority={d.priority ?? 'normal'}
-        style={{ borderColor }}
-        className={cn('w-full h-full bg-card border-2 rounded-full overflow-hidden shadow-md transition-shadow relative', sharedStateClass)}
+        className={cn('relative w-full h-full', d.dimmed && 'opacity-25')}
       >
         {/* NodeResizer handles appear at corners when the node is selected */}
         <NodeResizer isVisible={selected} minWidth={60} minHeight={60} keepAspectRatio />
-        <Handle type="target" position={Position.Left} className={HANDLE_CLASS} />
-        <div className="absolute inset-0 flex items-center justify-center p-2">
-          <span className="text-xs font-medium text-center text-foreground break-words leading-tight">
-            {d.title}
-          </span>
+        <div
+          style={{ borderColor }}
+          className={cn(
+            'absolute inset-0 bg-card border-2 rounded-full overflow-hidden shadow-md transition-shadow',
+            ring,
+            !d.dimmed && priorityClass(d.priority),
+          )}
+        >
+          <Handle type="target" position={Position.Left} className={HANDLE_CLASS} />
+          <div className="absolute inset-0 flex items-center justify-center p-2">
+            <span className="text-xs font-medium text-center text-foreground break-words leading-tight">
+              {d.title}
+            </span>
+          </div>
+          <Handle type="source" position={Position.Right} className={HANDLE_CLASS} />
         </div>
-        <Handle type="source" position={Position.Right} className={HANDLE_CLASS} />
         <PreviewSlots data={d} />
       </div>
     )

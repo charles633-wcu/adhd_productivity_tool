@@ -46,7 +46,7 @@ describe('HeapNode shapes', () => {
   it('renders circle with rounded-full', () => {
     const props = makeProps({ data: { title: 'Test', type: 'brain_dump', color: null, todoCount: 0, shape: 'circle' } })
     const { container } = render(<HeapNode {...props} />)
-    expect((container.firstChild as HTMLElement).className).toContain('rounded-full')
+    expect(container.querySelector('.rounded-full')).toBeTruthy()
   })
 
   it('renders diamond outer div with rotate-45', () => {
@@ -170,6 +170,30 @@ describe('HeapNode shapes', () => {
     expect(screen.getByText('+3')).toBeTruthy()
   })
 
+  it('renders circle previews outside the clipped circle surface', () => {
+    const { container } = render(
+      <HeapNode
+        {...makeProps({
+          data: {
+            title: 'Circle parent',
+            type: 'brain_dump',
+            color: null,
+            todoCount: 0,
+            shape: 'circle',
+            focusMode: true,
+            visibleChildren: [{ id: 'c1', title: 'First child' }],
+          },
+        })}
+      />,
+    )
+
+    const clippedSurface = container.querySelector('.overflow-hidden') as HTMLElement
+    const previewButton = screen.getByRole('button', { name: /focus first child/i })
+
+    expect(clippedSurface).toHaveClass('rounded-full')
+    expect(clippedSurface).not.toContainElement(previewButton)
+  })
+
   it('does not render child previews outside focus mode', () => {
     render(
       <HeapNode
@@ -217,5 +241,35 @@ describe('HeapNode shapes', () => {
 
     expect(onPreviewClick).toHaveBeenCalledWith('c1')
     expect(onParentClick).not.toHaveBeenCalled()
+  })
+
+  it('prevents React Flow drag and pan gestures from child previews', () => {
+    const onPointerDown = vi.fn()
+    const onMouseDown = vi.fn()
+    render(
+      <div onPointerDown={onPointerDown} onMouseDown={onMouseDown}>
+        <HeapNode
+          {...makeProps({
+            data: {
+              title: 'Parent',
+              type: 'brain_dump',
+              color: null,
+              todoCount: 0,
+              focusMode: true,
+              visibleChildren: [{ id: 'c1', title: 'First child' }],
+            },
+          })}
+        />
+      </div>,
+    )
+
+    const previewButton = screen.getByRole('button', { name: /focus first child/i })
+    fireEvent.pointerDown(previewButton)
+    fireEvent.mouseDown(previewButton)
+
+    expect(previewButton).toHaveClass('nodrag')
+    expect(previewButton).toHaveClass('nopan')
+    expect(onPointerDown).not.toHaveBeenCalled()
+    expect(onMouseDown).not.toHaveBeenCalled()
   })
 })
