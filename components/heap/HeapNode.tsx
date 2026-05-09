@@ -146,18 +146,23 @@ export function HeapNode({ data, selected }: NodeProps) {
 
   // Diamond — outer div rotated 45°; inner content counter-rotated so text stays upright
   const diamondSize = 90
+  const diamondSurfaceClass = cn(
+    'absolute inset-0 bg-card border-2 rotate-45 rounded-md shadow-md transition-shadow',
+    ring,
+    !d.dimmed && priorityClass(d.priority),
+  )
   return (
     <div
       data-priority={d.priority ?? 'normal'}
       style={{ width: diamondSize, height: diamondSize }}
-      className={cn('relative', sharedStateClass)}
+      className={cn('relative', d.dimmed && 'opacity-25')}
     >
       <NodeResizer isVisible={selected} minWidth={60} minHeight={60} keepAspectRatio />
       <Handle type="target" position={Position.Left} className={HANDLE_CLASS} />
       {/* Rotated background square that forms the diamond shape */}
       <div
         style={{ borderColor, width: diamondSize, height: diamondSize }}
-        className="absolute inset-0 bg-card border-2 rotate-45 rounded-md shadow-md transition-shadow"
+        className={diamondSurfaceClass}
       />
       {/* Counter-rotated text layer so title reads upright */}
       <div className="absolute inset-0 flex items-center justify-center p-3">

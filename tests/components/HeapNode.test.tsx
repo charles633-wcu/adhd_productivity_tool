@@ -61,12 +61,47 @@ describe('HeapNode shapes', () => {
       <HeapNode {...makeProps({ data: { title: 'High', type: 'brain_dump', color: null, todoCount: 0, priority: 'high' } })} />,
     )
     expect(high.container.firstChild).toHaveAttribute('data-priority', 'high')
+    expect(high.container.firstChild).toHaveClass('ring-primary/30')
     high.unmount()
 
     const critical = render(
       <HeapNode {...makeProps({ data: { title: 'Critical', type: 'brain_dump', color: null, todoCount: 0, priority: 'critical' } })} />,
     )
     expect(critical.container.firstChild).toHaveAttribute('data-priority', 'critical')
+    expect(critical.container.firstChild).toHaveClass('ring-destructive/40')
+  })
+
+  it('applies selected styling to the rotated diamond surface', () => {
+    const { container } = render(
+      <HeapNode
+        {...makeProps({
+          data: { title: 'Diamond', type: 'brain_dump', color: null, todoCount: 0, shape: 'diamond' },
+          selected: true,
+        })}
+      />,
+    )
+
+    const wrapper = container.firstChild as HTMLElement
+    const surface = container.querySelector('.rotate-45') as HTMLElement
+
+    expect(wrapper).not.toHaveClass('ring-primary')
+    expect(surface).toHaveClass('ring-primary')
+  })
+
+  it('applies priority styling to the rotated diamond surface', () => {
+    const { container } = render(
+      <HeapNode
+        {...makeProps({
+          data: { title: 'Diamond', type: 'brain_dump', color: null, todoCount: 0, shape: 'diamond', priority: 'critical' },
+        })}
+      />,
+    )
+
+    const wrapper = container.firstChild as HTMLElement
+    const surface = container.querySelector('.rotate-45') as HTMLElement
+
+    expect(wrapper).not.toHaveClass('ring-destructive/40')
+    expect(surface).toHaveClass('ring-destructive/40')
   })
 
   it('renders NodeResizer for rectangle, pill, circle, and diamond with shape-specific aspect ratio', () => {
