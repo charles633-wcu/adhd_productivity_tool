@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { NodeProps } from '@xyflow/react'
 
@@ -56,21 +56,31 @@ describe('HeapNode shapes', () => {
     expect(rotatedDiv).toBeTruthy()
   })
 
-  it('NodeResizer absent when shape is rectangle', () => {
-    render(<HeapNode {...makeProps()} />)
-    expect(NodeResizerMock).not.toHaveBeenCalled()
+  it('renders priority styling for high and critical nodes', () => {
+    const high = render(
+      <HeapNode {...makeProps({ data: { title: 'High', type: 'brain_dump', color: null, todoCount: 0, priority: 'high' } })} />,
+    )
+    expect(high.container.firstChild).toHaveAttribute('data-priority', 'high')
+    high.unmount()
+
+    const critical = render(
+      <HeapNode {...makeProps({ data: { title: 'Critical', type: 'brain_dump', color: null, todoCount: 0, priority: 'critical' } })} />,
+    )
+    expect(critical.container.firstChild).toHaveAttribute('data-priority', 'critical')
   })
 
-  it('NodeResizer absent when shape is pill', () => {
-    const props = makeProps({ data: { title: 'Test', type: 'brain_dump', color: null, todoCount: 0, shape: 'pill' } })
-    render(<HeapNode {...props} />)
-    expect(NodeResizerMock).not.toHaveBeenCalled()
-  })
-
-  it('NodeResizer absent when shape is diamond', () => {
-    const props = makeProps({ data: { title: 'Test', type: 'brain_dump', color: null, todoCount: 0, shape: 'diamond' } })
-    render(<HeapNode {...props} />)
-    expect(NodeResizerMock).not.toHaveBeenCalled()
+  it('renders NodeResizer for rectangle, pill, circle, and diamond with shape-specific aspect ratio', () => {
+    for (const shape of ['rectangle', 'pill', 'circle', 'diamond'] as const) {
+      NodeResizerMock.mockClear()
+      render(<HeapNode {...makeProps({ data: { title: shape, type: 'brain_dump', color: null, todoCount: 0, shape }, selected: true })} />)
+      expect(NodeResizerMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isVisible: true,
+          keepAspectRatio: shape === 'circle' || shape === 'diamond' ? true : false,
+        }),
+        expect.toSatisfy((v: unknown) => v === undefined || v != null),
+      )
+    }
   })
 
   it('NodeResizer rendered with isVisible=true when circle is selected', () => {
@@ -97,5 +107,80 @@ describe('HeapNode shapes', () => {
       expect.objectContaining({ isVisible: false }),
       expect.toSatisfy((v: unknown) => v === undefined || v != null),
     )
+  })
+
+  it('renders focus child previews and overflow count in focus mode', () => {
+    render(
+      <HeapNode
+        {...makeProps({
+          data: {
+            title: 'Parent',
+            type: 'brain_dump',
+            color: null,
+            todoCount: 0,
+            focusMode: true,
+            visibleChildren: [
+              { id: 'c1', title: 'First child' },
+              { id: 'c2', title: 'Second child' },
+            ],
+            overflowChildCount: 3,
+            onPreviewClick: vi.fn(),
+          },
+        })}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /focus first child/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /focus second child/i })).toBeTruthy()
+    expect(screen.getByText('+3')).toBeTruthy()
+  })
+
+  it('does not render child previews outside focus mode', () => {
+    render(
+      <HeapNode
+        {...makeProps({
+          data: {
+            title: 'Parent',
+            type: 'brain_dump',
+            color: null,
+            todoCount: 0,
+            focusMode: false,
+            visibleChildren: [{ id: 'c1', title: 'First child' }],
+            overflowChildCount: 1,
+            onPreviewClick: vi.fn(),
+          },
+        })}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: /focus first child/i })).toBeNull()
+    expect(screen.queryByText('+1')).toBeNull()
+  })
+
+  it('clicking a preview calls onPreviewClick and stops propagation', () => {
+    const onPreviewClick = vi.fn()
+    const onParentClick = vi.fn()
+    render(
+      <div onClick={onParentClick}>
+        <HeapNode
+          {...makeProps({
+            data: {
+              title: 'Parent',
+              type: 'brain_dump',
+              color: null,
+              todoCount: 0,
+              focusMode: true,
+              visibleChildren: [{ id: 'c1', title: 'First child' }],
+              onPreviewClick,
+            },
+          })}
+        />
+      </div>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /focus first child/i }))
+
+    expect(onPreviewClick).toHaveBeenCalledWith('c1')
+    expect(onParentClick).not.toHaveBeenCalled()
   })
 })

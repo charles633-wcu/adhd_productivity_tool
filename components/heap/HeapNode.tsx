@@ -2,9 +2,9 @@
 
 // HeapNode — renders a single Mind canvas node with one of four visual shapes.
 // Shape is read from data.shape (defaults to 'rectangle' if absent).
-// Circle nodes get a NodeResizer (visible only when selected) for drag-resize.
 import { Handle, Position, NodeResizer, type NodeProps } from '@xyflow/react'
-import type { HeapNodeType, HeapNodeShape } from '@/lib/db/schema'
+import type { HeapNodePriority, HeapNodeType, HeapNodeShape } from '@/lib/db/schema'
+import { cn } from '@/lib/utils'
 
 const TYPE_ICON: Record<HeapNodeType, string> = {
   task_cluster: 'Tasks',
@@ -22,23 +22,69 @@ export type HeapNodeData = {
   shape?: HeapNodeShape
   width?: number | null
   height?: number | null
+  priority?: HeapNodePriority
+  focusMode?: boolean
+  dimmed?: boolean
+  visibleChildren?: Array<{ id: string; title: string }>
+  overflowChildCount?: number
+  onPreviewClick?: (nodeId: string) => void
 }
 
 const HANDLE_CLASS = '!bg-primary !border-2 !border-background !w-3 !h-3'
+
+function priorityClass(priority: HeapNodePriority | undefined): string {
+  if (priority === 'critical') return 'shadow-[0_0_24px_rgba(239,68,68,0.28)] ring-1 ring-destructive/40'
+  if (priority === 'high') return 'shadow-primary/20 ring-1 ring-primary/30'
+  if (priority === 'low') return 'opacity-85'
+  return ''
+}
+
+function PreviewSlots({ data }: { data: HeapNodeData }) {
+  const overflowCount = data.overflowChildCount ?? 0
+  if (!data.focusMode || (!data.visibleChildren?.length && overflowCount <= 0)) return null
+
+  return (
+    <div className="pointer-events-auto absolute left-1/2 top-full z-10 mt-1 flex -translate-x-1/2 items-center gap-1">
+      {data.visibleChildren?.map((child) => (
+        <button
+          key={child.id}
+          type="button"
+          aria-label={`Focus ${child.title}`}
+          onClick={(event) => {
+            event.stopPropagation()
+            data.onPreviewClick?.(child.id)
+          }}
+          className="max-w-20 truncate rounded-full border border-border bg-popover px-2 py-0.5 text-[10px] text-popover-foreground shadow"
+        >
+          {child.title}
+        </button>
+      ))}
+      {overflowCount > 0 && (
+        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">+{overflowCount}</span>
+      )}
+    </div>
+  )
+}
 
 export function HeapNode({ data, selected }: NodeProps) {
   const d = data as HeapNodeData
   const borderColor = d.color ?? '#475569'
   const shape = d.shape ?? 'rectangle'
-  const ring = selected ? ' shadow-lg ring-1 ring-primary' : ''
+  const ring = selected ? 'shadow-lg ring-1 ring-primary' : ''
+  const sharedStateClass = cn(ring, !d.dimmed && priorityClass(d.priority), d.dimmed && 'opacity-25')
 
   // Rectangle — default card shape
   if (shape === 'rectangle') {
     return (
       <div
+        data-priority={d.priority ?? 'normal'}
         style={{ borderColor }}
-        className={`bg-card border-2 rounded-xl px-3 py-2.5 min-w-[110px] max-w-[160px] shadow-md transition-shadow${ring}`}
+        className={cn(
+          'relative bg-card border-2 rounded-xl px-3 py-2.5 min-w-[110px] max-w-[160px] shadow-md transition-shadow',
+          sharedStateClass,
+        )}
       >
+        <NodeResizer isVisible={selected} minWidth={60} minHeight={40} keepAspectRatio={false} />
         <Handle type="target" position={Position.Left} title="Drop connection here" className={HANDLE_CLASS} />
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] leading-none text-muted-foreground">{TYPE_ICON[d.type]}</span>
@@ -50,6 +96,7 @@ export function HeapNode({ data, selected }: NodeProps) {
           )}
         </div>
         <Handle type="source" position={Position.Right} title="Drag to connect" className={HANDLE_CLASS} />
+        <PreviewSlots data={d} />
       </div>
     )
   }
@@ -58,14 +105,17 @@ export function HeapNode({ data, selected }: NodeProps) {
   if (shape === 'pill') {
     return (
       <div
+        data-priority={d.priority ?? 'normal'}
         style={{ borderColor }}
-        className={`bg-card border-2 rounded-full px-4 py-2 min-w-[120px] shadow-md transition-shadow${ring}`}
+        className={cn('relative bg-card border-2 rounded-full px-4 py-2 min-w-[120px] shadow-md transition-shadow', sharedStateClass)}
       >
+        <NodeResizer isVisible={selected} minWidth={60} minHeight={40} keepAspectRatio={false} />
         <Handle type="target" position={Position.Left} className={HANDLE_CLASS} />
         <div className="flex items-center justify-center">
           <span className="text-xs font-medium truncate text-foreground">{d.title}</span>
         </div>
         <Handle type="source" position={Position.Right} className={HANDLE_CLASS} />
+        <PreviewSlots data={d} />
       </div>
     )
   }
@@ -76,8 +126,9 @@ export function HeapNode({ data, selected }: NodeProps) {
   if (shape === 'circle') {
     return (
       <div
+        data-priority={d.priority ?? 'normal'}
         style={{ borderColor }}
-        className={`w-full h-full bg-card border-2 rounded-full overflow-hidden shadow-md transition-shadow relative${ring}`}
+        className={cn('w-full h-full bg-card border-2 rounded-full overflow-hidden shadow-md transition-shadow relative', sharedStateClass)}
       >
         {/* NodeResizer handles appear at corners when the node is selected */}
         <NodeResizer isVisible={selected} minWidth={60} minHeight={60} keepAspectRatio />
@@ -88,6 +139,7 @@ export function HeapNode({ data, selected }: NodeProps) {
           </span>
         </div>
         <Handle type="source" position={Position.Right} className={HANDLE_CLASS} />
+        <PreviewSlots data={d} />
       </div>
     )
   }
@@ -95,12 +147,17 @@ export function HeapNode({ data, selected }: NodeProps) {
   // Diamond — outer div rotated 45°; inner content counter-rotated so text stays upright
   const diamondSize = 90
   return (
-    <div style={{ width: diamondSize, height: diamondSize }} className="relative">
+    <div
+      data-priority={d.priority ?? 'normal'}
+      style={{ width: diamondSize, height: diamondSize }}
+      className={cn('relative', sharedStateClass)}
+    >
+      <NodeResizer isVisible={selected} minWidth={60} minHeight={60} keepAspectRatio />
       <Handle type="target" position={Position.Left} className={HANDLE_CLASS} />
       {/* Rotated background square that forms the diamond shape */}
       <div
         style={{ borderColor, width: diamondSize, height: diamondSize }}
-        className={`absolute inset-0 bg-card border-2 rotate-45 rounded-md shadow-md transition-shadow${ring}`}
+        className="absolute inset-0 bg-card border-2 rotate-45 rounded-md shadow-md transition-shadow"
       />
       {/* Counter-rotated text layer so title reads upright */}
       <div className="absolute inset-0 flex items-center justify-center p-3">
@@ -109,6 +166,7 @@ export function HeapNode({ data, selected }: NodeProps) {
         </span>
       </div>
       <Handle type="source" position={Position.Right} className={HANDLE_CLASS} />
+      <PreviewSlots data={d} />
     </div>
   )
 }
