@@ -27,6 +27,7 @@ import { HeapTodoOverlay } from './HeapTodoOverlay'
 import { HeapTutorial } from './HeapTutorial'
 import { NodeDetailSheet } from './NodeDetailSheet'
 import type { HeapNode as HeapNodeType } from '@/lib/db/schema'
+import { deriveFocusVisibility, type FocusEdge, type FocusNode } from '@/lib/heap/focus'
 
 const nodeTypes = { heapNode: HeapNode }
 
@@ -46,6 +47,8 @@ function toFlowNode(node: HeapNodeType & { todoCount?: number }): Node {
       shape: node.shape,
       width: node.width,
       height: node.height,
+      priority: node.priority ?? 'normal',
+      updatedAt: node.updatedAt,
     } satisfies HeapNodeData,
     style: isCircle
       ? { width: node.width ?? 80, height: node.height ?? 80 }
@@ -62,6 +65,8 @@ export function HeapCanvas() {
   const [sheetNodeId, setSheetNodeId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [showTutorial, setShowTutorial] = useState(false)
+  const [focusMode, setFocusMode] = useState(false)
+  const [focusPathIds, setFocusPathIds] = useState<Set<string>>(new Set())
   // Abort controller map for in-flight drag PATCH requests — prevents stale writes on rapid drag
   const dragAbortRefs = useRef<Map<string, AbortController>>(new Map())
   // Abort controller map for in-flight resize PATCH requests — prevents stale writes on rapid resize
@@ -214,6 +219,48 @@ export function HeapCanvas() {
     }))
   }
 
+  const focusVisibility = focusMode
+    ? deriveFocusVisibility({
+        nodes: nodes.map((node) => ({
+          id: node.id,
+          title: String((node.data as HeapNodeData).title),
+          priority: (node.data as HeapNodeData).priority,
+          shape: (node.data as HeapNodeData).shape,
+          width: (node.data as HeapNodeData).width,
+          height: (node.data as HeapNodeData).height,
+          updatedAt: (node.data as HeapNodeData).updatedAt,
+        })) satisfies FocusNode[],
+        edges: edges.map((edge) => ({ id: edge.id, source: String(edge.source), target: String(edge.target) })) satisfies FocusEdge[],
+        focusPathIds,
+      })
+    : null
+
+  const childTitles = new Map(nodes.map((node) => [node.id, String((node.data as HeapNodeData).title)]))
+  const renderedNodes = focusVisibility
+    ? nodes.map((node) => {
+        const picked = focusVisibility.visibleChildrenByNodeId.get(node.id)
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            focusMode,
+            dimmed: focusVisibility.dimmedNodeIds.has(node.id),
+            visibleChildren: picked?.visibleChildIds.map((id) => ({ id, title: childTitles.get(id) ?? 'Untitled' })) ?? [],
+            overflowChildCount: picked?.overflowCount ?? 0,
+            onPreviewClick: (nodeId: string) => setFocusPathIds((current) => new Set([...current, nodeId])),
+          },
+        }
+      })
+    : nodes
+
+  const renderedEdges = focusVisibility
+    ? edges.map((edge) => ({
+        ...edge,
+        animated: focusVisibility.brightEdgeIds.has(edge.id),
+        style: { ...(edge.style ?? {}), opacity: focusVisibility.dimmedEdgeIds.has(edge.id) ? 0.18 : 1 },
+      }))
+    : edges
+
   return (
     <div className="h-full w-full relative" data-testid="heap-canvas-container" data-selected-node-id={selectedNodeId ?? undefined}>
       {isLoading && (
@@ -221,9 +268,33 @@ export function HeapCanvas() {
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         </div>
       )}
+      <div className="absolute right-6 top-6 z-30 flex items-center gap-2 rounded-full border border-border bg-card/90 px-3 py-2 shadow-lg backdrop-blur">
+        <button
+          type="button"
+          aria-pressed={focusMode}
+          aria-label="Focus Mode"
+          onClick={() => setFocusMode((current) => !current)}
+          className={focusMode ? 'text-primary text-sm font-semibold' : 'text-muted-foreground text-sm font-semibold'}
+        >
+          Focus Mode
+        </button>
+        {focusMode && focusVisibility && (
+          <span className="text-xs text-muted-foreground">Focused: {focusVisibility.brightNodeIds.size} / {nodes.length}</span>
+        )}
+        {focusMode && focusPathIds.size > 0 && (
+          <button type="button" onClick={() => setFocusPathIds(new Set())} className="text-xs text-muted-foreground hover:text-foreground">
+            Reset Focus
+          </button>
+        )}
+      </div>
+      {focusMode && focusVisibility?.brightNodeIds.size === 0 && (
+        <div className="absolute right-6 top-20 z-30 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground shadow">
+          Mark nodes high priority to start Focus Mode.
+        </div>
+      )}
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={renderedNodes}
+        edges={renderedEdges}
         onNodesChange={handleNodesChange}
         onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}

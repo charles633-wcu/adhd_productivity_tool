@@ -23,6 +23,7 @@ export type HeapNodeData = {
   width?: number | null
   height?: number | null
   priority?: HeapNodePriority
+  updatedAt?: Date | string | number | null
   focusMode?: boolean
   dimmed?: boolean
   visibleChildren?: Array<{ id: string; title: string }>
