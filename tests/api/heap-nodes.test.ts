@@ -41,6 +41,11 @@ describe('heap schema columns', () => {
     expect(cols.width.name).toBe('width')
     expect(cols.height.name).toBe('height')
   })
+
+  it('heap_nodes has priority column', () => {
+    const cols = getTableColumns(heapNodes) as Record<string, { name: string }>
+    expect(cols.priority.name).toBe('priority')
+  })
 })
 
 function mockNode(overrides = {}) {
@@ -51,6 +56,7 @@ function mockNode(overrides = {}) {
     title: 'Test node',
     body: null,
     color: null,
+    priority: 'normal',
     posX: 0,
     posY: 0,
     shape: 'rectangle',
@@ -157,6 +163,27 @@ describe('POST /api/heap/nodes', () => {
     }))
     expect(res.status).toBe(400)
   })
+
+  it('creates a node with manual priority', async () => {
+    const db = mockDb([mockNode({ priority: 'high' })])
+    getDb.mockReturnValue(db)
+    const res = await POST(new Request('http://localhost/api/heap/nodes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'High node', priority: 'high' }),
+    }))
+    expect(res.status).toBe(201)
+    expect(db.values).toHaveBeenCalledWith(expect.objectContaining({ priority: 'high' }))
+  })
+
+  it('rejects invalid priority with 400', async () => {
+    const res = await POST(new Request('http://localhost/api/heap/nodes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'X', priority: 'urgent' }),
+    }))
+    expect(res.status).toBe(400)
+  })
 })
 
 describe('PATCH /api/heap/nodes/[id]', () => {
@@ -199,6 +226,43 @@ describe('PATCH /api/heap/nodes/[id]', () => {
       { params: Promise.resolve({ id: 'node-1' }) }
     )
     expect(res.status).toBe(200)
+  })
+
+  it('updates node priority and returns 200', async () => {
+    const existing = mockNode()
+    const updated = mockNode({ priority: 'critical' })
+    const db = mockDb([existing])
+    const updateChain = {
+      set: vi.fn(() => updateChain),
+      where: vi.fn(() => updateChain),
+      returning: vi.fn(() => Promise.resolve([updated])),
+    }
+    db.update = vi.fn(() => updateChain)
+    getDb.mockReturnValue(db)
+    const res = await PATCH(
+      new Request('http://localhost/api/heap/nodes/node-1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priority: 'critical' }),
+      }),
+      { params: Promise.resolve({ id: 'node-1' }) }
+    )
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.priority).toBe('critical')
+    expect(updateChain.set).toHaveBeenCalledWith({ priority: 'critical' })
+  })
+
+  it('rejects invalid priority with 400', async () => {
+    const res = await PATCH(
+      new Request('http://localhost/api/heap/nodes/node-1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priority: 'urgent' }),
+      }),
+      { params: Promise.resolve({ id: 'node-1' }) }
+    )
+    expect(res.status).toBe(400)
   })
 })
 

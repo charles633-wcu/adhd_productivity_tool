@@ -216,6 +216,7 @@ export const todoTaskLabels = sqliteTable('todo_task_labels', {
 // Shape options for heap canvas nodes
 export type HeapNodeShape = 'rectangle' | 'circle' | 'diamond' | 'pill'
 export type HeapNodeType = 'task_cluster' | 'note' | 'goal' | 'reference' | 'brain_dump'
+export type HeapNodePriority = 'low' | 'normal' | 'high' | 'critical'
 
 // heap_nodes - spatial knowledge graph nodes; posX/posY are canvas coordinates
 export const heapNodes = sqliteTable('heap_nodes', {
@@ -225,6 +226,7 @@ export const heapNodes = sqliteTable('heap_nodes', {
   title: text('title').notNull(),
   body: text('body'),
   color: text('color'),
+  priority: text('priority').$type<HeapNodePriority>().notNull().default('normal'),
   posX: real('pos_x').notNull().default(0),
   posY: real('pos_y').notNull().default(0),
   // Visual shape — defaults to rectangle so existing nodes are unchanged

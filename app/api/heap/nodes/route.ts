@@ -11,6 +11,7 @@ const CreateNodeSchema = z.object({
   type: z.enum(['task_cluster', 'note', 'goal', 'reference', 'brain_dump']).default('brain_dump'),
   body: z.string().max(10000).optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
+  priority: z.enum(['low', 'normal', 'high', 'critical']).default('normal'),
   posX: z.number().finite().optional(),
   posY: z.number().finite().optional(),
 })

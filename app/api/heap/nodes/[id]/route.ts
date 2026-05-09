@@ -10,6 +10,7 @@ const PatchNodeSchema = z.object({
   type: z.enum(['task_cluster', 'note', 'goal', 'reference', 'brain_dump']).optional(),
   body: z.string().max(10000).nullable().optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
+  priority: z.enum(['low', 'normal', 'high', 'critical']).optional(),
   posX: z.number().finite().optional(),
   posY: z.number().finite().optional(),
   shape: z.enum(['rectangle', 'circle', 'diamond', 'pill']).optional(),
