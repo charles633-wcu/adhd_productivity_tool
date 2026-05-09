@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import type { HeapNode, HeapNodeShape, HeapNodeType } from '@/lib/db/schema'
+import type { HeapNode, HeapNodePriority, HeapNodeShape, HeapNodeType } from '@/lib/db/schema'
 import type { HeapNodeData } from './HeapNode'
 
 const TYPE_OPTIONS: { value: HeapNodeType; label: string }[] = [
@@ -21,6 +21,12 @@ const SHAPE_OPTIONS: { value: HeapNodeShape; label: string }[] = [
   { value: 'circle', label: 'Circle' },
   { value: 'diamond', label: 'Diamond' },
   { value: 'pill', label: 'Pill' },
+]
+const PRIORITY_OPTIONS: { value: HeapNodePriority; label: string }[] = [
+  { value: 'low', label: 'Low' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'high', label: 'High' },
+  { value: 'critical', label: 'Critical' },
 ]
 
 interface NodeDetailSheetProps {
@@ -162,6 +168,16 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
     }
     setNode((current) => current ? { ...current, shape } : current)
     onUpdated(currentNodeId, { shape })
+  }
+
+  async function handlePriorityChange(priority: HeapNodePriority) {
+    const updated = await patch({ priority })
+    if (!updated) {
+      toast.error('Failed to save priority')
+      return
+    }
+    setNode((current) => current ? { ...current, priority } : current)
+    onUpdated(currentNodeId, { priority })
   }
 
   async function handleCreateAndLink() {
@@ -313,6 +329,32 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
                   type="button"
                   key={option.value}
                   onClick={() => handleShapeChange(option.value)}
+                  aria-pressed={isActive}
+                  className={cn(
+                    'text-xs px-2 py-1.5 rounded border transition-colors',
+                    isActive
+                      ? 'ring-2 ring-primary border-primary bg-primary/10 text-primary'
+                      : 'border-border text-muted-foreground hover:border-muted-foreground',
+                  )}
+                >
+                  {option.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs text-muted-foreground uppercase tracking-widest mb-2">Priority</p>
+          <div className="grid grid-cols-2 gap-2">
+            {PRIORITY_OPTIONS.map((option) => {
+              const isActive = (node.priority ?? 'normal') === option.value
+              return (
+                <button
+                  type="button"
+                  key={option.value}
+                  onClick={() => handlePriorityChange(option.value)}
+                  aria-label={`${option.label} priority`}
                   aria-pressed={isActive}
                   className={cn(
                     'text-xs px-2 py-1.5 rounded border transition-colors',

@@ -267,3 +267,52 @@ describe('NodeDetailSheet — shape picker', () => {
     expect(onUpdated).toHaveBeenCalledWith('n-1', expect.objectContaining({ shape: 'diamond' }))
   })
 })
+
+describe('NodeDetailSheet — priority picker', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('renders priority buttons and marks current priority active', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ...mockNode, priority: 'high' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+    render(<NodeDetailSheet nodeId="n-1" onClose={vi.fn()} onDeleted={vi.fn()} onUpdated={vi.fn()} />)
+    await waitFor(() => screen.getByDisplayValue('My node'))
+    expect(screen.getByRole('button', { name: /high priority/i }).className).toContain('ring-2')
+  })
+
+  it('clicking priority patches and calls onUpdated after success', async () => {
+    const onUpdated = vi.fn()
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ...mockNode, priority: 'normal' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ...mockNode, priority: 'critical' }) })
+    render(<NodeDetailSheet nodeId="n-1" onClose={vi.fn()} onDeleted={vi.fn()} onUpdated={onUpdated} />)
+    await waitFor(() => screen.getByDisplayValue('My node'))
+    fireEvent.click(screen.getByRole('button', { name: /critical priority/i }))
+    await waitFor(() => {
+      const patchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.find((c: unknown[]) => (c[1] as RequestInit)?.method === 'PATCH')
+      expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({ priority: 'critical' })
+    })
+    expect(onUpdated).toHaveBeenCalledWith('n-1', expect.objectContaining({ priority: 'critical' }))
+  })
+
+  it('does not update priority locally when PATCH fails', async () => {
+    const onUpdated = vi.fn()
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ...mockNode, priority: 'normal' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'failed' }) })
+    render(<NodeDetailSheet nodeId="n-1" onClose={vi.fn()} onDeleted={vi.fn()} onUpdated={onUpdated} />)
+    await waitFor(() => screen.getByDisplayValue('My node'))
+    fireEvent.click(screen.getByRole('button', { name: /critical priority/i }))
+    await waitFor(() => {
+      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+      expect(calls.some((c: unknown[]) => (c[1] as RequestInit)?.method === 'PATCH')).toBe(true)
+    })
+    expect(onUpdated).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /normal priority/i }).className).toContain('ring-2')
+  })
+})
