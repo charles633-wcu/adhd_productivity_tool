@@ -1,4 +1,5 @@
 import { getTableColumns } from 'drizzle-orm'
+import { existsSync, readFileSync } from 'node:fs'
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { heapNodes, heapEdges, heapNodeTodos } from '@/lib/db/schema'
 
@@ -45,6 +46,27 @@ describe('heap schema columns', () => {
   it('heap_nodes has priority column', () => {
     const cols = getTableColumns(heapNodes) as Record<string, { name: string }>
     expect(cols.priority.name).toBe('priority')
+  })
+})
+
+describe('heap migrations', () => {
+  it('adds priority column to migrated heap_nodes tables', () => {
+    const migrationPath = 'lib/db/migrations/0010_heap_node_priority.sql'
+    expect(existsSync(migrationPath)).toBe(true)
+    expect(readFileSync(migrationPath, 'utf8').trim()).toBe(
+      "ALTER TABLE `heap_nodes` ADD `priority` text NOT NULL DEFAULT 'normal';"
+    )
+
+    const journal = JSON.parse(readFileSync('lib/db/migrations/meta/_journal.json', 'utf8')) as {
+      entries: Array<{ idx: number; tag: string; when: number; version: string; breakpoints: boolean }>
+    }
+    expect(journal.entries).toContainEqual({
+      idx: 10,
+      version: '6',
+      when: 1778300000000,
+      tag: '0010_heap_node_priority',
+      breakpoints: true,
+    })
   })
 })
 
