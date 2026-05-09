@@ -43,11 +43,15 @@ export function HeapTodoOverlay({ selectedNodeId, selectedNodeTitle, onClose }: 
     }
     const newTodo: Todo = await res.json()
     if (selectedNodeId) {
-      await fetch(`/api/heap/nodes/${selectedNodeId}/todos`, {
+      const linkRes = await fetch(`/api/heap/nodes/${selectedNodeId}/todos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ todoId: newTodo.id }),
       })
+      if (!linkRes.ok) {
+        toast.error('Failed to link task')
+        return
+      }
     }
     setTodos((current) => [...current, newTodo])
     setAddInput('')
@@ -93,12 +97,18 @@ export function HeapTodoOverlay({ selectedNodeId, selectedNodeTitle, onClose }: 
               type="checkbox"
               className="accent-primary flex-shrink-0"
               onChange={async (event) => {
-                await fetch(`/api/todos/${todo.id}`, {
+                const checked = event.target.checked
+                const res = await fetch(`/api/todos/${todo.id}`, {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ completed: event.target.checked }),
+                  body: JSON.stringify({ completed: checked }),
                 })
-                setTodos((current) => current.map((item) => item.id === todo.id ? { ...item, completed: event.target.checked ? 1 : 0 } : item))
+                if (!res.ok) {
+                  toast.error('Failed to update task')
+                  event.target.checked = !checked
+                  return
+                }
+                setTodos((current) => current.map((item) => item.id === todo.id ? { ...item, completed: checked ? 1 : 0 } : item))
               }}
             />
             <span className="text-sm truncate">{todo.title}</span>

@@ -78,6 +78,44 @@ describe('NodeDetailSheet', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
     await waitFor(() => expect(screen.getByText('New task')).toBeTruthy())
   })
+
+  it('does not update node type locally when PATCH fails', async () => {
+    const onUpdated = vi.fn()
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => mockNode })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })  // todos
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })  // triggers
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'failed' }) })  // PATCH response
+    render(<NodeDetailSheet nodeId="n-1" onClose={vi.fn()} onDeleted={vi.fn()} onUpdated={onUpdated} />)
+    await waitFor(() => screen.getByDisplayValue('My node'))
+    fireEvent.click(screen.getByRole('button', { name: 'Note' }))
+    await waitFor(() => {
+      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+      expect(calls.some((c: unknown[]) => (c[1] as RequestInit)?.method === 'PATCH')).toBe(true)
+    })
+    expect(onUpdated).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Dump' }).className).toContain('border-primary')
+  })
+
+  it('does not show a created todo when linking it to the node fails', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => mockNode })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })  // todos
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })  // triggers
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 't-new', title: 'Unlinked task' }) })  // POST /api/todos
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'failed' }) })  // POST /api/heap/nodes/[id]/todos
+    render(<NodeDetailSheet nodeId="n-1" onClose={vi.fn()} onDeleted={vi.fn()} onUpdated={vi.fn()} />)
+    await waitFor(() => screen.getByDisplayValue('My node'))
+    const input = screen.getByPlaceholderText(/create and link/i)
+    fireEvent.change(input, { target: { value: 'Unlinked task' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => {
+      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+      expect(calls.filter((c: unknown[]) => (c[1] as RequestInit)?.method === 'POST')).toHaveLength(2)
+    })
+    expect(screen.queryByText('Unlinked task')).toBeNull()
+    expect((input as HTMLInputElement).value).toBe('Unlinked task')
+  })
 })
 
 const mockLinkedTrigger = {
@@ -159,6 +197,29 @@ describe('NodeDetailSheet — linked triggers', () => {
     await waitFor(() => expect(screen.getAllByText('Read daily').length).toBeGreaterThanOrEqual(1))
     // Input should be cleared
     expect((screen.getByRole('textbox', { name: /link a trigger/i }) as HTMLInputElement).value).toBe('')
+  })
+
+  it('keeps trigger picker input when linking a trigger fails', async () => {
+    const newTrigger = { id: 'tr-2', title: 'Read daily', status: 'active', nextReviewAt: new Date().toISOString(), categoryId: 'c-1' }
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => mockNode })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [newTrigger] })
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'failed' }) })  // POST response
+    render(<NodeDetailSheet nodeId="n-1" onClose={vi.fn()} onDeleted={vi.fn()} onUpdated={vi.fn()} />)
+    await waitFor(() => screen.getByDisplayValue('My node'))
+    const input = screen.getByRole('textbox', { name: /link a trigger/i })
+    fireEvent.focus(input)
+    await waitFor(() => screen.getByText('Read daily'))
+    fireEvent.change(input, { target: { value: 'Read' } })
+    fireEvent.mouseDown(screen.getByText('Read daily'))
+    await waitFor(() => {
+      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+      expect(calls.some((c: unknown[]) => (c[1] as RequestInit)?.method === 'POST')).toBe(true)
+    })
+    expect((input as HTMLInputElement).value).toBe('Read')
+    expect(screen.getByText('Read daily')).toBeTruthy()
   })
 })
 

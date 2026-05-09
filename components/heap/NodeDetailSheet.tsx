@@ -135,13 +135,21 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
   }
 
   async function handleTypeChange(type: HeapNodeType) {
-    await patch({ type })
+    const updated = await patch({ type })
+    if (!updated) {
+      toast.error('Failed to save type')
+      return
+    }
     setNode((current) => current ? { ...current, type } : current)
     onUpdated(currentNodeId, { type })
   }
 
   async function handleColorChange(color: string) {
-    await patch({ color })
+    const updated = await patch({ color })
+    if (!updated) {
+      toast.error('Failed to save color')
+      return
+    }
     setNode((current) => current ? { ...current, color } : current)
     onUpdated(currentNodeId, { color })
   }
@@ -168,11 +176,15 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
       return
     }
     const newTodo = await res.json()
-    await fetch(`/api/heap/nodes/${currentNodeId}/todos`, {
+    const linkRes = await fetch(`/api/heap/nodes/${currentNodeId}/todos`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ todoId: newTodo.id }),
     })
+    if (!linkRes.ok) {
+      toast.error('Failed to link todo')
+      return
+    }
     setLinkedTodos((current) => [...current, { id: newTodo.id, title: newTodo.title }])
     setNewTodoInput('')
   }
@@ -211,9 +223,11 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
     if (res.ok) {
       const linked = await res.json()
       setLinkedTriggers((current) => [...current, linked])
+      setTriggerInput('')
+      setPickerOpen(false)
+      return
     }
-    setTriggerInput('')
-    setPickerOpen(false)
+    toast.error('Failed to link trigger')
   }
 
   function handleDeleteClick() {
