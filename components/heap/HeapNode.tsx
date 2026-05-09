@@ -31,6 +31,7 @@ export type HeapNodeData = {
 }
 
 const HANDLE_CLASS = '!bg-primary !border-2 !border-background !w-3 !h-3'
+const RESIZER_OVERLAY_CLASS = 'z-20'
 
 function priorityClass(priority: HeapNodePriority | undefined): string {
   if (priority === 'critical') return 'shadow-[0_0_24px_rgba(239,68,68,0.28)] ring-1 ring-destructive/40'
@@ -132,7 +133,14 @@ export function HeapNode({ data, selected }: NodeProps) {
         className={cn('relative w-full h-full', d.dimmed && 'opacity-25')}
       >
         {/* NodeResizer handles appear at corners when the node is selected */}
-        <NodeResizer isVisible={selected} minWidth={60} minHeight={60} keepAspectRatio />
+        <NodeResizer
+          isVisible={selected}
+          minWidth={60}
+          minHeight={60}
+          keepAspectRatio
+          handleClassName={RESIZER_OVERLAY_CLASS}
+          lineClassName={RESIZER_OVERLAY_CLASS}
+        />
         <div
           style={{ borderColor }}
           className={cn(
@@ -167,7 +175,14 @@ export function HeapNode({ data, selected }: NodeProps) {
       style={{ width: diamondSize, height: diamondSize }}
       className={cn('relative', d.dimmed && 'opacity-25')}
     >
-      <NodeResizer isVisible={selected} minWidth={60} minHeight={60} keepAspectRatio />
+      <NodeResizer
+        isVisible={selected}
+        minWidth={60}
+        minHeight={60}
+        keepAspectRatio
+        handleClassName={RESIZER_OVERLAY_CLASS}
+        lineClassName={RESIZER_OVERLAY_CLASS}
+      />
       <Handle type="target" position={Position.Left} className={HANDLE_CLASS} />
       {/* Rotated background square that forms the diamond shape */}
       <div

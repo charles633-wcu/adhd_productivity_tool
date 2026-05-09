@@ -144,6 +144,21 @@ describe('HeapNode shapes', () => {
     )
   })
 
+  it('keeps circle and diamond resize controls above shape surfaces', () => {
+    for (const shape of ['circle', 'diamond'] as const) {
+      NodeResizerMock.mockClear()
+      render(<HeapNode {...makeProps({ data: { title: shape, type: 'brain_dump', color: null, todoCount: 0, shape }, selected: true })} />)
+
+      expect(NodeResizerMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          handleClassName: expect.stringContaining('z-20'),
+          lineClassName: expect.stringContaining('z-20'),
+        }),
+        expect.toSatisfy((v: unknown) => v === undefined || v != null),
+      )
+    }
+  })
+
   it('renders focus child previews and overflow count in focus mode', () => {
     render(
       <HeapNode
