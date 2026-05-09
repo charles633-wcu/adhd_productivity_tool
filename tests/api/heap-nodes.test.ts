@@ -34,6 +34,13 @@ describe('heap schema columns', () => {
     expect(cols.nodeId.name).toBe('node_id')
     expect(cols.todoId.name).toBe('todo_id')
   })
+
+  it('heap_nodes has shape, width, height columns', () => {
+    const cols = getTableColumns(heapNodes) as Record<string, { name: string }>
+    expect(cols.shape.name).toBe('shape')
+    expect(cols.width.name).toBe('width')
+    expect(cols.height.name).toBe('height')
+  })
 })
 
 function mockNode(overrides = {}) {
