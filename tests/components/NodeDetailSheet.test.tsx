@@ -161,3 +161,48 @@ describe('NodeDetailSheet — linked triggers', () => {
     expect((screen.getByRole('textbox', { name: /link a trigger/i }) as HTMLInputElement).value).toBe('')
   })
 })
+
+describe('NodeDetailSheet — shape picker', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('shape picker renders 4 buttons (rectangle, circle, diamond, pill)', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ...mockNode, shape: 'rectangle' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })   // todos
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })   // triggers
+    render(<NodeDetailSheet nodeId="n-1" onClose={vi.fn()} onDeleted={vi.fn()} onUpdated={vi.fn()} />)
+    await waitFor(() => screen.getByDisplayValue('My node'))
+    const shapeButtons = screen.getAllByRole('button', { name: /rectangle|circle|diamond|pill/i })
+    expect(shapeButtons).toHaveLength(4)
+  })
+
+  it('active shape button has ring-2 class', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ...mockNode, shape: 'circle' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+    render(<NodeDetailSheet nodeId="n-1" onClose={vi.fn()} onDeleted={vi.fn()} onUpdated={vi.fn()} />)
+    await waitFor(() => screen.getByDisplayValue('My node'))
+    const circleBtn = screen.getByRole('button', { name: /circle/i })
+    expect(circleBtn.className).toContain('ring-2')
+  })
+
+  it('clicking a shape fires PATCH with the new shape and calls onUpdated', async () => {
+    const onUpdated = vi.fn()
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ...mockNode, shape: 'rectangle' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ...mockNode, shape: 'diamond' }) })   // PATCH response
+    render(<NodeDetailSheet nodeId="n-1" onClose={vi.fn()} onDeleted={vi.fn()} onUpdated={onUpdated} />)
+    await waitFor(() => screen.getByDisplayValue('My node'))
+    fireEvent.click(screen.getByRole('button', { name: /diamond/i }))
+    await waitFor(() => {
+      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+      const patchCall = calls.find((c: unknown[]) => (c[1] as RequestInit)?.method === 'PATCH')
+      expect(patchCall).toBeTruthy()
+      expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({ shape: 'diamond' })
+    })
+    expect(onUpdated).toHaveBeenCalledWith('n-1', expect.objectContaining({ shape: 'diamond' }))
+  })
+})

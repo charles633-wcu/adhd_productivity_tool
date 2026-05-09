@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import type { HeapNode, HeapNodeType } from '@/lib/db/schema'
+import type { HeapNode, HeapNodeShape, HeapNodeType } from '@/lib/db/schema'
 import type { HeapNodeData } from './HeapNode'
 
 const TYPE_OPTIONS: { value: HeapNodeType; label: string }[] = [
@@ -16,6 +16,12 @@ const TYPE_OPTIONS: { value: HeapNodeType; label: string }[] = [
 ]
 
 const SWATCHES = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#64748b']
+const SHAPE_OPTIONS: { value: HeapNodeShape; label: string }[] = [
+  { value: 'rectangle', label: 'Rectangle' },
+  { value: 'circle', label: 'Circle' },
+  { value: 'diamond', label: 'Diamond' },
+  { value: 'pill', label: 'Pill' },
+]
 
 interface NodeDetailSheetProps {
   nodeId: string | null
@@ -138,6 +144,16 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
     await patch({ color })
     setNode((current) => current ? { ...current, color } : current)
     onUpdated(currentNodeId, { color })
+  }
+
+  async function handleShapeChange(shape: HeapNodeShape) {
+    const updated = await patch({ shape })
+    if (!updated) {
+      toast.error('Failed to save shape')
+      return
+    }
+    setNode((current) => current ? { ...current, shape } : current)
+    onUpdated(currentNodeId, { shape })
   }
 
   async function handleCreateAndLink() {
@@ -270,6 +286,31 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
                 aria-label={`Set color ${color}`}
               />
             ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs text-muted-foreground uppercase tracking-widest mb-2">Shape</p>
+          <div className="grid grid-cols-2 gap-2">
+            {SHAPE_OPTIONS.map((option) => {
+              const isActive = (node.shape ?? 'rectangle') === option.value
+              return (
+                <button
+                  type="button"
+                  key={option.value}
+                  onClick={() => handleShapeChange(option.value)}
+                  aria-pressed={isActive}
+                  className={cn(
+                    'text-xs px-2 py-1.5 rounded border transition-colors',
+                    isActive
+                      ? 'ring-2 ring-primary border-primary bg-primary/10 text-primary'
+                      : 'border-border text-muted-foreground hover:border-muted-foreground',
+                  )}
+                >
+                  {option.label}
+                </button>
+              )
+            })}
           </div>
         </div>
 
