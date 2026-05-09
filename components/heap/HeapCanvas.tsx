@@ -9,9 +9,12 @@ import {
   useEdgesState,
   useReactFlow,
   addEdge,
+  ConnectionMode,
   type Node,
   type Edge,
   type EdgeChange,
+  type NodeChange,
+  type NodeDimensionChange,
   type Connection,
   type OnNodeDrag,
   type OnConnect,
@@ -28,6 +31,9 @@ import type { HeapNode as HeapNodeType } from '@/lib/db/schema'
 const nodeTypes = { heapNode: HeapNode }
 
 function toFlowNode(node: HeapNodeType & { todoCount?: number }): Node {
+  // Circle nodes need an explicit size so they render at the correct dimensions on load.
+  // Other shapes are content-sized by ReactFlow.
+  const isCircle = node.shape === 'circle'
   return {
     id: node.id,
     type: 'heapNode',
@@ -37,7 +43,15 @@ function toFlowNode(node: HeapNodeType & { todoCount?: number }): Node {
       type: node.type,
       color: node.color,
       todoCount: node.todoCount ?? 0,
+      shape: node.shape,
+      width: node.width,
+      height: node.height,
     } satisfies HeapNodeData,
+    style: isCircle
+      ? { width: node.width ?? 80, height: node.height ?? 80 }
+      : node.width != null
+        ? { width: node.width, height: node.height ?? node.width }
+        : undefined,
   }
 }
 
@@ -48,7 +62,10 @@ export function HeapCanvas() {
   const [sheetNodeId, setSheetNodeId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [showTutorial, setShowTutorial] = useState(false)
+  // Abort controller map for in-flight drag PATCH requests — prevents stale writes on rapid drag
   const dragAbortRefs = useRef<Map<string, AbortController>>(new Map())
+  // Abort controller map for in-flight resize PATCH requests — prevents stale writes on rapid resize
+  const resizeAbortRefs = useRef<Map<string, AbortController>>(new Map())
   const { fitView } = useReactFlow()
 
   useEffect(() => {
@@ -86,6 +103,22 @@ export function HeapCanvas() {
     }
   }, [isLoading, fitView])
 
+  // Persist circle resize to the server; aborts in-flight requests for the same node
+  const patchNodeSize = useCallback((nodeId: string, width: number, height: number) => {
+    const prev = resizeAbortRefs.current.get(nodeId)
+    prev?.abort()
+    const controller = new AbortController()
+    resizeAbortRefs.current.set(nodeId, controller)
+    fetch(`/api/heap/nodes/${nodeId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ width, height }),
+      signal: controller.signal,
+    }).catch((error) => {
+      if (error.name !== 'AbortError') toast.error('Failed to save node size')
+    })
+  }, []) // resizeAbortRefs is a stable ref — no deps needed
+
   const handleEdgesChange = useCallback((changes: EdgeChange[]) => {
     onEdgesChange(changes)
     changes.forEach((change) => {
@@ -96,6 +129,18 @@ export function HeapCanvas() {
       }
     })
   }, [onEdgesChange])
+
+  // Wraps useNodesState's onNodesChange to also persist circle resize when drag ends.
+  // c.resizing is boolean | undefined: true while dragging, undefined when drag ends (not false).
+  const handleNodesChange = useCallback((changes: NodeChange[]) => {
+    onNodesChange(changes)
+    const resizes = changes.filter((c): c is NodeDimensionChange => c.type === 'dimensions')
+    for (const c of resizes) {
+      if (c.resizing !== true && c.dimensions != null) {
+        patchNodeSize(c.id, c.dimensions.width, c.dimensions.height)
+      }
+    }
+  }, [onNodesChange, patchNodeSize])
 
   const handleNodeDragStop: OnNodeDrag<Node> = useCallback((_event, node) => {
     const prev = dragAbortRefs.current.get(node.id)
@@ -154,9 +199,19 @@ export function HeapCanvas() {
   }
 
   function handleNodeUpdated(nodeId: string, data: Partial<HeapNodeData>) {
-    setNodes((currentNodes) => currentNodes.map((node) => (
-      node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node
-    )))
+    setNodes((currentNodes) => currentNodes.map((node) => {
+      if (node.id !== nodeId) return node
+      const updatedData = { ...node.data, ...data } as HeapNodeData
+      // Keep style in sync when shape changes: circle needs an explicit pixel size;
+      // non-circle shapes are content-sized (no style constraint).
+      let updatedStyle = node.style
+      if (data.shape === 'circle') {
+        updatedStyle = { width: updatedData.width ?? 80, height: updatedData.height ?? 80 }
+      } else if (data.shape != null) {
+        updatedStyle = undefined
+      }
+      return { ...node, data: updatedData, style: updatedStyle }
+    }))
   }
 
   return (
@@ -169,12 +224,13 @@ export function HeapCanvas() {
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodesChange={onNodesChange}
+        onNodesChange={handleNodesChange}
         onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
         onNodeDragStop={handleNodeDragStop}
         onNodeClick={handleNodeClick}
         nodeTypes={nodeTypes}
+        connectionMode={ConnectionMode.Loose}
         colorMode="dark"
       >
         <Background />

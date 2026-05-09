@@ -14,6 +14,7 @@ vi.mock('@xyflow/react', () => ({
   addEdge: vi.fn((params, edges) => [...edges, params]),
   Position: { Left: 'left', Right: 'right' },
   Handle: () => null,
+  ConnectionMode: { Loose: 'loose', Strict: 'strict' },
 }))
 
 global.fetch = vi.fn()
