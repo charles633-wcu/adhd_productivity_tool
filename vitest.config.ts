@@ -11,7 +11,7 @@ export default defineConfig({
     pool: 'threads',
     maxWorkers: 4,
     testTimeout: 10000,
-    exclude: ['node_modules', '.worktrees/**', '.claude/**'],
+    exclude: ['node_modules', '.worktrees/**', '.claude/**', 'tests/e2e/**'],
   },
   resolve: {
     alias: {
