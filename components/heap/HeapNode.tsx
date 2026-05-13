@@ -84,7 +84,9 @@ export function HeapNode({ data, selected }: NodeProps) {
         data-priority={d.priority ?? 'normal'}
         style={{ borderColor }}
         className={cn(
-          'relative bg-card border-2 rounded-xl px-3 py-2.5 min-w-[110px] max-w-[160px] shadow-md transition-shadow',
+          'relative bg-card border-2 rounded-xl px-3 py-2.5 min-w-[110px] shadow-md transition-shadow',
+          d.width != null && 'w-full h-full',
+          d.width == null && 'max-w-[160px]',
           sharedStateClass,
         )}
       >
@@ -111,7 +113,11 @@ export function HeapNode({ data, selected }: NodeProps) {
       <div
         data-priority={d.priority ?? 'normal'}
         style={{ borderColor }}
-        className={cn('relative bg-card border-2 rounded-full px-4 py-2 min-w-[120px] shadow-md transition-shadow', sharedStateClass)}
+        className={cn(
+          'relative bg-card border-2 rounded-full px-4 py-2 min-w-[120px] shadow-md transition-shadow',
+          d.width != null && 'w-full h-full',
+          sharedStateClass,
+        )}
       >
         <NodeResizer isVisible={selected} minWidth={60} minHeight={40} keepAspectRatio={false} />
         <Handle type="target" position={Position.Left} className={HANDLE_CLASS} />
@@ -164,7 +170,7 @@ export function HeapNode({ data, selected }: NodeProps) {
   }
 
   // Diamond — outer div rotated 45°; inner content counter-rotated so text stays upright
-  const diamondSize = 90
+  const diamondSize = Math.max(d.width ?? 90, d.height ?? d.width ?? 90)
   const diamondSurfaceClass = cn(
     'absolute inset-0 bg-card border-2 rotate-45 rounded-md shadow-md transition-shadow',
     ring,

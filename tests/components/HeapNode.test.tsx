@@ -56,6 +56,38 @@ describe('HeapNode shapes', () => {
     expect(rotatedDiv).toBeTruthy()
   })
 
+  it('fills persisted rectangle and pill dimensions', () => {
+    for (const shape of ['rectangle', 'pill'] as const) {
+      const { container, unmount } = render(
+        <HeapNode
+          {...makeProps({
+            data: { title: shape, type: 'brain_dump', color: null, todoCount: 0, shape, width: 240, height: 96 },
+          })}
+        />,
+      )
+
+      expect(container.firstChild).toHaveClass('w-full')
+      expect(container.firstChild).toHaveClass('h-full')
+      unmount()
+    }
+  })
+
+  it('sizes the diamond surface from persisted dimensions', () => {
+    const { container } = render(
+      <HeapNode
+        {...makeProps({
+          data: { title: 'Diamond', type: 'brain_dump', color: null, todoCount: 0, shape: 'diamond', width: 160, height: 160 },
+        })}
+      />,
+    )
+
+    const wrapper = container.firstChild as HTMLElement
+    const surface = container.querySelector('.rotate-45') as HTMLElement
+
+    expect(wrapper).toHaveStyle({ width: '160px', height: '160px' })
+    expect(surface).toHaveStyle({ width: '160px', height: '160px' })
+  })
+
   it('renders priority styling for high and critical nodes', () => {
     const high = render(
       <HeapNode {...makeProps({ data: { title: 'High', type: 'brain_dump', color: null, todoCount: 0, priority: 'high' } })} />,
