@@ -140,12 +140,25 @@ export function HeapCanvas() {
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
     onNodesChange(changes)
     const resizes = changes.filter((c): c is NodeDimensionChange => c.type === 'dimensions')
+    if (resizes.length > 0) {
+      setNodes((currentNodes) => currentNodes.map((node) => {
+        const resize = resizes.find((change) => change.id === node.id && change.dimensions != null)
+        if (!resize?.dimensions) return node
+        const nextWidth = resize.dimensions.width
+        const nextHeight = resize.dimensions.height
+        return {
+          ...node,
+          data: { ...node.data, width: nextWidth, height: nextHeight },
+          style: { ...(node.style ?? {}), width: nextWidth, height: nextHeight },
+        }
+      }))
+    }
     for (const c of resizes) {
       if (c.resizing !== true && c.dimensions != null) {
         patchNodeSize(c.id, c.dimensions.width, c.dimensions.height)
       }
     }
-  }, [onNodesChange, patchNodeSize])
+  }, [onNodesChange, patchNodeSize, setNodes])
 
   const handleNodeDragStop: OnNodeDrag<Node> = useCallback((_event, node) => {
     const prev = dragAbortRefs.current.get(node.id)
@@ -213,7 +226,9 @@ export function HeapCanvas() {
       if (data.shape === 'circle') {
         updatedStyle = { width: updatedData.width ?? 80, height: updatedData.height ?? 80 }
       } else if (data.shape != null) {
-        updatedStyle = undefined
+        updatedStyle = updatedData.width != null
+          ? { width: updatedData.width, height: updatedData.height ?? updatedData.width }
+          : undefined
       }
       return { ...node, data: updatedData, style: updatedStyle }
     }))

@@ -2,14 +2,20 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { HeapCanvas } from '@/components/heap/HeapCanvas'
 
+const reactFlowProps = vi.hoisted(() => ({ current: null as null | { onNodesChange?: (changes: unknown[]) => void } }))
+const nodeDetailSheetProps = vi.hoisted(() => ({ current: null as null | { onUpdated: (nodeId: string, data: Record<string, unknown>) => void } }))
+
 vi.mock('@xyflow/react', async () => {
   const React = await vi.importActual<typeof import('react')>('react')
   return {
-  ReactFlow: ({ children, nodes, edges }: { children: React.ReactNode; nodes: unknown[]; edges: unknown[] }) => (
-    <div data-testid="react-flow-mock" data-nodes={JSON.stringify(nodes)} data-edges={JSON.stringify(edges)}>
-      {children}
-    </div>
-  ),
+  ReactFlow: (props: { children: React.ReactNode; nodes: unknown[]; edges: unknown[]; onNodesChange?: (changes: unknown[]) => void }) => {
+    reactFlowProps.current = props
+    return (
+      <div data-testid="react-flow-mock" data-nodes={JSON.stringify(props.nodes)} data-edges={JSON.stringify(props.edges)}>
+        {props.children}
+      </div>
+    )
+  },
   ReactFlowProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useReactFlow: () => ({ screenToFlowPosition: (p: unknown) => p, addEdge: vi.fn(), fitView: vi.fn() }),
   Background: () => null,
@@ -29,10 +35,21 @@ vi.mock('@xyflow/react', async () => {
   ConnectionMode: { Loose: 'loose', Strict: 'strict' },
 }})
 
+vi.mock('@/components/heap/NodeDetailSheet', () => ({
+  NodeDetailSheet: (props: { onUpdated: (nodeId: string, data: Record<string, unknown>) => void }) => {
+    nodeDetailSheetProps.current = props
+    return null
+  },
+}))
+
 global.fetch = vi.fn()
 
 describe('HeapCanvas', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    reactFlowProps.current = null
+    nodeDetailSheetProps.current = null
+  })
 
   it('renders the React Flow container', async () => {
     ;(global.fetch as ReturnType<typeof vi.fn>)
@@ -103,6 +120,67 @@ describe('HeapCanvas', () => {
     await waitFor(() => {
       const parsedNodes = JSON.parse(flow.getAttribute('data-nodes') ?? '[]') as Array<{ id: string; data: { visibleChildren?: Array<{ id: string }> } }>
       expect(parsedNodes.find((node) => node.id === 'p')?.data.visibleChildren?.map((child) => child.id)).toEqual(['recent', 'old'])
+    })
+  })
+
+  it('updates local node dimensions after resize so focus slots react immediately', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => [
+        { id: 'p', userId: 'u1', title: 'Parent', type: 'brain_dump', color: null, priority: 'high', shape: 'rectangle', width: 110, height: 60, posX: 0, posY: 0, body: null, createdAt: new Date(), updatedAt: new Date() },
+        { id: 'a', userId: 'u1', title: 'A', type: 'brain_dump', color: null, priority: 'normal', shape: 'rectangle', width: null, height: null, posX: 200, posY: 0, body: null, createdAt: new Date(), updatedAt: new Date() },
+        { id: 'b', userId: 'u1', title: 'B', type: 'brain_dump', color: null, priority: 'normal', shape: 'rectangle', width: null, height: null, posX: 400, posY: 0, body: null, createdAt: new Date(), updatedAt: new Date() },
+        { id: 'c', userId: 'u1', title: 'C', type: 'brain_dump', color: null, priority: 'normal', shape: 'rectangle', width: null, height: null, posX: 600, posY: 0, body: null, createdAt: new Date(), updatedAt: new Date() },
+      ] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [
+        { id: 'pa', source: 'p', target: 'a' },
+        { id: 'pb', source: 'p', target: 'b' },
+        { id: 'pc', source: 'p', target: 'c' },
+      ] })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) })
+    render(<HeapCanvas />)
+    await waitFor(() => screen.getByRole('button', { name: /focus mode/i }))
+    fireEvent.click(screen.getByRole('button', { name: /focus mode/i }))
+    const flow = screen.getByTestId('react-flow-mock')
+
+    await waitFor(() => {
+      const parsedNodes = JSON.parse(flow.getAttribute('data-nodes') ?? '[]') as Array<{ id: string; data: { visibleChildren?: Array<{ id: string }> } }>
+      expect(parsedNodes.find((node) => node.id === 'p')?.data.visibleChildren).toHaveLength(2)
+    })
+
+    reactFlowProps.current?.onNodesChange?.([
+      { type: 'dimensions', id: 'p', dimensions: { width: 250, height: 105 }, resizing: false },
+    ])
+
+    await waitFor(() => {
+      const parsedNodes = JSON.parse(flow.getAttribute('data-nodes') ?? '[]') as Array<{ id: string; data: { width?: number; height?: number; visibleChildren?: Array<{ id: string }> }; style?: { width?: number; height?: number } }>
+      const parent = parsedNodes.find((node) => node.id === 'p')
+      expect(parent?.data.width).toBe(250)
+      expect(parent?.data.height).toBe(105)
+      expect(parent?.style).toEqual(expect.objectContaining({ width: 250, height: 105 }))
+      expect(parent?.data.visibleChildren).toHaveLength(3)
+    })
+  })
+
+  it('keeps persisted dimensions when a resized node changes to a non-circle shape', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => [
+        { id: 'p', userId: 'u1', title: 'Parent', type: 'brain_dump', color: null, priority: 'normal', shape: 'circle', width: 180, height: 180, posX: 0, posY: 0, body: null, createdAt: new Date(), updatedAt: new Date() },
+      ] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+    render(<HeapCanvas />)
+    const flow = screen.getByTestId('react-flow-mock')
+    await waitFor(() => {
+      const parsedNodes = JSON.parse(flow.getAttribute('data-nodes') ?? '[]') as Array<{ id: string; style?: { width?: number; height?: number } }>
+      expect(parsedNodes.find((node) => node.id === 'p')?.style).toEqual(expect.objectContaining({ width: 180, height: 180 }))
+    })
+
+    nodeDetailSheetProps.current?.onUpdated('p', { shape: 'pill' })
+
+    await waitFor(() => {
+      const parsedNodes = JSON.parse(flow.getAttribute('data-nodes') ?? '[]') as Array<{ id: string; data: { shape?: string; width?: number; height?: number }; style?: { width?: number; height?: number } }>
+      const parent = parsedNodes.find((node) => node.id === 'p')
+      expect(parent?.data.shape).toBe('pill')
+      expect(parent?.style).toEqual(expect.objectContaining({ width: 180, height: 180 }))
     })
   })
 })
