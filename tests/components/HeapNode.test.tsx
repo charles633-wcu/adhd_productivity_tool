@@ -1,13 +1,16 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { NodeProps } from '@xyflow/react'
+import type { CSSProperties } from 'react'
 
 // vi.mock is hoisted before variable declarations, so use vi.hoisted() to lift the mock ref.
 // Without vi.hoisted(), NodeResizerMock would be undefined inside the factory at runtime.
 const NodeResizerMock = vi.hoisted(() => vi.fn(() => null))
 vi.mock('@xyflow/react', () => ({
-  Handle: () => null,
-  Position: { Left: 'left', Right: 'right' },
+  Handle: (props: { id?: string; type?: string; style?: CSSProperties }) => (
+    <div data-testid={`handle-${props.id}-${props.type}`} style={props.style} />
+  ),
+  Position: { Top: 'top', Right: 'right', Bottom: 'bottom', Left: 'left' },
   NodeResizer: NodeResizerMock,
 }))
 
@@ -148,6 +151,36 @@ describe('HeapNode shapes', () => {
         expect.toSatisfy((v: unknown) => v === undefined || v != null),
       )
     }
+  })
+
+  it('renders dynamic connection handles around the node edge', () => {
+    render(
+      <HeapNode
+        {...makeProps({
+          data: {
+            title: 'Large node title that wraps',
+            type: 'brain_dump',
+            color: null,
+            todoCount: 0,
+            shape: 'rectangle',
+            priority: 'normal',
+            handles: [
+              { id: 'top-0', side: 'top', index: 0, count: 2, xPercent: 33.33, yPercent: 0 },
+              { id: 'top-1', side: 'top', index: 1, count: 2, xPercent: 66.66, yPercent: 0 },
+              { id: 'right-0', side: 'right', index: 0, count: 1, xPercent: 100, yPercent: 50 },
+              { id: 'bottom-0', side: 'bottom', index: 0, count: 1, xPercent: 50, yPercent: 100 },
+              { id: 'left-0', side: 'left', index: 0, count: 1, xPercent: 0, yPercent: 50 },
+            ],
+          },
+        })}
+      />,
+    )
+
+    expect(screen.getByTestId('visual-handle-top-0')).toBeTruthy()
+    expect(screen.getByTestId('handle-top-0-source')).toHaveStyle({ left: '33.33%', top: '0%' })
+    expect(screen.getByTestId('handle-top-0-target')).toHaveStyle({ left: '33.33%', top: '0%' })
+    expect(screen.getByTestId('visual-handle-top-1')).toBeTruthy()
+    expect(screen.getByTestId('visual-handle-right-0')).toBeTruthy()
   })
 
   it('NodeResizer rendered with isVisible=true when circle is selected', () => {

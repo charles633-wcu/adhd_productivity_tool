@@ -28,6 +28,7 @@ import { HeapTutorial } from './HeapTutorial'
 import { NodeDetailSheet } from './NodeDetailSheet'
 import type { HeapNode as HeapNodeType } from '@/lib/db/schema'
 import { deriveFocusVisibility, type FocusEdge, type FocusNode } from '@/lib/heap/focus'
+import { assignEdgeHandles, buildNodeHandles, type HandleNode } from '@/lib/heap/handles'
 
 const nodeTypes = { heapNode: HeapNode }
 
@@ -56,6 +57,15 @@ function toFlowNode(node: HeapNodeType & { todoCount?: number }): Node {
         ? { width: node.width, height: node.height ?? node.width }
         : undefined,
   }
+}
+
+function numericDimension(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  return undefined
 }
 
 export function HeapCanvas() {
@@ -251,8 +261,27 @@ export function HeapCanvas() {
     : null
 
   const childTitles = new Map(nodes.map((node) => [node.id, String((node.data as HeapNodeData).title)]))
+  const handleNodes: HandleNode[] = nodes.map((node) => {
+    const data = node.data as HeapNodeData
+    return {
+      id: node.id,
+      x: node.position.x,
+      y: node.position.y,
+      width: numericDimension(data.width) ?? numericDimension(node.width) ?? numericDimension(node.style?.width),
+      height: numericDimension(data.height) ?? numericDimension(node.height) ?? numericDimension(node.style?.height),
+      shape: data.shape,
+    }
+  })
+  const handlesByNodeId = new Map(handleNodes.map((node) => [node.id, buildNodeHandles(node)]))
+  const nodesWithHandles = nodes.map((node) => ({
+    ...node,
+    data: {
+      ...node.data,
+      handles: handlesByNodeId.get(node.id) ?? [],
+    },
+  }))
   const renderedNodes = focusVisibility
-    ? nodes.map((node) => {
+    ? nodesWithHandles.map((node) => {
         const picked = focusVisibility.visibleChildrenByNodeId.get(node.id)
         return {
           ...node,
@@ -266,15 +295,16 @@ export function HeapCanvas() {
           },
         }
       })
-    : nodes
+    : nodesWithHandles
 
+  const assignedEdges = assignEdgeHandles(handleNodes, edges)
   const renderedEdges = focusVisibility
-    ? edges.map((edge) => ({
+    ? assignedEdges.map((edge) => ({
         ...edge,
         animated: focusVisibility.brightEdgeIds.has(edge.id),
         style: { ...(edge.style ?? {}), opacity: focusVisibility.dimmedEdgeIds.has(edge.id) ? 0.18 : 1 },
       }))
-    : edges
+    : assignedEdges
 
   return (
     <div className="h-full w-full relative" data-testid="heap-canvas-container" data-selected-node-id={selectedNodeId ?? undefined}>
