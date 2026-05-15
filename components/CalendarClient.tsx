@@ -6,7 +6,7 @@
 
 import React, { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react'
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion'
-import { ChevronLeft, ChevronRight, FolderOpen, Link2, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FolderOpen, Link2, Maximize2, Minimize2, Plus } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { DayDetailModal } from '@/components/DayDetailModal'
 import { EventCategoryModal } from '@/components/EventCategoryModal'
@@ -313,6 +313,27 @@ export function CalendarClient({
       >
         {isCenter ? (
           <>
+            {/* Corner expand/collapse button */}
+            <button
+              type="button"
+              aria-label={isExpanded ? 'Collapse calendar' : 'Expand calendar'}
+              onClick={() => setIsExpanded(prev => !prev)}
+              className="absolute top-2 right-2 z-10 flex h-7 w-7 items-center justify-center rounded-lg bg-muted/40 hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.span
+                  key={isExpanded ? 'min' : 'max'}
+                  initial={{ opacity: 0, scale: 0.7 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.7 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  {isExpanded
+                    ? <Minimize2 className="h-3.5 w-3.5" />
+                    : <Maximize2 className="h-3.5 w-3.5" />}
+                </motion.span>
+              </AnimatePresence>
+            </button>
             <button
               type="button"
               aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${label} calendar`}

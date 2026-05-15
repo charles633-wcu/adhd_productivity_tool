@@ -430,6 +430,33 @@ describe('CalendarClient', () => {
     expect(screen.getByRole('button', { name: `Expand ${nextMonthLabel} calendar` })).toBeTruthy()
   })
 
+  it('renders a corner expand button that toggles isExpanded', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-15T12:00:00'))
+
+    render(<CalendarClient {...baseProps} />)
+
+    // Corner button exists in collapsed state
+    const expandBtn = screen.getByRole('button', { name: 'Expand calendar' })
+    expect(expandBtn).toBeTruthy()
+
+    // Clicking it expands the calendar
+    fireEvent.click(expandBtn)
+    expect(screen.getByRole('button', { name: 'Collapse calendar' })).toBeTruthy()
+
+    // Clicking again collapses it
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse calendar' }))
+    expect(screen.getByRole('button', { name: 'Expand calendar' })).toBeTruthy()
+  })
+
+  it('corner expand button has z-10 and is inside the center card', () => {
+    render(<CalendarClient {...baseProps} />)
+
+    const expandBtn = screen.getByRole('button', { name: 'Expand calendar' })
+    expect(expandBtn.className).toContain('absolute')
+    expect(expandBtn.className).toContain('z-10')
+  })
+
   it('refetches expanded recurring events after save', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-15T12:00:00'))
