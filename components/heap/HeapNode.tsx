@@ -4,6 +4,7 @@
 // Shape is read from data.shape (defaults to 'rectangle' if absent).
 import { Handle, Position, NodeResizer, type NodeProps } from '@xyflow/react'
 import type { HeapNodePriority, HeapNodeType, HeapNodeShape } from '@/lib/db/schema'
+import type { HandleSide, VisualHandle } from '@/lib/heap/handles'
 import { cn } from '@/lib/utils'
 
 const TYPE_ICON: Record<HeapNodeType, string> = {
@@ -29,6 +30,7 @@ export type HeapNodeData = {
   visibleChildren?: Array<{ id: string; title: string }>
   overflowChildCount?: number
   onPreviewClick?: (nodeId: string) => void
+  handles?: VisualHandle[]
 }
 
 const HANDLE_CLASS = '!bg-primary !border-2 !border-background !w-3 !h-3'
@@ -39,6 +41,51 @@ function priorityClass(priority: HeapNodePriority | undefined): string {
   if (priority === 'high') return 'shadow-primary/20 ring-1 ring-primary/30'
   if (priority === 'low') return 'opacity-85'
   return ''
+}
+
+function positionForSide(side: HandleSide): Position {
+  if (side === 'top') return Position.Top
+  if (side === 'right') return Position.Right
+  if (side === 'bottom') return Position.Bottom
+  return Position.Left
+}
+
+function DynamicHandles({ handles }: { handles?: VisualHandle[] }) {
+  const list = handles?.length
+    ? handles
+    : ([
+        { id: 'left-0', side: 'left', index: 0, count: 1, xPercent: 0, yPercent: 50 },
+        { id: 'right-0', side: 'right', index: 0, count: 1, xPercent: 100, yPercent: 50 },
+      ] satisfies VisualHandle[])
+
+  return (
+    <>
+      {list.map((handle) => {
+        const style = { left: `${handle.xPercent}%`, top: `${handle.yPercent}%` }
+        const position = positionForSide(handle.side)
+        return (
+          <span key={handle.id} data-testid={`visual-handle-${handle.id}`}>
+            <Handle
+              id={handle.id}
+              type="source"
+              position={position}
+              title="Connection point"
+              className={cn(HANDLE_CLASS, 'absolute')}
+              style={style}
+            />
+            <Handle
+              id={handle.id}
+              type="target"
+              position={position}
+              title="Connection point"
+              className={cn(HANDLE_CLASS, 'absolute')}
+              style={style}
+            />
+          </span>
+        )
+      })}
+    </>
+  )
 }
 
 function PreviewSlots({ data }: { data: HeapNodeData }) {
@@ -91,17 +138,16 @@ export function HeapNode({ data, selected }: NodeProps) {
         )}
       >
         <NodeResizer isVisible={selected} minWidth={60} minHeight={40} keepAspectRatio={false} />
-        <Handle type="target" position={Position.Left} title="Drop connection here" className={HANDLE_CLASS} />
-        <div className="flex items-center gap-1.5">
+        <DynamicHandles handles={d.handles} />
+        <div className="flex h-full min-h-0 items-start gap-1.5">
           <span className="text-[10px] leading-none text-muted-foreground">{TYPE_ICON[d.type]}</span>
-          <span className="text-xs font-medium truncate text-foreground">{d.title}</span>
+          <span className="min-w-0 flex-1 whitespace-normal break-words text-xs font-medium leading-tight text-foreground">{d.title}</span>
           {d.todoCount > 0 && (
             <span className="ml-auto text-[10px] bg-primary/20 text-primary rounded-full px-1.5 py-0.5 flex-shrink-0">
               {d.todoCount}
             </span>
           )}
         </div>
-        <Handle type="source" position={Position.Right} title="Drag to connect" className={HANDLE_CLASS} />
         <PreviewSlots data={d} />
       </div>
     )
@@ -120,11 +166,10 @@ export function HeapNode({ data, selected }: NodeProps) {
         )}
       >
         <NodeResizer isVisible={selected} minWidth={60} minHeight={40} keepAspectRatio={false} />
-        <Handle type="target" position={Position.Left} className={HANDLE_CLASS} />
-        <div className="flex items-center justify-center">
-          <span className="text-xs font-medium truncate text-foreground">{d.title}</span>
+        <DynamicHandles handles={d.handles} />
+        <div className="flex h-full min-h-0 items-center justify-center">
+          <span className="min-w-0 whitespace-normal break-words text-center text-xs font-medium leading-tight text-foreground">{d.title}</span>
         </div>
-        <Handle type="source" position={Position.Right} className={HANDLE_CLASS} />
         <PreviewSlots data={d} />
       </div>
     )
@@ -156,13 +201,12 @@ export function HeapNode({ data, selected }: NodeProps) {
             !d.dimmed && priorityClass(d.priority),
           )}
         >
-          <Handle type="target" position={Position.Left} className={HANDLE_CLASS} />
+          <DynamicHandles handles={d.handles} />
           <div className="absolute inset-0 flex items-center justify-center p-2">
             <span className="text-xs font-medium text-center text-foreground break-words leading-tight">
               {d.title}
             </span>
           </div>
-          <Handle type="source" position={Position.Right} className={HANDLE_CLASS} />
         </div>
         <PreviewSlots data={d} />
       </div>
@@ -190,7 +234,7 @@ export function HeapNode({ data, selected }: NodeProps) {
         handleClassName={RESIZER_OVERLAY_CLASS}
         lineClassName={RESIZER_OVERLAY_CLASS}
       />
-      <Handle type="target" position={Position.Left} className={HANDLE_CLASS} />
+      <DynamicHandles handles={d.handles} />
       {/* Rotated background square that forms the diamond shape */}
       <div
         style={{ borderColor, width: diamondSize, height: diamondSize }}
@@ -202,7 +246,6 @@ export function HeapNode({ data, selected }: NodeProps) {
           {d.title}
         </span>
       </div>
-      <Handle type="source" position={Position.Right} className={HANDLE_CLASS} />
       <PreviewSlots data={d} />
     </div>
   )

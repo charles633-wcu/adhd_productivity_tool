@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { HeapCanvas } from '@/components/heap/HeapCanvas'
 
@@ -30,7 +30,7 @@ vi.mock('@xyflow/react', async () => {
     return [items, setItems, vi.fn()]
   },
   addEdge: vi.fn((params, edges) => [...edges, params]),
-  Position: { Left: 'left', Right: 'right' },
+  Position: { Top: 'top', Right: 'right', Bottom: 'bottom', Left: 'left' },
   Handle: () => null,
   ConnectionMode: { Loose: 'loose', Strict: 'strict' },
 }})
@@ -158,6 +158,48 @@ describe('HeapCanvas', () => {
       expect(parent?.data.height).toBe(105)
       expect(parent?.style).toEqual(expect.objectContaining({ width: 250, height: 105 }))
       expect(parent?.data.visibleChildren).toHaveLength(3)
+    })
+  })
+
+  it('assigns visual edge handles from current node geometry', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => [
+        { id: 'p', userId: 'u1', title: 'Parent', type: 'brain_dump', color: null, priority: 'normal', shape: 'rectangle', width: 250, height: 120, posX: 0, posY: 0, body: null, createdAt: new Date(), updatedAt: new Date() },
+        { id: 'a', userId: 'u1', title: 'A', type: 'brain_dump', color: null, priority: 'normal', shape: 'rectangle', width: null, height: null, posX: 400, posY: 0, body: null, createdAt: new Date(), updatedAt: new Date() },
+        { id: 'b', userId: 'u1', title: 'B', type: 'brain_dump', color: null, priority: 'normal', shape: 'rectangle', width: null, height: null, posX: 400, posY: 90, body: null, createdAt: new Date(), updatedAt: new Date() },
+      ] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [
+        { id: 'pa', source: 'p', target: 'a' },
+        { id: 'pb', source: 'p', target: 'b' },
+      ] })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) })
+
+    render(<HeapCanvas />)
+    const flow = screen.getByTestId('react-flow-mock')
+
+    await waitFor(() => {
+      const parsedNodes = JSON.parse(flow.getAttribute('data-nodes') ?? '[]') as Array<{ id: string; data: { handles?: Array<{ id: string }> } }>
+      const parent = parsedNodes.find((node) => node.id === 'p')
+      expect(parent?.data.handles?.map((handle) => handle.id)).toContain('right-1')
+
+      const parsedEdges = JSON.parse(flow.getAttribute('data-edges') ?? '[]') as Array<{
+        id: string
+        sourceHandle?: string
+        targetHandle?: string
+      }>
+      expect(parsedEdges.map((edge) => edge.sourceHandle)).toEqual(['right-0', 'right-1'])
+      expect(parsedEdges.every((edge) => edge.targetHandle === 'left-0')).toBe(true)
+    })
+
+    act(() => {
+      reactFlowProps.current?.onNodesChange?.([
+        { type: 'dimensions', id: 'p', dimensions: { width: 110, height: 60 }, resizing: false },
+      ])
+    })
+
+    await waitFor(() => {
+      const parsedEdges = JSON.parse(flow.getAttribute('data-edges') ?? '[]') as Array<{ sourceHandle?: string }>
+      expect(parsedEdges.map((edge) => edge.sourceHandle)).toEqual(['right-0', 'right-0'])
     })
   })
 
