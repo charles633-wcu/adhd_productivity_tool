@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { eq } from 'drizzle-orm'
+import { count, eq, getTableColumns } from 'drizzle-orm'
 import { createId } from '@paralleldrive/cuid2'
 import { getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db/client'
-import { heapNodes } from '@/lib/db/schema'
+import { heapNodeTodos, heapNodes } from '@/lib/db/schema'
 
 const CreateNodeSchema = z.object({
   title: z.string().min(1).max(200),
@@ -20,7 +20,15 @@ export async function GET() {
   try {
     const user = await getCurrentUser()
     const db = getDb()
-    const nodes = await db.select().from(heapNodes).where(eq(heapNodes.userId, user.id))
+    const nodes = await db
+      .select({
+        ...getTableColumns(heapNodes),
+        todoCount: count(heapNodeTodos.todoId),
+      })
+      .from(heapNodes)
+      .leftJoin(heapNodeTodos, eq(heapNodeTodos.nodeId, heapNodes.id))
+      .where(eq(heapNodes.userId, user.id))
+      .groupBy(heapNodes.id)
     return NextResponse.json(nodes)
   } catch (error) {
     return NextResponse.json({ error: String(error), code: 'DB_ERROR' }, { status: 500 })

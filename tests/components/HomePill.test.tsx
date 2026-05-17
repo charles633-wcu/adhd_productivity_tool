@@ -41,4 +41,20 @@ describe('HomePill', () => {
     fireEvent.click(screen.getByRole('button', { name: /^trigger$/i }))
     expect(screen.getByTestId('quick-add-form-state').textContent).toBe('open')
   })
+
+  it('keeps app switcher labels on one line', () => {
+    render(
+      <HomePill
+        categories={[{ id: 'cat-1', name: 'Work', color: null, icon: null }]}
+        triggers={[]}
+        todayTodoCount={3}
+      />
+    )
+
+    for (const name of [/triggers/i, /calendar/i, /to-dos/i, /mind/i]) {
+      const item = screen.getByRole(name.source === 'triggers' ? 'button' : 'link', { name })
+      expect(item.className).toContain('whitespace-nowrap')
+      expect(item.className).toContain('shrink-0')
+    }
+  })
 })

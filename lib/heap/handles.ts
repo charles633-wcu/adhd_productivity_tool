@@ -36,8 +36,18 @@ const SIDES: HandleSide[] = ['top', 'right', 'bottom', 'left']
 export function buildNodeHandles(node: HandleNode): VisualHandle[] {
   const width = node.width ?? defaultWidth(node.shape)
   const height = node.height ?? defaultHeight(node.shape)
-  const sideCounts = getSideCounts(width, height, node.shape)
 
+  // Circles use angular circumference positions so handles land on the visual border.
+  if (node.shape === 'circle') {
+    return buildCircleHandles(Math.max(width, height))
+  }
+
+  // Diamonds place handles at the four visual tips, which overflow the bounding box.
+  if (node.shape === 'diamond') {
+    return buildDiamondHandles()
+  }
+
+  const sideCounts = getSideCounts(width, height)
   return SIDES.flatMap((side) => Array.from({ length: sideCounts[side] }, (_, index) => {
     const count = sideCounts[side]
     const offset = count === 1 ? 50 : ((index + 1) / (count + 1)) * 100
@@ -50,6 +60,42 @@ export function buildNodeHandles(node: HandleNode): VisualHandle[] {
       yPercent: side === 'top' ? 0 : side === 'bottom' ? 100 : offset,
     }
   }))
+}
+
+function buildCircleHandles(size: number): VisualHandle[] {
+  // Scale handle count with circle size; each handle is placed exactly on the circumference.
+  const count = size < 120 ? 4 : size < 250 ? 8 : 12
+  return Array.from({ length: count }, (_, i) => {
+    // Angle: start at top (12 o'clock = -π/2), advance clockwise.
+    const angle = -Math.PI / 2 + (2 * Math.PI * i) / count
+    const xPercent = 50 + 50 * Math.cos(angle)
+    // CSS y increases downward, matching Math.sin's positive direction from top.
+    const yPercent = 50 + 50 * Math.sin(angle)
+
+    // Map to nearest cardinal direction for React Flow edge routing.
+    const clockwiseDeg = (i / count) * 360
+    const side: HandleSide =
+      clockwiseDeg < 45 || clockwiseDeg >= 315 ? 'top'
+      : clockwiseDeg < 135 ? 'right'
+      : clockwiseDeg < 225 ? 'bottom'
+      : 'left'
+
+    return { id: `circle-${i}`, side, index: i, count, xPercent, yPercent }
+  })
+}
+
+function buildDiamondHandles(): VisualHandle[] {
+  // The visual diamond (a square rotated 45°) overflows the bounding box.
+  // Each tip is at distance containerSize × √2/2 from the center.
+  // Expressed as a percentage of the container that puts handles outside 0–100%
+  // so they land on the visual tip, not the bounding-box edge.
+  const TIP_PERCENT = 50 * Math.SQRT2 // ≈ 70.71
+  return [
+    { id: 'top-0', side: 'top', index: 0, count: 1, xPercent: 50, yPercent: 50 - TIP_PERCENT },
+    { id: 'right-0', side: 'right', index: 0, count: 1, xPercent: 50 + TIP_PERCENT, yPercent: 50 },
+    { id: 'bottom-0', side: 'bottom', index: 0, count: 1, xPercent: 50, yPercent: 50 + TIP_PERCENT },
+    { id: 'left-0', side: 'left', index: 0, count: 1, xPercent: 50 - TIP_PERCENT, yPercent: 50 },
+  ]
 }
 
 export function assignEdgeHandles<T extends HandleEdge>(nodes: HandleNode[], edges: T[]): AssignedHandleEdge<T>[] {
@@ -137,13 +183,7 @@ function center(node: HandleNode): { x: number; y: number } {
   return { x: node.x + width / 2, y: node.y + height / 2 }
 }
 
-function getSideCounts(width: number, height: number, shape?: HeapNodeShape | null): Record<HandleSide, number> {
-  if (shape === 'circle' || shape === 'diamond') {
-    const size = Math.max(width, height)
-    const count = clamp(1 + Math.floor(Math.max(0, size - 80) / 70), 1, 4)
-    return { top: count, right: count, bottom: count, left: count }
-  }
-
+function getSideCounts(width: number, height: number): Record<HandleSide, number> {
   const horizontal = clamp(1 + Math.floor(Math.max(0, width - 110) / 70), 1, 5)
   const vertical = clamp(1 + Math.floor(Math.max(0, height - 60) / 60), 1, 4)
   return { top: horizontal, right: vertical, bottom: horizontal, left: vertical }

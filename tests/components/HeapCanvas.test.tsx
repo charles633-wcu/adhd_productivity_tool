@@ -203,6 +203,57 @@ describe('HeapCanvas', () => {
     })
   })
 
+  it('toggles the graph inspector panel open and closed', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => [
+        { id: 'n1', userId: 'u1', title: 'Node 1', type: 'brain_dump', color: null, priority: 'normal', shape: 'circle', width: 120, height: 120, posX: 10, posY: 20, body: null, createdAt: new Date(), updatedAt: new Date() },
+      ] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+    render(<HeapCanvas />)
+    await waitFor(() => screen.getByRole('button', { name: /graph inspector/i }))
+
+    expect(screen.queryByTestId('graph-debug-panel')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /graph inspector/i }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('graph-debug-panel')).toBeTruthy()
+    })
+    expect(screen.getByText(/n1/)).toBeTruthy()
+    expect(screen.getByText(/circle/)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /graph inspector/i }))
+    expect(screen.queryByTestId('graph-debug-panel')).toBeNull()
+  })
+
+  it('graph inspector export button triggers a JSON download', async () => {
+    const createObjectURLMock = vi.fn(() => 'blob:test')
+    const revokeObjectURLMock = vi.fn()
+    const anchorClickMock = vi.fn()
+    vi.stubGlobal('URL', { ...URL, createObjectURL: createObjectURLMock, revokeObjectURL: revokeObjectURLMock })
+    const origCreate = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      const el = origCreate(tag)
+      if (tag === 'a') vi.spyOn(el as HTMLAnchorElement, 'click').mockImplementation(anchorClickMock)
+      return el
+    })
+
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+    render(<HeapCanvas />)
+    await waitFor(() => screen.getByRole('button', { name: /graph inspector/i }))
+    fireEvent.click(screen.getByRole('button', { name: /graph inspector/i }))
+    await waitFor(() => screen.getByTestId('graph-debug-panel'))
+
+    fireEvent.click(screen.getByRole('button', { name: /export json/i }))
+
+    expect(createObjectURLMock).toHaveBeenCalledOnce()
+    expect(anchorClickMock).toHaveBeenCalledOnce()
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
   it('keeps persisted dimensions when a resized node changes to a non-circle shape', async () => {
     ;(global.fetch as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({ ok: true, json: async () => [

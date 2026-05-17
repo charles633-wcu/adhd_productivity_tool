@@ -1,11 +1,11 @@
-// Todo Lists API — list all lists (lazy Inbox creation) and create new lists.
+// Todo Lists API - list all lists (lazy Inbox creation) and create new lists.
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { createId } from '@paralleldrive/cuid2'
+import { getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db/client'
 import { todoLists } from '@/lib/db/schema'
-import { getCurrentUser } from '@/lib/auth'
-import { eq } from 'drizzle-orm'
-import { createId } from '@paralleldrive/cuid2'
+import { ensureTodoListsForUser } from '@/lib/db/todoLists'
 
 const CreateListSchema = z.object({
   name: z.string().min(1).max(100),
@@ -14,24 +14,12 @@ const CreateListSchema = z.object({
 })
 
 /**
- * GET /api/todo-lists — returns all lists; lazily inserts "Inbox" if none exist.
+ * GET /api/todo-lists - returns all lists; lazily inserts "Inbox" if none exist.
  */
 export async function GET(_request: Request) {
   try {
     const user = await getCurrentUser()
-    const db = getDb()
-
-    let lists = await db.select().from(todoLists).where(eq(todoLists.userId, user.id))
-
-    // Lazy Inbox creation — first-time setup
-    if (lists.length === 0) {
-      const [inbox] = await db
-        .insert(todoLists)
-        .values({ id: createId(), userId: user.id, name: 'Inbox' })
-        .returning()
-      lists = [inbox]
-    }
-
+    const lists = await ensureTodoListsForUser(user.id)
     return NextResponse.json(lists)
   } catch (error) {
     return NextResponse.json({ error: String(error), code: 'DB_ERROR' }, { status: 500 })
@@ -39,7 +27,7 @@ export async function GET(_request: Request) {
 }
 
 /**
- * POST /api/todo-lists — create a new list.
+ * POST /api/todo-lists - create a new list.
  */
 export async function POST(request: Request) {
   try {

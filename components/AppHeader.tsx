@@ -40,13 +40,13 @@ export function AppHeader({ active, className }: AppHeaderProps) {
       <div
         data-testid="app-header-pill"
         className={cn(
-          'fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 rounded-full border border-border/50 bg-background/90 backdrop-blur-md shadow-lg px-4 py-0',
+          'fixed top-3 left-1/2 -translate-x-1/2 z-50 flex max-w-[calc(100vw-1rem)] items-center gap-2.5 overflow-x-auto rounded-full border border-border/50 bg-background/90 backdrop-blur-md shadow-lg px-4 py-0',
           className,
         )}
       >
         <Link
           href="/"
-          className="text-[13px] font-extrabold uppercase tracking-widest text-foreground select-none hover:text-primary transition-colors"
+          className="shrink-0 whitespace-nowrap text-[13px] font-extrabold uppercase tracking-widest text-foreground select-none hover:text-primary transition-colors"
         >
           SENTINEL
         </Link>
@@ -65,7 +65,7 @@ export function AppHeader({ active, className }: AppHeaderProps) {
                 href={href}
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'flex items-center gap-1.5 rounded-xl px-4 min-h-[44px] text-[13px] transition-colors',
+                  'flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-4 min-h-[44px] text-[13px] transition-colors',
                   isActive
                     ? 'bg-primary text-primary-foreground font-semibold cursor-default'
                     : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',

@@ -61,6 +61,59 @@ describe('dynamic heap handles', () => {
     expect(result.every((edge) => edge.targetHandle === 'left-0')).toBe(true)
   })
 
+  it('small circle has 4 handles at cardinal circumference points', () => {
+    const handles = buildNodeHandles(baseNode({ shape: 'circle', width: 80, height: 80 }))
+
+    expect(handles).toHaveLength(4)
+    // Every handle must sit on the circle circumference: (x-50)²+(y-50)² = 50²
+    for (const h of handles) {
+      const dist = Math.sqrt((h.xPercent - 50) ** 2 + (h.yPercent - 50) ** 2)
+      expect(dist).toBeCloseTo(50, 0)
+    }
+  })
+
+  it('medium circle (≥120px) has 8 handles evenly on the circumference', () => {
+    const handles = buildNodeHandles(baseNode({ shape: 'circle', width: 200, height: 200 }))
+
+    expect(handles).toHaveLength(8)
+    for (const h of handles) {
+      const dist = Math.sqrt((h.xPercent - 50) ** 2 + (h.yPercent - 50) ** 2)
+      expect(dist).toBeCloseTo(50, 0)
+    }
+  })
+
+  it('large circle (≥250px) has 12 handles evenly on the circumference', () => {
+    const handles = buildNodeHandles(baseNode({ shape: 'circle', width: 300, height: 300 }))
+
+    expect(handles).toHaveLength(12)
+    for (const h of handles) {
+      const dist = Math.sqrt((h.xPercent - 50) ** 2 + (h.yPercent - 50) ** 2)
+      expect(dist).toBeCloseTo(50, 0)
+    }
+  })
+
+  it('diamond has 4 handles at visual tips, which overflow the bounding box', () => {
+    const handles = buildNodeHandles(baseNode({ shape: 'diamond', width: 90, height: 90 }))
+
+    expect(handles).toHaveLength(4)
+    // Each tip is at 50 × √2 ≈ 70.71% from center, outside the 0–100% box range.
+    const TIP = 50 * Math.SQRT2
+    expect(handles.find((h) => h.side === 'top')?.yPercent).toBeCloseTo(50 - TIP, 1)
+    expect(handles.find((h) => h.side === 'right')?.xPercent).toBeCloseTo(50 + TIP, 1)
+    expect(handles.find((h) => h.side === 'bottom')?.yPercent).toBeCloseTo(50 + TIP, 1)
+    expect(handles.find((h) => h.side === 'left')?.xPercent).toBeCloseTo(50 - TIP, 1)
+  })
+
+  it('diamond tip positions are constant regardless of node size', () => {
+    const small = buildNodeHandles(baseNode({ shape: 'diamond', width: 90, height: 90 }))
+    const large = buildNodeHandles(baseNode({ shape: 'diamond', width: 250, height: 250 }))
+
+    expect(small.find((h) => h.side === 'top')?.yPercent).toBeCloseTo(
+      large.find((h) => h.side === 'top')?.yPercent ?? 0,
+      1,
+    )
+  })
+
   it('collapses assignments to remaining handles when a node shrinks', () => {
     const nodes = [
       baseNode({ id: 'a', x: 0, y: 0, width: 110, height: 60 }),

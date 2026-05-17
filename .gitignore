@@ -68,3 +68,6 @@ sample_csv/
 # generated runtime logs
 docs/*.log
 docs/**/*.log
+
+
+goal_adhd_research_features.txt

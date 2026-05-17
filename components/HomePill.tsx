@@ -202,10 +202,10 @@ export function HomePill({ categories, triggers, todayTodoCount }: HomePillProps
   return (
     <>
       {/* ── Floating Pill Toolbar — fixed top-center ────────────────────────── */}
-      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 rounded-full border border-border/50 bg-background/90 backdrop-blur-md shadow-lg px-4 py-0">
+      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex max-w-[calc(100vw-1rem)] items-center gap-2.5 overflow-x-auto rounded-full border border-border/50 bg-background/90 backdrop-blur-md shadow-lg px-4 py-0">
 
         {/* Brand */}
-        <span className="text-[13px] font-extrabold tracking-widest text-foreground select-none">
+        <span className="shrink-0 whitespace-nowrap text-[13px] font-extrabold tracking-widest text-foreground select-none">
           SENTINEL
         </span>
 
@@ -215,7 +215,7 @@ export function HomePill({ categories, triggers, todayTodoCount }: HomePillProps
         {/* App switcher — Triggers (active). Future apps added here. */}
         <button
           type="button"
-          className="flex items-center gap-1.5 rounded-xl bg-primary text-primary-foreground px-4 min-h-[44px] text-[13px] font-semibold cursor-default"
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-primary text-primary-foreground px-4 min-h-[44px] text-[13px] font-semibold cursor-default"
           aria-current="page"
         >
           <span aria-hidden="true">🎯</span>
@@ -225,7 +225,7 @@ export function HomePill({ categories, triggers, todayTodoCount }: HomePillProps
         {/* Calendar app — navigates to /calendar */}
         <Link
           href="/calendar"
-          className="flex items-center gap-1.5 rounded-xl px-4 min-h-[44px] text-[13px] font-medium text-muted-foreground hover:bg-muted/60 transition-colors"
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-4 min-h-[44px] text-[13px] font-medium text-muted-foreground hover:bg-muted/60 transition-colors"
         >
           <CalendarDays className="h-4 w-4" aria-hidden="true" />
           Calendar
@@ -234,7 +234,7 @@ export function HomePill({ categories, triggers, todayTodoCount }: HomePillProps
         {/* To-Dos app — navigates to /todos with today count badge */}
         <Link
           href="/todos"
-          className="flex items-center gap-1.5 rounded-xl px-4 min-h-[44px] text-[13px] font-medium text-muted-foreground hover:bg-muted/60 transition-colors"
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-4 min-h-[44px] text-[13px] font-medium text-muted-foreground hover:bg-muted/60 transition-colors"
         >
           ✓ To-Dos
           {todayTodoCount > 0 && (
@@ -247,7 +247,7 @@ export function HomePill({ categories, triggers, todayTodoCount }: HomePillProps
         {/* Mind app — navigates to /heap */}
         <Link
           href="/heap"
-          className="flex items-center gap-1.5 rounded-xl px-4 min-h-[44px] text-[13px] font-medium text-muted-foreground hover:bg-muted/60 transition-colors"
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-4 min-h-[44px] text-[13px] font-medium text-muted-foreground hover:bg-muted/60 transition-colors"
         >
           <Brain className="h-4 w-4" aria-hidden="true" />
           Mind

@@ -3,6 +3,7 @@
 // HeapNode — renders a single Mind canvas node with one of four visual shapes.
 // Shape is read from data.shape (defaults to 'rectangle' if absent).
 import { Handle, Position, NodeResizer, type NodeProps } from '@xyflow/react'
+import type { CSSProperties } from 'react'
 import type { HeapNodePriority, HeapNodeType, HeapNodeShape } from '@/lib/db/schema'
 import type { HandleSide, VisualHandle } from '@/lib/heap/handles'
 import { cn } from '@/lib/utils'
@@ -50,6 +51,9 @@ function positionForSide(side: HandleSide): Position {
   return Position.Left
 }
 
+// Half the handle dot size (!w-3 !h-3 = 12px) used to center via calc().
+const HANDLE_HALF_PX = 6
+
 function DynamicHandles({ handles }: { handles?: VisualHandle[] }) {
   const list = handles?.length
     ? handles
@@ -61,7 +65,15 @@ function DynamicHandles({ handles }: { handles?: VisualHandle[] }) {
   return (
     <>
       {list.map((handle) => {
-        const style = { left: `${handle.xPercent}%`, top: `${handle.yPercent}%` }
+        // Place the handle's CENTER at (xPercent, yPercent) of the node container.
+        // Using calc(X% - half) so the center lands exactly on the shape boundary.
+        // transform:none overrides React Flow's class-based transform (translate±50%)
+        // which assumes edge-anchored handles and would misplace diagonal circle handles.
+        const style: CSSProperties = {
+          left: `calc(${handle.xPercent}% - ${HANDLE_HALF_PX}px)`,
+          top: `calc(${handle.yPercent}% - ${HANDLE_HALF_PX}px)`,
+          transform: 'none',
+        }
         const position = positionForSide(handle.side)
         return (
           <span key={handle.id} data-testid={`visual-handle-${handle.id}`}>
@@ -193,6 +205,10 @@ export function HeapNode({ data, selected }: NodeProps) {
           handleClassName={RESIZER_OVERLAY_CLASS}
           lineClassName={RESIZER_OVERLAY_CLASS}
         />
+        {/* Handles must live on the outer wrapper, not inside overflow-hidden.
+            React Flow's handle transform shifts them outside their parent;
+            overflow-hidden on the inner surface would clip them. */}
+        <DynamicHandles handles={d.handles} />
         <div
           style={{ borderColor }}
           className={cn(
@@ -201,7 +217,6 @@ export function HeapNode({ data, selected }: NodeProps) {
             !d.dimmed && priorityClass(d.priority),
           )}
         >
-          <DynamicHandles handles={d.handles} />
           <div className="absolute inset-0 flex items-center justify-center p-2">
             <span className="text-xs font-medium text-center text-foreground break-words leading-tight">
               {d.title}

@@ -42,6 +42,16 @@ describe('AppHeader', () => {
     expect(todosLink.querySelector('.lucide-inbox')).toBeNull()
   })
 
+  it('keeps feature navigation labels on one line', () => {
+    render(<AppHeader active="calendar" />)
+
+    for (const name of [/triggers/i, /calendar/i, /to-dos/i, /mind/i]) {
+      const link = screen.getByRole('link', { name })
+      expect(link.className).toContain('whitespace-nowrap')
+      expect(link.className).toContain('shrink-0')
+    }
+  })
+
   it('opens an empty subfeature menu from the hamburger', () => {
     render(<AppHeader active="todos" />)
 

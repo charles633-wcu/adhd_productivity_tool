@@ -18,6 +18,7 @@ import {
   type Connection,
   type OnNodeDrag,
   type OnConnect,
+  type Viewport,
 } from '@xyflow/react'
 import { HelpCircle } from 'lucide-react'
 import { toast } from 'sonner'
@@ -31,6 +32,24 @@ import { deriveFocusVisibility, type FocusEdge, type FocusNode } from '@/lib/hea
 import { assignEdgeHandles, buildNodeHandles, type HandleNode } from '@/lib/heap/handles'
 
 const nodeTypes = { heapNode: HeapNode }
+
+function exportGraph(nodes: Node[], edges: Edge[]) {
+  const snapshot = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    nodes: nodes.map((n) => ({ id: n.id, position: n.position, data: n.data, style: n.style })),
+    edges: edges.map((e) => ({ id: e.id, source: String(e.source), target: String(e.target) })),
+  }
+  const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `mind-graph-${new Date().toISOString().slice(0, 10)}.json`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
 
 function toFlowNode(node: HeapNodeType & { todoCount?: number }): Node {
   // Circle nodes need an explicit size so they render at the correct dimensions on load.
@@ -77,11 +96,12 @@ export function HeapCanvas() {
   const [showTutorial, setShowTutorial] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
   const [focusPathIds, setFocusPathIds] = useState<Set<string>>(new Set())
+  const [showInspector, setShowInspector] = useState(false)
   // Abort controller map for in-flight drag PATCH requests — prevents stale writes on rapid drag
   const dragAbortRefs = useRef<Map<string, AbortController>>(new Map())
   // Abort controller map for in-flight resize PATCH requests — prevents stale writes on rapid resize
   const resizeAbortRefs = useRef<Map<string, AbortController>>(new Map())
-  const { fitView } = useReactFlow()
+  const { fitView, setViewport } = useReactFlow()
 
   useEffect(() => {
     let cancelled = false
@@ -111,12 +131,28 @@ export function HeapCanvas() {
     return () => { cancelled = true }
   }, [setNodes, setEdges])
 
-  // Fit view after async load so nodes are always visible regardless of stored coordinates
+  // Restore saved viewport from localStorage, or fit all nodes if none saved.
   useEffect(() => {
     if (!isLoading) {
-      requestAnimationFrame(() => fitView({ padding: 0.15, duration: 300 }))
+      requestAnimationFrame(() => {
+        const saved = localStorage.getItem('mind-graph-viewport')
+        if (saved) {
+          try {
+            const vp = JSON.parse(saved) as Viewport
+            setViewport(vp, { duration: 200 })
+          } catch {
+            fitView({ padding: 0.15, duration: 300 })
+          }
+        } else {
+          fitView({ padding: 0.15, duration: 300 })
+        }
+      })
     }
-  }, [isLoading, fitView])
+  }, [isLoading, fitView, setViewport])
+
+  const handleMoveEnd = useCallback((_event: unknown, viewport: Viewport) => {
+    localStorage.setItem('mind-graph-viewport', JSON.stringify(viewport))
+  }, [])
 
   // Persist circle resize to the server; aborts in-flight requests for the same node
   const patchNodeSize = useCallback((nodeId: string, width: number, height: number) => {
@@ -147,15 +183,18 @@ export function HeapCanvas() {
 
   // Wraps useNodesState's onNodesChange to also persist circle resize when drag ends.
   // c.resizing is boolean | undefined: true while dragging, undefined when drag ends (not false).
+  // Falls back to node.style (updated by onNodesChange) when the change omits explicit dimensions,
+  // which happens when ReactFlow's NodeResizer fires updateStyle:true without a dimensions field.
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
     onNodesChange(changes)
     const resizes = changes.filter((c): c is NodeDimensionChange => c.type === 'dimensions')
     if (resizes.length > 0) {
       setNodes((currentNodes) => currentNodes.map((node) => {
-        const resize = resizes.find((change) => change.id === node.id && change.dimensions != null)
-        if (!resize?.dimensions) return node
-        const nextWidth = resize.dimensions.width
-        const nextHeight = resize.dimensions.height
+        const resize = resizes.find((change) => change.id === node.id)
+        if (!resize) return node
+        const nextWidth = resize.dimensions?.width ?? numericDimension(node.style?.width)
+        const nextHeight = resize.dimensions?.height ?? numericDimension(node.style?.height)
+        if (nextWidth == null || nextHeight == null) return node
         return {
           ...node,
           data: { ...node.data, width: nextWidth, height: nextHeight },
@@ -267,8 +306,8 @@ export function HeapCanvas() {
       id: node.id,
       x: node.position.x,
       y: node.position.y,
-      width: numericDimension(data.width) ?? numericDimension(node.width) ?? numericDimension(node.style?.width),
-      height: numericDimension(data.height) ?? numericDimension(node.height) ?? numericDimension(node.style?.height),
+      width: numericDimension(data.width) ?? numericDimension(node.measured?.width) ?? numericDimension(node.style?.width),
+      height: numericDimension(data.height) ?? numericDimension(node.measured?.height) ?? numericDimension(node.style?.height),
       shape: data.shape,
     }
   })
@@ -331,6 +370,16 @@ export function HeapCanvas() {
             Reset Focus
           </button>
         )}
+        <span className="w-px h-4 bg-border" />
+        <button
+          type="button"
+          aria-label="Graph Inspector"
+          aria-pressed={showInspector}
+          onClick={() => setShowInspector((v) => !v)}
+          className={showInspector ? 'text-primary text-sm font-semibold' : 'text-muted-foreground text-sm font-semibold'}
+        >
+          Graph Inspector
+        </button>
       </div>
       {focusMode && focusVisibility?.brightNodeIds.size === 0 && (
         <div className="absolute right-6 top-20 z-30 rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground shadow">
@@ -345,6 +394,7 @@ export function HeapCanvas() {
         onConnect={handleConnect}
         onNodeDragStop={handleNodeDragStop}
         onNodeClick={handleNodeClick}
+        onMoveEnd={handleMoveEnd}
         nodeTypes={nodeTypes}
         connectionMode={ConnectionMode.Loose}
         colorMode="dark"
@@ -375,6 +425,50 @@ export function HeapCanvas() {
         onDeleted={handleNodeDeleted}
         onUpdated={handleNodeUpdated}
       />
+      {showInspector && (
+        <div
+          data-testid="graph-debug-panel"
+          className="absolute bottom-20 left-4 z-40 max-h-72 w-80 overflow-y-auto rounded-xl border border-border bg-card/95 p-3 shadow-xl backdrop-blur text-xs font-mono"
+        >
+          <div className="mb-2 flex items-center justify-between">
+            <p className="font-semibold text-foreground">Graph Inspector — {nodes.length} nodes · {edges.length} edges</p>
+            <button
+              type="button"
+              aria-label="Export JSON"
+              onClick={() => exportGraph(nodes, edges)}
+              className="rounded px-2 py-0.5 text-[10px] border border-border text-muted-foreground hover:text-foreground hover:border-primary transition-colors"
+            >
+              Export JSON
+            </button>
+          </div>
+          {nodes.map((node) => {
+            const d = node.data as HeapNodeData
+            const handleCount = (d.handles ?? []).length
+            return (
+              <div key={node.id} className="mb-1 text-muted-foreground">
+                <span className="text-foreground">{node.id.slice(0, 8)}</span>
+                {' · '}
+                <span>{d.shape ?? 'rect'}</span>
+                {' · '}
+                {d.width != null ? `${Math.round(d.width)}×${Math.round(d.height ?? d.width)}` : 'auto'}
+                {' @ '}({Math.round(node.position.x)},{Math.round(node.position.y)})
+                {' · '}
+                {handleCount}h
+              </div>
+            )
+          })}
+          {edges.length > 0 && (
+            <>
+              <p className="mt-2 mb-1 font-semibold text-foreground">Edges</p>
+              {edges.map((edge) => (
+                <div key={edge.id} className="text-muted-foreground">
+                  {String(edge.source).slice(0, 8)} → {String(edge.target).slice(0, 8)}
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }

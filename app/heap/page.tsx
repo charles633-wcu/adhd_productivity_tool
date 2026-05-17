@@ -4,10 +4,11 @@ import { ReactFlowProvider } from '@xyflow/react'
 import { AppHeader } from '@/components/AppHeader'
 import { HeapCanvas } from '@/components/heap/HeapCanvas'
 import { getCurrentUser } from '@/lib/auth'
+import { ensureTodoListsForUser } from '@/lib/db/todoLists'
 
 export default async function HeapPage() {
-  await getCurrentUser()
-  await fetch(`${process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000'}/api/todo-lists`)
+  const user = await getCurrentUser()
+  await ensureTodoListsForUser(user.id)
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">

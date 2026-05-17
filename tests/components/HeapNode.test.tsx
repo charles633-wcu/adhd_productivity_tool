@@ -153,7 +153,7 @@ describe('HeapNode shapes', () => {
     }
   })
 
-  it('renders dynamic connection handles around the node edge', () => {
+  it('renders dynamic connection handles around the node edge using calc centering', () => {
     render(
       <HeapNode
         {...makeProps({
@@ -177,8 +177,14 @@ describe('HeapNode shapes', () => {
     )
 
     expect(screen.getByTestId('visual-handle-top-0')).toBeTruthy()
-    expect(screen.getByTestId('handle-top-0-source')).toHaveStyle({ left: '33.33%', top: '0%' })
-    expect(screen.getByTestId('handle-top-0-target')).toHaveStyle({ left: '33.33%', top: '0%' })
+    // All handles use calc centering — center is at (xPercent%, yPercent%),
+    // style places top-left at (xPercent% - 6px, yPercent% - 6px) with transform:none.
+    expect(screen.getByTestId('handle-top-0-source').style.left).toBe('calc(33.33% - 6px)')
+    expect(screen.getByTestId('handle-top-0-source').style.top).toBe('calc(0% - 6px)')
+    // Right handles must NOT use left:100% (which misplaces center by 12px outside the node).
+    expect(screen.getByTestId('handle-right-0-source').style.left).toBe('calc(100% - 6px)')
+    // Bottom handles must NOT use top:100%.
+    expect(screen.getByTestId('handle-bottom-0-source').style.top).toBe('calc(100% - 6px)')
     expect(screen.getByTestId('visual-handle-top-1')).toBeTruthy()
     expect(screen.getByTestId('visual-handle-right-0')).toBeTruthy()
   })
@@ -248,6 +254,32 @@ describe('HeapNode shapes', () => {
     expect(screen.getByRole('button', { name: /focus first child/i })).toBeTruthy()
     expect(screen.getByRole('button', { name: /focus second child/i })).toBeTruthy()
     expect(screen.getByText('+3')).toBeTruthy()
+  })
+
+  it('renders circle handles outside the overflow-hidden surface', () => {
+    const { container } = render(
+      <HeapNode
+        {...makeProps({
+          data: {
+            title: 'Circle',
+            type: 'brain_dump',
+            color: null,
+            todoCount: 0,
+            shape: 'circle',
+            handles: [
+              { id: 'left-0', side: 'left', index: 0, count: 1, xPercent: 0, yPercent: 50 },
+              { id: 'right-0', side: 'right', index: 0, count: 1, xPercent: 100, yPercent: 50 },
+            ],
+          },
+        })}
+      />,
+    )
+
+    const clippedSurface = container.querySelector('.overflow-hidden') as HTMLElement
+    const leftHandle = screen.getByTestId('visual-handle-left-0')
+
+    expect(clippedSurface).toBeTruthy()
+    expect(clippedSurface).not.toContainElement(leftHandle)
   })
 
   it('renders circle previews outside the clipped circle surface', () => {

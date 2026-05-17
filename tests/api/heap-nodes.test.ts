@@ -112,13 +112,41 @@ describe('GET /api/heap/nodes', () => {
 
   it('returns nodes for current user', async () => {
     const node = mockNode()
-    const db = mockDb([node])
+    const db = {
+      select: vi.fn(() => db),
+      from: vi.fn(() => db),
+      leftJoin: vi.fn(() => db),
+      where: vi.fn(() => db),
+      groupBy: vi.fn(() => Promise.resolve([node])),
+    }
     getDb.mockReturnValue(db)
     const res = await GET()
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body).toHaveLength(1)
     expect(body[0].id).toBe('node-1')
+  })
+
+  it('includes linked todo counts for node badges', async () => {
+    const node = mockNode({ todoCount: 2 })
+    const db = {
+      select: vi.fn(() => db),
+      from: vi.fn(() => db),
+      leftJoin: vi.fn(() => db),
+      where: vi.fn(() => db),
+      groupBy: vi.fn(() => Promise.resolve([node])),
+    }
+    getDb.mockReturnValue(db)
+    const res = await GET()
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body[0].todoCount).toBe(2)
+    expect(db.leftJoin).toHaveBeenCalledWith(heapNodeTodos, expect.anything())
+    expect(db.groupBy).toHaveBeenCalledWith(heapNodes.id)
+    const selectArgs = db.select.mock.calls as unknown as Array<[Record<string, unknown>]>
+    expect(selectArgs[0][0]).toEqual(expect.objectContaining({
+      todoCount: expect.anything(),
+    }))
   })
 })
 
