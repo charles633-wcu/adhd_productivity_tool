@@ -5,7 +5,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db/client'
 import { heapNodes } from '@/lib/db/schema'
 
-const PatchNodeSchema = z.object({
+export const PatchNodeSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   type: z.enum(['task_cluster', 'note', 'goal', 'reference', 'brain_dump']).optional(),
   body: z.string().max(10000).nullable().optional(),
@@ -16,6 +16,9 @@ const PatchNodeSchema = z.object({
   shape: z.enum(['rectangle', 'circle', 'diamond', 'pill']).optional(),
   width: z.number().positive().optional(),
   height: z.number().positive().optional(),
+  fontFamily: z.enum(['sans', 'serif', 'mono', 'display']).optional(),
+  fontSize: z.enum(['sm', 'md', 'lg']).optional(),
+  fontBold: z.boolean().optional(),
 })
 
 type RouteContext = { params: Promise<{ id: string }> }
