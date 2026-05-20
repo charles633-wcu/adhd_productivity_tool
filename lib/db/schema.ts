@@ -217,6 +217,8 @@ export const todoTaskLabels = sqliteTable('todo_task_labels', {
 export type HeapNodeShape = 'rectangle' | 'circle' | 'diamond' | 'pill'
 export type HeapNodeType = 'task_cluster' | 'note' | 'goal' | 'reference' | 'brain_dump'
 export type HeapNodePriority = 'low' | 'normal' | 'high' | 'critical'
+export type HeapNodeFontFamily = 'sans' | 'serif' | 'mono' | 'display'
+export type HeapNodeFontSize = 'sm' | 'md' | 'lg'
 
 // heap_nodes - spatial knowledge graph nodes; posX/posY are canvas coordinates
 export const heapNodes = sqliteTable('heap_nodes', {
@@ -234,6 +236,10 @@ export const heapNodes = sqliteTable('heap_nodes', {
   // Persisted dimensions — null means use per-shape component default; only used for circle resize
   width: real('width'),
   height: real('height'),
+  // Per-node text styling — null means use canvas/theme default
+  fontFamily: text('font_family').$type<HeapNodeFontFamily>(),
+  fontSize: text('font_size').$type<HeapNodeFontSize>(),
+  fontBold: integer('font_bold'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`).$onUpdate(() => new Date()),
 })
