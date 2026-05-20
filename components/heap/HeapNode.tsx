@@ -144,7 +144,7 @@ function TextToolbar({ data, selected }: { data: HeapNodeData; selected: boolean
             onClick={() => data.onTextStyleChange?.({ fontFamily: f })}
             style={{ fontFamily: fontFamilyStyle(f) }}
             className={cn(
-              'text-[10px] px-1.5 py-0.5 rounded transition-colors nodrag',
+              'text-[10px] px-1.5 py-0.5 rounded transition-colors nodrag nopan',
               (data.fontFamily ?? 'sans') === f
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:text-foreground',
@@ -162,7 +162,7 @@ function TextToolbar({ data, selected }: { data: HeapNodeData; selected: boolean
             aria-label={`Size: ${s}`}
             onClick={() => data.onTextStyleChange?.({ fontSize: s })}
             className={cn(
-              'px-1 py-0.5 rounded transition-colors nodrag',
+              'px-1 py-0.5 rounded transition-colors nodrag nopan',
               (data.fontSize ?? 'md') === s
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:text-foreground',
@@ -178,7 +178,7 @@ function TextToolbar({ data, selected }: { data: HeapNodeData; selected: boolean
           aria-label="Toggle bold"
           onClick={() => data.onTextStyleChange?.({ fontBold: !data.fontBold })}
           className={cn(
-            'text-xs font-bold px-1.5 py-0.5 rounded transition-colors nodrag',
+            'text-xs font-bold px-1.5 py-0.5 rounded transition-colors nodrag nopan',
             data.fontBold
               ? 'bg-primary text-primary-foreground'
               : 'text-muted-foreground hover:text-foreground',
@@ -196,7 +196,7 @@ function TextToolbar({ data, selected }: { data: HeapNodeData; selected: boolean
             style={{ background: color }}
             aria-label={`Set color ${color}`}
             className={cn(
-              'w-3.5 h-3.5 rounded-full border-2 transition-all nodrag',
+              'w-3.5 h-3.5 rounded-full border-2 transition-all nodrag nopan',
               data.color === color ? 'border-white scale-110' : 'border-transparent',
             )}
           />
