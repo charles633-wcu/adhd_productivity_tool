@@ -299,14 +299,25 @@ export function HeapCanvas() {
   }
 
   const handleTextStyleChange = useCallback((nodeId: string, style: Partial<Pick<HeapNodeData, 'fontFamily' | 'fontSize' | 'fontBold' | 'color'>>) => {
-    setNodes((current) => current.map((node) =>
-      node.id === nodeId ? { ...node, data: { ...node.data, ...style } } : node,
-    ))
+    // Capture previous data for rollback
+    let prevData: HeapNodeData | null = null
+    setNodes((current) => current.map((node) => {
+      if (node.id !== nodeId) return node
+      prevData = node.data as HeapNodeData
+      return { ...node, data: { ...node.data, ...style } }
+    }))
     fetch(`/api/heap/nodes/${nodeId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(style),
-    }).catch(() => toast.error('Failed to save text style'))
+    }).catch(() => {
+      toast.error('Failed to save text style')
+      if (prevData) {
+        setNodes((current) => current.map((node) =>
+          node.id === nodeId ? { ...node, data: prevData as HeapNodeData } : node,
+        ))
+      }
+    })
   }, [setNodes])
 
   const focusVisibility = focusMode
