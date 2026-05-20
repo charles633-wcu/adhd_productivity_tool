@@ -239,7 +239,7 @@ export const heapNodes = sqliteTable('heap_nodes', {
   // Per-node text styling — null means use canvas/theme default
   fontFamily: text('font_family').$type<HeapNodeFontFamily>(),
   fontSize: text('font_size').$type<HeapNodeFontSize>(),
-  fontBold: integer('font_bold'),
+  fontBold: integer('font_bold', { mode: 'boolean' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`).$onUpdate(() => new Date()),
 })
