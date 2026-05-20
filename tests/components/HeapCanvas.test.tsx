@@ -321,6 +321,43 @@ describe('HeapCanvas', () => {
     })
   })
 
+  it('shows all children in focus mode regardless of node size', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => [
+        { id: 'root', userId: 'u1', title: 'Root', type: 'brain_dump', color: null, priority: 'high',
+          shape: 'rectangle', width: 110, height: 60, posX: 0, posY: 0, body: null,
+          fontFamily: null, fontSize: null, fontBold: null, createdAt: new Date(), updatedAt: new Date() },
+        { id: 'c1', userId: 'u1', title: 'C1', type: 'brain_dump', color: null, priority: 'normal',
+          shape: 'rectangle', width: null, height: null, posX: 200, posY: 0, body: null,
+          fontFamily: null, fontSize: null, fontBold: null, createdAt: new Date(), updatedAt: new Date() },
+        { id: 'c2', userId: 'u1', title: 'C2', type: 'brain_dump', color: null, priority: 'normal',
+          shape: 'rectangle', width: null, height: null, posX: 400, posY: 0, body: null,
+          fontFamily: null, fontSize: null, fontBold: null, createdAt: new Date(), updatedAt: new Date() },
+        { id: 'c3', userId: 'u1', title: 'C3', type: 'brain_dump', color: null, priority: 'normal',
+          shape: 'rectangle', width: null, height: null, posX: 600, posY: 0, body: null,
+          fontFamily: null, fontSize: null, fontBold: null, createdAt: new Date(), updatedAt: new Date() },
+        { id: 'c4', userId: 'u1', title: 'C4', type: 'brain_dump', color: null, priority: 'normal',
+          shape: 'rectangle', width: null, height: null, posX: 800, posY: 0, body: null,
+          fontFamily: null, fontSize: null, fontBold: null, createdAt: new Date(), updatedAt: new Date() },
+      ] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [
+        { id: 'r-c1', source: 'root', target: 'c1' },
+        { id: 'r-c2', source: 'root', target: 'c2' },
+        { id: 'r-c3', source: 'root', target: 'c3' },
+        { id: 'r-c4', source: 'root', target: 'c4' },
+      ] })
+    render(<HeapCanvas />)
+    await waitFor(() => screen.getByRole('button', { name: /focus mode/i }))
+    fireEvent.click(screen.getByRole('button', { name: /focus mode/i }))
+    const flow = screen.getByTestId('react-flow-mock')
+    // A 110x60 rectangle previously had a slot cap of 2. All 4 children should now be bright.
+    await waitFor(() => {
+      const parsedNodes = JSON.parse(flow.getAttribute('data-nodes') ?? '[]') as Array<{ id: string; data: { dimmed?: boolean } }>
+      expect(parsedNodes.find((n) => n.id === 'c1')?.data.dimmed).toBe(false)
+      expect(parsedNodes.find((n) => n.id === 'c4')?.data.dimmed).toBe(false)
+    })
+  })
+
   it('keeps persisted dimensions when a resized node changes to a non-circle shape', async () => {
     ;(global.fetch as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({ ok: true, json: async () => [

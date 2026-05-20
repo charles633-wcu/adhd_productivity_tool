@@ -94,26 +94,17 @@ export function deriveFocusVisibility({
   dimmedNodeIds: Set<string>
   brightEdgeIds: Set<string>
   dimmedEdgeIds: Set<string>
-  visibleChildrenByNodeId: Map<string, VisibleChildren>
 } {
   const childMap = buildChildMap(edges)
   const brightNodeIds = new Set<string>()
-  const visibleChildrenByNodeId = new Map<string, VisibleChildren>()
   const rootNodes = nodes.filter((node) => node.priority === 'critical' || node.priority === 'high' || focusPathIds.has(node.id))
 
   for (const node of rootNodes) {
     brightNodeIds.add(node.id)
 
-    const picked = pickVisibleChildren({
-      parentId: node.id,
-      nodes,
-      childMap,
-      focusPathIds,
-      slotCount: calculateVisibleChildSlots(node),
-    })
-    visibleChildrenByNodeId.set(node.id, picked)
-
-    for (const childId of picked.visibleChildIds) {
+    // All children of root nodes are always bright — no slot cap applied
+    const childIds = childMap.get(node.id) ?? []
+    for (const childId of childIds) {
       brightNodeIds.add(childId)
     }
   }
@@ -127,7 +118,6 @@ export function deriveFocusVisibility({
     dimmedNodeIds,
     brightEdgeIds,
     dimmedEdgeIds,
-    visibleChildrenByNodeId,
   }
 }
 

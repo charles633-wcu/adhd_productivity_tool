@@ -51,10 +51,11 @@ describe('mind focus helpers', () => {
 
   it('derives bright and dimmed nodes in focus mode', () => {
     const result = deriveFocusVisibility({ nodes, edges, focusPathIds: new Set(['d']) })
-    expect(result.brightNodeIds).toEqual(new Set(['a', 'b', 'd', 'e']))
-    expect(result.dimmedNodeIds).toEqual(new Set(['c']))
-    expect(result.brightEdgeIds).toEqual(new Set(['ab', 'ad', 'be']))
-    expect(result.dimmedEdgeIds).toEqual(new Set(['ac']))
-    expect(result.visibleChildrenByNodeId.get('a')).toEqual({ visibleChildIds: ['b', 'd'], overflowCount: 1 })
+    // All children of root nodes are now shown (Infinity slot cap removed)
+    expect(result.brightNodeIds).toEqual(new Set(['a', 'b', 'c', 'd', 'e']))
+    expect(result.dimmedNodeIds).toEqual(new Set())
+    expect(result.brightEdgeIds).toEqual(new Set(['ab', 'ac', 'ad', 'be']))
+    expect(result.dimmedEdgeIds).toEqual(new Set())
+    // visibleChildrenByNodeId removed from return — do not access it
   })
 })
