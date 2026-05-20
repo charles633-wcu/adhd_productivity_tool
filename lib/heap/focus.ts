@@ -33,6 +33,7 @@ export function buildChildMap(edges: FocusEdge[]): Map<string, string[]> {
   return childMap
 }
 
+// Utility export: not called by deriveFocusVisibility (which shows all children), but kept for potential per-node display caps.
 export function calculateVisibleChildSlots(node: Pick<FocusNode, 'shape' | 'width' | 'height'>): number {
   const shape = node.shape ?? 'rectangle'
   const width = node.width ?? defaultWidth(shape)
@@ -57,6 +58,7 @@ export function calculateVisibleChildSlots(node: Pick<FocusNode, 'shape' | 'widt
   return clamp(2 + widthSlots + heightSlots, 2, 8)
 }
 
+// Utility export: sorts and slices children by priority/recency. Not used internally since deriveFocusVisibility shows all children.
 export function pickVisibleChildren({
   parentId,
   nodes,
