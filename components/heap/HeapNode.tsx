@@ -2,9 +2,11 @@
 
 // HeapNode — renders a single Mind canvas node with one of four visual shapes.
 // Shape is read from data.shape (defaults to 'rectangle' if absent).
-import { Handle, Position, NodeResizer, type NodeProps } from '@xyflow/react'
+// Supports a floating NodeToolbar (visible when selected) with text-style controls:
+// font family, font size, bold toggle, and color swatches.
+import { Handle, Position, NodeResizer, NodeToolbar, type NodeProps } from '@xyflow/react'
 import type { CSSProperties } from 'react'
-import type { HeapNodePriority, HeapNodeType, HeapNodeShape } from '@/lib/db/schema'
+import type { HeapNodePriority, HeapNodeType, HeapNodeShape, HeapNodeFontFamily, HeapNodeFontSize } from '@/lib/db/schema'
 import type { HandleSide, VisualHandle } from '@/lib/heap/handles'
 import { cn } from '@/lib/utils'
 
@@ -28,14 +30,18 @@ export type HeapNodeData = {
   updatedAt?: Date | string | number | null
   focusMode?: boolean
   dimmed?: boolean
-  visibleChildren?: Array<{ id: string; title: string }>
-  overflowChildCount?: number
-  onPreviewClick?: (nodeId: string) => void
   handles?: VisualHandle[]
+  fontFamily?: HeapNodeFontFamily | null
+  fontSize?: HeapNodeFontSize | null
+  fontBold?: boolean | null
+  onTextStyleChange?: (style: Partial<Pick<HeapNodeData, 'fontFamily' | 'fontSize' | 'fontBold' | 'color'>>) => void
 }
 
 const HANDLE_CLASS = '!bg-primary !border-2 !border-background !w-3 !h-3'
 const RESIZER_OVERLAY_CLASS = 'z-20'
+
+// Color swatches shown in the toolbar palette
+const TOOLBAR_SWATCHES = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#64748b']
 
 function priorityClass(priority: HeapNodePriority | undefined): string {
   if (priority === 'critical') return 'shadow-[0_0_24px_rgba(239,68,68,0.28)] ring-1 ring-destructive/40'
@@ -53,6 +59,29 @@ function positionForSide(side: HandleSide): Position {
 
 // Half the handle dot size (!w-3 !h-3 = 12px) used to center via calc().
 const HANDLE_HALF_PX = 6
+
+// Returns a CSS font-family string for a given HeapNodeFontFamily value.
+function fontFamilyStyle(family?: HeapNodeFontFamily | null): string {
+  if (family === 'serif') return 'Georgia, serif'
+  if (family === 'mono') return "'Courier New', monospace"
+  if (family === 'display') return "'Trebuchet MS', sans-serif"
+  return 'system-ui, sans-serif'
+}
+
+// Builds inline style for title spans (font-family + optional color override).
+function titleTextStyle(d: HeapNodeData): CSSProperties {
+  return {
+    fontFamily: fontFamilyStyle(d.fontFamily),
+    ...(d.color ? { color: d.color } : {}),
+  }
+}
+
+// Maps HeapNodeFontSize to a Tailwind text-size class.
+function titleSizeClass(fontSize?: HeapNodeFontSize | null): string {
+  if (fontSize === 'sm') return 'text-[10px]'
+  if (fontSize === 'lg') return 'text-sm'
+  return 'text-xs'
+}
 
 function DynamicHandles({ handles }: { handles?: VisualHandle[] }) {
   const list = handles?.length
@@ -100,32 +129,80 @@ function DynamicHandles({ handles }: { handles?: VisualHandle[] }) {
   )
 }
 
-function PreviewSlots({ data }: { data: HeapNodeData }) {
-  const overflowCount = data.overflowChildCount ?? 0
-  if (!data.focusMode || (!data.visibleChildren?.length && overflowCount <= 0)) return null
-
+// TextToolbar — floating panel above a selected node for text style controls.
+// Renders font family pickers, size toggles, bold button, and color swatches.
+function TextToolbar({ data, selected }: { data: HeapNodeData; selected: boolean }) {
   return (
-    <div className="pointer-events-auto absolute left-1/2 top-full z-10 mt-1 flex -translate-x-1/2 items-center gap-1">
-      {data.visibleChildren?.map((child) => (
+    <NodeToolbar isVisible={selected} position={Position.Top}>
+      <div className="flex gap-1 items-center bg-card border border-border rounded-lg shadow-lg px-2 py-1.5 nodrag nopan">
+        {/* Font family buttons — each shows 'Aa' in its own typeface */}
+        {(['sans', 'serif', 'mono', 'display'] as HeapNodeFontFamily[]).map((f) => (
+          <button
+            key={f}
+            type="button"
+            aria-label={`Font: ${f}`}
+            onClick={() => data.onTextStyleChange?.({ fontFamily: f })}
+            style={{ fontFamily: fontFamilyStyle(f) }}
+            className={cn(
+              'text-[10px] px-1.5 py-0.5 rounded transition-colors nodrag',
+              (data.fontFamily ?? 'sans') === f
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            Aa
+          </button>
+        ))}
+        <span className="w-px h-3 bg-border mx-0.5" />
+        {/* Font size buttons — A rendered at 9/11/14px to visually represent sm/md/lg */}
+        {(['sm', 'md', 'lg'] as HeapNodeFontSize[]).map((s, i) => (
+          <button
+            key={s}
+            type="button"
+            aria-label={`Size: ${s}`}
+            onClick={() => data.onTextStyleChange?.({ fontSize: s })}
+            className={cn(
+              'px-1 py-0.5 rounded transition-colors nodrag',
+              (data.fontSize ?? 'md') === s
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+            style={{ fontSize: ['9px', '11px', '14px'][i] }}
+          >
+            A
+          </button>
+        ))}
+        {/* Bold toggle */}
         <button
-          key={child.id}
           type="button"
-          aria-label={`Focus ${child.title}`}
-          onClick={(event) => {
-            event.stopPropagation()
-            data.onPreviewClick?.(child.id)
-          }}
-          onPointerDown={(event) => event.stopPropagation()}
-          onMouseDown={(event) => event.stopPropagation()}
-          className="nodrag nopan max-w-20 truncate rounded-full border border-border bg-popover px-2 py-0.5 text-[10px] text-popover-foreground shadow"
+          aria-label="Toggle bold"
+          onClick={() => data.onTextStyleChange?.({ fontBold: !data.fontBold })}
+          className={cn(
+            'text-xs font-bold px-1.5 py-0.5 rounded transition-colors nodrag',
+            data.fontBold
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
         >
-          {child.title}
+          B
         </button>
-      ))}
-      {overflowCount > 0 && (
-        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">+{overflowCount}</span>
-      )}
-    </div>
+        <span className="w-px h-3 bg-border mx-0.5" />
+        {/* Color swatches */}
+        {TOOLBAR_SWATCHES.map((color) => (
+          <button
+            key={color}
+            type="button"
+            onClick={() => data.onTextStyleChange?.({ color })}
+            style={{ background: color }}
+            aria-label={`Set color ${color}`}
+            className={cn(
+              'w-3.5 h-3.5 rounded-full border-2 transition-all nodrag',
+              data.color === color ? 'border-white scale-110' : 'border-transparent',
+            )}
+          />
+        ))}
+      </div>
+    </NodeToolbar>
   )
 }
 
@@ -149,18 +226,28 @@ export function HeapNode({ data, selected }: NodeProps) {
           sharedStateClass,
         )}
       >
+        <TextToolbar data={d} selected={!!selected} />
         <NodeResizer isVisible={selected} minWidth={60} minHeight={40} keepAspectRatio={false} />
         <DynamicHandles handles={d.handles} />
         <div className="flex h-full min-h-0 items-start gap-1.5">
           <span className="text-[10px] leading-none text-muted-foreground">{TYPE_ICON[d.type]}</span>
-          <span className="min-w-0 flex-1 whitespace-normal break-words text-xs font-medium leading-tight text-foreground">{d.title}</span>
+          <span
+            data-testid="node-title"
+            style={titleTextStyle(d)}
+            className={cn(
+              'min-w-0 flex-1 whitespace-normal break-words leading-tight text-foreground',
+              titleSizeClass(d.fontSize),
+              d.fontBold ? 'font-bold' : 'font-medium',
+            )}
+          >
+            {d.title}
+          </span>
           {d.todoCount > 0 && (
             <span className="ml-auto text-[10px] bg-primary/20 text-primary rounded-full px-1.5 py-0.5 flex-shrink-0">
               {d.todoCount}
             </span>
           )}
         </div>
-        <PreviewSlots data={d} />
       </div>
     )
   }
@@ -177,12 +264,22 @@ export function HeapNode({ data, selected }: NodeProps) {
           sharedStateClass,
         )}
       >
+        <TextToolbar data={d} selected={!!selected} />
         <NodeResizer isVisible={selected} minWidth={60} minHeight={40} keepAspectRatio={false} />
         <DynamicHandles handles={d.handles} />
         <div className="flex h-full min-h-0 items-center justify-center">
-          <span className="min-w-0 whitespace-normal break-words text-center text-xs font-medium leading-tight text-foreground">{d.title}</span>
+          <span
+            data-testid="node-title"
+            style={titleTextStyle(d)}
+            className={cn(
+              'min-w-0 whitespace-normal break-words text-center leading-tight text-foreground',
+              titleSizeClass(d.fontSize),
+              d.fontBold ? 'font-bold' : 'font-medium',
+            )}
+          >
+            {d.title}
+          </span>
         </div>
-        <PreviewSlots data={d} />
       </div>
     )
   }
@@ -196,6 +293,7 @@ export function HeapNode({ data, selected }: NodeProps) {
         data-priority={d.priority ?? 'normal'}
         className={cn('relative w-full h-full', d.dimmed && 'opacity-25')}
       >
+        <TextToolbar data={d} selected={!!selected} />
         {/* NodeResizer handles appear at corners when the node is selected */}
         <NodeResizer
           isVisible={selected}
@@ -218,12 +316,19 @@ export function HeapNode({ data, selected }: NodeProps) {
           )}
         >
           <div className="absolute inset-0 flex items-center justify-center p-2">
-            <span className="text-xs font-medium text-center text-foreground break-words leading-tight">
+            <span
+              data-testid="node-title"
+              style={titleTextStyle(d)}
+              className={cn(
+                'text-center break-words leading-tight text-foreground',
+                titleSizeClass(d.fontSize),
+                d.fontBold ? 'font-bold' : 'font-medium',
+              )}
+            >
               {d.title}
             </span>
           </div>
         </div>
-        <PreviewSlots data={d} />
       </div>
     )
   }
@@ -241,6 +346,7 @@ export function HeapNode({ data, selected }: NodeProps) {
       style={{ width: diamondSize, height: diamondSize }}
       className={cn('relative', d.dimmed && 'opacity-25')}
     >
+      <TextToolbar data={d} selected={!!selected} />
       <NodeResizer
         isVisible={selected}
         minWidth={60}
@@ -257,11 +363,18 @@ export function HeapNode({ data, selected }: NodeProps) {
       />
       {/* Counter-rotated text layer so title reads upright */}
       <div className="absolute inset-0 flex items-center justify-center p-3">
-        <span className="text-xs font-medium text-center text-foreground break-words leading-tight">
+        <span
+          data-testid="node-title"
+          style={titleTextStyle(d)}
+          className={cn(
+            'text-center break-words leading-tight text-foreground',
+            titleSizeClass(d.fontSize),
+            d.fontBold ? 'font-bold' : 'font-medium',
+          )}
+        >
           {d.title}
         </span>
       </div>
-      <PreviewSlots data={d} />
     </div>
   )
 }

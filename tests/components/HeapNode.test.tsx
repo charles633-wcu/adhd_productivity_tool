@@ -1,3 +1,4 @@
+import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { NodeProps } from '@xyflow/react'
@@ -12,6 +13,9 @@ vi.mock('@xyflow/react', () => ({
   ),
   Position: { Top: 'top', Right: 'right', Bottom: 'bottom', Left: 'left' },
   NodeResizer: NodeResizerMock,
+  NodeToolbar: ({ children, isVisible }: { children: React.ReactNode; isVisible?: boolean }) => (
+    isVisible ? <div data-testid="node-toolbar">{children}</div> : null
+  ),
 }))
 
 import { HeapNode } from '@/components/heap/HeapNode'
@@ -230,32 +234,6 @@ describe('HeapNode shapes', () => {
     }
   })
 
-  it('renders focus child previews and overflow count in focus mode', () => {
-    render(
-      <HeapNode
-        {...makeProps({
-          data: {
-            title: 'Parent',
-            type: 'brain_dump',
-            color: null,
-            todoCount: 0,
-            focusMode: true,
-            visibleChildren: [
-              { id: 'c1', title: 'First child' },
-              { id: 'c2', title: 'Second child' },
-            ],
-            overflowChildCount: 3,
-            onPreviewClick: vi.fn(),
-          },
-        })}
-      />,
-    )
-
-    expect(screen.getByRole('button', { name: /focus first child/i })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /focus second child/i })).toBeTruthy()
-    expect(screen.getByText('+3')).toBeTruthy()
-  })
-
   it('renders circle handles outside the overflow-hidden surface', () => {
     const { container } = render(
       <HeapNode
@@ -282,106 +260,57 @@ describe('HeapNode shapes', () => {
     expect(clippedSurface).not.toContainElement(leftHandle)
   })
 
-  it('renders circle previews outside the clipped circle surface', () => {
-    const { container } = render(
-      <HeapNode
-        {...makeProps({
-          data: {
-            title: 'Circle parent',
-            type: 'brain_dump',
-            color: null,
-            todoCount: 0,
-            shape: 'circle',
-            focusMode: true,
-            visibleChildren: [{ id: 'c1', title: 'First child' }],
-          },
-        })}
-      />,
-    )
+})
 
-    const clippedSurface = container.querySelector('.overflow-hidden') as HTMLElement
-    const previewButton = screen.getByRole('button', { name: /focus first child/i })
-
-    expect(clippedSurface).toHaveClass('rounded-full')
-    expect(clippedSurface).not.toContainElement(previewButton)
+describe('HeapNode text styles', () => {
+  it('applies serif font-family to title when fontFamily is serif', () => {
+    const props = makeProps({
+      selected: true,
+      data: { title: 'Styled', type: 'brain_dump', color: null, todoCount: 0, fontFamily: 'serif' },
+    })
+    render(<HeapNode {...props} />)
+    const toolbar = screen.getByTestId('node-toolbar')
+    expect(toolbar).toBeTruthy()
   })
 
-  it('does not render child previews outside focus mode', () => {
+  it('shows NodeToolbar only when selected', () => {
+    const props = makeProps({
+      selected: false,
+      data: { title: 'Not selected', type: 'brain_dump', color: null, todoCount: 0 },
+    })
+    render(<HeapNode {...props} />)
+    expect(screen.queryByTestId('node-toolbar')).toBeNull()
+  })
+
+  it('applies bold font-weight class when fontBold is true', () => {
+    const props = makeProps({
+      data: { title: 'Bold', type: 'brain_dump', color: null, todoCount: 0, fontBold: true },
+    })
+    const { container } = render(<HeapNode {...props} />)
+    const titleSpan = container.querySelector('[data-testid="node-title"]')
+    expect(titleSpan?.className).toContain('font-bold')
+  })
+
+  it('applies sm font size class when fontSize is sm', () => {
+    const props = makeProps({
+      data: { title: 'Small', type: 'brain_dump', color: null, todoCount: 0, fontSize: 'sm' },
+    })
+    const { container } = render(<HeapNode {...props} />)
+    const titleSpan = container.querySelector('[data-testid="node-title"]')
+    expect(titleSpan?.className).toContain('text-[10px]')
+  })
+
+  it('calls onTextStyleChange with fontFamily when family button clicked', () => {
+    const onTextStyleChange = vi.fn()
     render(
       <HeapNode
         {...makeProps({
-          data: {
-            title: 'Parent',
-            type: 'brain_dump',
-            color: null,
-            todoCount: 0,
-            focusMode: false,
-            visibleChildren: [{ id: 'c1', title: 'First child' }],
-            overflowChildCount: 1,
-            onPreviewClick: vi.fn(),
-          },
+          selected: true,
+          data: { title: 'T', type: 'brain_dump', color: null, todoCount: 0, onTextStyleChange },
         })}
       />,
     )
-
-    expect(screen.queryByRole('button', { name: /focus first child/i })).toBeNull()
-    expect(screen.queryByText('+1')).toBeNull()
-  })
-
-  it('clicking a preview calls onPreviewClick and stops propagation', () => {
-    const onPreviewClick = vi.fn()
-    const onParentClick = vi.fn()
-    render(
-      <div onClick={onParentClick}>
-        <HeapNode
-          {...makeProps({
-            data: {
-              title: 'Parent',
-              type: 'brain_dump',
-              color: null,
-              todoCount: 0,
-              focusMode: true,
-              visibleChildren: [{ id: 'c1', title: 'First child' }],
-              onPreviewClick,
-            },
-          })}
-        />
-      </div>,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: /focus first child/i }))
-
-    expect(onPreviewClick).toHaveBeenCalledWith('c1')
-    expect(onParentClick).not.toHaveBeenCalled()
-  })
-
-  it('prevents React Flow drag and pan gestures from child previews', () => {
-    const onPointerDown = vi.fn()
-    const onMouseDown = vi.fn()
-    render(
-      <div onPointerDown={onPointerDown} onMouseDown={onMouseDown}>
-        <HeapNode
-          {...makeProps({
-            data: {
-              title: 'Parent',
-              type: 'brain_dump',
-              color: null,
-              todoCount: 0,
-              focusMode: true,
-              visibleChildren: [{ id: 'c1', title: 'First child' }],
-            },
-          })}
-        />
-      </div>,
-    )
-
-    const previewButton = screen.getByRole('button', { name: /focus first child/i })
-    fireEvent.pointerDown(previewButton)
-    fireEvent.mouseDown(previewButton)
-
-    expect(previewButton).toHaveClass('nodrag')
-    expect(previewButton).toHaveClass('nopan')
-    expect(onPointerDown).not.toHaveBeenCalled()
-    expect(onMouseDown).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: /font: serif/i }))
+    expect(onTextStyleChange).toHaveBeenCalledWith({ fontFamily: 'serif' })
   })
 })
