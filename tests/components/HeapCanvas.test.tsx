@@ -2,13 +2,13 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { HeapCanvas } from '@/components/heap/HeapCanvas'
 
-const reactFlowProps = vi.hoisted(() => ({ current: null as null | { onNodesChange?: (changes: unknown[]) => void } }))
+const reactFlowProps = vi.hoisted(() => ({ current: null as null | { onNodesChange?: (changes: unknown[]) => void; onNodeClick?: (event: MouseEvent, node: unknown) => void } }))
 const nodeDetailSheetProps = vi.hoisted(() => ({ current: null as null | { onUpdated: (nodeId: string, data: Record<string, unknown>) => void } }))
 
 vi.mock('@xyflow/react', async () => {
   const React = await vi.importActual<typeof import('react')>('react')
   return {
-  ReactFlow: (props: { children: React.ReactNode; nodes: unknown[]; edges: unknown[]; onNodesChange?: (changes: unknown[]) => void }) => {
+  ReactFlow: (props: { children: React.ReactNode; nodes: unknown[]; edges: unknown[]; onNodesChange?: (changes: unknown[]) => void; onNodeClick?: (event: MouseEvent, node: unknown) => void }) => {
     reactFlowProps.current = props
     return (
       <div data-testid="react-flow-mock" data-nodes={JSON.stringify(props.nodes)} data-edges={JSON.stringify(props.edges)}>
@@ -118,8 +118,9 @@ describe('HeapCanvas', () => {
     fireEvent.click(screen.getByRole('button', { name: /focus mode/i }))
     const flow = screen.getByTestId('react-flow-mock')
     await waitFor(() => {
-      const parsedNodes = JSON.parse(flow.getAttribute('data-nodes') ?? '[]') as Array<{ id: string; data: { visibleChildren?: Array<{ id: string }> } }>
-      expect(parsedNodes.find((node) => node.id === 'p')?.data.visibleChildren?.map((child) => child.id)).toEqual(['recent', 'old'])
+      const parsedNodes = JSON.parse(flow.getAttribute('data-nodes') ?? '[]') as Array<{ id: string; data: { dimmed?: boolean } }>
+      expect(parsedNodes.find((n) => n.id === 'old')?.data.dimmed).toBe(false)
+      expect(parsedNodes.find((n) => n.id === 'recent')?.data.dimmed).toBe(false)
     })
   })
 
@@ -142,9 +143,10 @@ describe('HeapCanvas', () => {
     fireEvent.click(screen.getByRole('button', { name: /focus mode/i }))
     const flow = screen.getByTestId('react-flow-mock')
 
+    // Wait for nodes to load before triggering resize
     await waitFor(() => {
-      const parsedNodes = JSON.parse(flow.getAttribute('data-nodes') ?? '[]') as Array<{ id: string; data: { visibleChildren?: Array<{ id: string }> } }>
-      expect(parsedNodes.find((node) => node.id === 'p')?.data.visibleChildren).toHaveLength(2)
+      const parsedNodes = JSON.parse(flow.getAttribute('data-nodes') ?? '[]') as Array<{ id: string }>
+      expect(parsedNodes.find((n) => n.id === 'p')).toBeTruthy()
     })
 
     reactFlowProps.current?.onNodesChange?.([
@@ -152,12 +154,11 @@ describe('HeapCanvas', () => {
     ])
 
     await waitFor(() => {
-      const parsedNodes = JSON.parse(flow.getAttribute('data-nodes') ?? '[]') as Array<{ id: string; data: { width?: number; height?: number; visibleChildren?: Array<{ id: string }> }; style?: { width?: number; height?: number } }>
+      const parsedNodes = JSON.parse(flow.getAttribute('data-nodes') ?? '[]') as Array<{ id: string; data: { width?: number; height?: number }; style?: { width?: number; height?: number } }>
       const parent = parsedNodes.find((node) => node.id === 'p')
       expect(parent?.data.width).toBe(250)
       expect(parent?.data.height).toBe(105)
       expect(parent?.style).toEqual(expect.objectContaining({ width: 250, height: 105 }))
-      expect(parent?.data.visibleChildren).toHaveLength(3)
     })
   })
 
@@ -252,6 +253,72 @@ describe('HeapCanvas', () => {
     expect(anchorClickMock).toHaveBeenCalledOnce()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+  })
+
+  it('calls PATCH when text style is changed via toolbar callback', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => [
+        { id: 'n1', userId: 'u1', title: 'Node', type: 'brain_dump', color: null, priority: 'normal',
+          shape: 'rectangle', width: null, height: null, posX: 0, posY: 0, body: null,
+          fontFamily: null, fontSize: null, fontBold: null,
+          createdAt: new Date(), updatedAt: new Date() },
+      ] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) })
+    render(<HeapCanvas />)
+    // Wait for nodes to load and onTextStyleChange to be wired — check via live props (not JSON, which strips functions)
+    await waitFor(() => {
+      const liveNodes = reactFlowProps.current?.nodes as Array<{ id: string; data: Record<string, unknown> }> | undefined
+      expect(typeof liveNodes?.find((n) => n.id === 'n1')?.data.onTextStyleChange).toBe('function')
+    })
+    const liveNodes = reactFlowProps.current?.nodes as Array<{ id: string; data: { onTextStyleChange?: (style: Record<string, unknown>) => void } }> | undefined
+    act(() => {
+      liveNodes?.find((n) => n.id === 'n1')?.data.onTextStyleChange?.({ fontFamily: 'serif' })
+    })
+    await waitFor(() => {
+      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+      expect(calls.some((call: unknown[]) => call[0] === '/api/heap/nodes/n1' && (call[1] as RequestInit)?.method === 'PATCH')).toBe(true)
+    })
+  })
+
+  it('drills into a bright child when clicked in focus mode', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => [
+        { id: 'a', userId: 'u1', title: 'Root', type: 'brain_dump', color: null, priority: 'high',
+          shape: 'rectangle', width: null, height: null, posX: 0, posY: 0, body: null,
+          fontFamily: null, fontSize: null, fontBold: null, createdAt: new Date(), updatedAt: new Date() },
+        { id: 'b', userId: 'u1', title: 'Child', type: 'brain_dump', color: null, priority: 'normal',
+          shape: 'rectangle', width: null, height: null, posX: 200, posY: 0, body: null,
+          fontFamily: null, fontSize: null, fontBold: null, createdAt: new Date(), updatedAt: new Date() },
+        { id: 'c', userId: 'u1', title: 'Grandchild', type: 'brain_dump', color: null, priority: 'normal',
+          shape: 'rectangle', width: null, height: null, posX: 400, posY: 0, body: null,
+          fontFamily: null, fontSize: null, fontBold: null, createdAt: new Date(), updatedAt: new Date() },
+      ] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [
+        { id: 'ab', source: 'a', target: 'b' },
+        { id: 'bc', source: 'b', target: 'c' },
+      ] })
+    render(<HeapCanvas />)
+    await waitFor(() => screen.getByRole('button', { name: /focus mode/i }))
+    fireEvent.click(screen.getByRole('button', { name: /focus mode/i }))
+    const flow = screen.getByTestId('react-flow-mock')
+
+    // Initially: a (root/high) + b (child) are bright; c is dimmed
+    await waitFor(() => {
+      const parsedNodes = JSON.parse(flow.getAttribute('data-nodes') ?? '[]') as Array<{ id: string; data: { dimmed?: boolean } }>
+      expect(parsedNodes.find((n) => n.id === 'c')?.data.dimmed).toBe(true)
+    })
+
+    // Simulate clicking node 'b' (bright child, not root, not in path)
+    act(() => {
+      reactFlowProps.current?.onNodeClick?.(new MouseEvent('click'), { id: 'b', position: { x: 200, y: 0 }, data: { priority: 'normal' } })
+    })
+
+    // After drilling: b is in focusPathIds; c becomes bright
+    await waitFor(() => {
+      const parsedNodes = JSON.parse(flow.getAttribute('data-nodes') ?? '[]') as Array<{ id: string; data: { dimmed?: boolean } }>
+      expect(parsedNodes.find((n) => n.id === 'c')?.data.dimmed).toBe(false)
+    })
   })
 
   it('keeps persisted dimensions when a resized node changes to a non-circle shape', async () => {

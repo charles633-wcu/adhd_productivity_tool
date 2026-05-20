@@ -69,6 +69,9 @@ function toFlowNode(node: HeapNodeType & { todoCount?: number }): Node {
       height: node.height,
       priority: node.priority ?? 'normal',
       updatedAt: node.updatedAt,
+      fontFamily: node.fontFamily ?? null,
+      fontSize: node.fontSize ?? null,
+      fontBold: node.fontBold ?? null,
     } satisfies HeapNodeData,
     style: isCircle
       ? { width: node.width ?? 80, height: node.height ?? 80 }
@@ -248,6 +251,18 @@ export function HeapCanvas() {
   }, [setEdges])
 
   function handleNodeClick(_event: React.MouseEvent, node: Node) {
+    if (focusMode && focusVisibility) {
+      const data = node.data as HeapNodeData
+      const isBright = focusVisibility.brightNodeIds.has(node.id)
+      // Root nodes (high/critical) are seeds; drilled nodes are already in path.
+      // Only drill a bright node that is neither.
+      const isRootNode = data.priority === 'critical' || data.priority === 'high'
+      const isAlreadyInPath = focusPathIds.has(node.id)
+      if (isBright && !isRootNode && !isAlreadyInPath) {
+        setFocusPathIds((current) => new Set([...current, node.id]))
+        return
+      }
+    }
     setSelectedNodeId(node.id)
     setSheetNodeId(node.id)
   }
@@ -283,6 +298,17 @@ export function HeapCanvas() {
     }))
   }
 
+  const handleTextStyleChange = useCallback((nodeId: string, style: Partial<Pick<HeapNodeData, 'fontFamily' | 'fontSize' | 'fontBold' | 'color'>>) => {
+    setNodes((current) => current.map((node) =>
+      node.id === nodeId ? { ...node, data: { ...node.data, ...style } } : node,
+    ))
+    fetch(`/api/heap/nodes/${nodeId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(style),
+    }).catch(() => toast.error('Failed to save text style'))
+  }, [setNodes])
+
   const focusVisibility = focusMode
     ? deriveFocusVisibility({
         nodes: nodes.map((node) => ({
@@ -299,7 +325,6 @@ export function HeapCanvas() {
       })
     : null
 
-  const childTitles = new Map(nodes.map((node) => [node.id, String((node.data as HeapNodeData).title)]))
   const handleNodes: HandleNode[] = nodes.map((node) => {
     const data = node.data as HeapNodeData
     return {
@@ -319,22 +344,18 @@ export function HeapCanvas() {
       handles: handlesByNodeId.get(node.id) ?? [],
     },
   }))
-  const renderedNodes = focusVisibility
-    ? nodesWithHandles.map((node) => {
-        const picked = focusVisibility.visibleChildrenByNodeId.get(node.id)
-        return {
-          ...node,
-          data: {
-            ...node.data,
-            focusMode,
-            dimmed: focusVisibility.dimmedNodeIds.has(node.id),
-            visibleChildren: picked?.visibleChildIds.map((id) => ({ id, title: childTitles.get(id) ?? 'Untitled' })) ?? [],
-            overflowChildCount: picked?.overflowCount ?? 0,
-            onPreviewClick: (nodeId: string) => setFocusPathIds((current) => new Set([...current, nodeId])),
-          },
-        }
-      })
-    : nodesWithHandles
+  const renderedNodes = nodesWithHandles.map((node) => ({
+    ...node,
+    data: {
+      ...node.data,
+      ...(focusVisibility && {
+        focusMode: true,
+        dimmed: focusVisibility.dimmedNodeIds.has(node.id),
+      }),
+      onTextStyleChange: (style: Partial<Pick<HeapNodeData, 'fontFamily' | 'fontSize' | 'fontBold' | 'color'>>) =>
+        handleTextStyleChange(node.id, style),
+    },
+  }))
 
   const assignedEdges = assignEdgeHandles(handleNodes, edges)
   const renderedEdges = focusVisibility
