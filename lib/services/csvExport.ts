@@ -16,7 +16,7 @@ const PRIORITY_LABELS: Record<number, string> = {
 
 // Escape a CSV field: wrap in quotes if it contains comma, quote, or newline
 function escapeField(value: string): string {
-  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+  if (value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
     return `"${value.replace(/"/g, '""')}"`
   }
   return value

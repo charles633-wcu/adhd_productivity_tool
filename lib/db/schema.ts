@@ -51,7 +51,7 @@ export const triggers = sqliteTable('triggers', {
   // pending = not yet sent to Gemini, generated = Gemini returned result, manual = user-written
   summaryStatus: text('summary_status').$type<SummaryStatus>().notNull().default('pending'),
 
-  // Priority: 0 = Critical, 1 = High, 2 = Medium, 3 = Backlog
+  // Priority: 0 = Extremely High, 1 = High, 2 = Medium, 3 = Low
   priority: integer('priority').notNull().default(2),
 
   // Review clock fields

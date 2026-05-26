@@ -65,9 +65,11 @@ describe('getCsvString', () => {
 
   it('outputs 0 for Last Reviewed placeholder', async () => {
     const csv = await getCsvString(mockDb as any)
-    const dataLine = csv.split('\n')[1]
-    const fields = dataLine.split(',')
-    expect(fields[2]).toBe('0')
+    const lines = csv.split('\n')
+    // First data row is "Drink water,Health,..." — no commas in earlier fields, safe to split
+    const firstDataLine = lines[1]
+    const fields = firstDataLine.split(',')
+    expect(fields[2]).toBe('0') // index 2 = Last Reviewed
   })
 
   it('outputs empty string for null summary', async () => {
@@ -94,7 +96,7 @@ describe('regenerateCsv', () => {
       { recursive: true }
     )
     expect(fs.writeFileSync).toHaveBeenCalledWith(
-      expect.stringContaining('triggers_export.csv'),
+      expect.stringContaining(path.join('notion_backup', 'latest', 'triggers_export.csv')),
       expect.stringContaining('Idea,Category')
     )
   })
