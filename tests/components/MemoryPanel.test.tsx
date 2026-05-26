@@ -18,6 +18,7 @@ function makeTrigger(overrides: Partial<Trigger> = {}): Trigger {
     nextReviewAt: new Date('2026-04-20T12:00:00.000Z'),
     status: 'active',
     notifyChannel: null,
+    notionPageId: null,
     agentMetadata: {
       notes: [
         { id: 'n1', date: '2026-04-01T12:00:00.000Z', text: 'first note' },

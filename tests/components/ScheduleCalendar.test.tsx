@@ -20,6 +20,7 @@ function makeTrigger(overrides: Record<string, unknown> = {}) {
     nextReviewAt: base.toISOString(),
     status: 'active' as const,
     notifyChannel: null,
+    notionPageId: null,
     agentMetadata: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
