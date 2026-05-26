@@ -7,7 +7,7 @@ import { heapNodes } from '@/lib/db/schema'
 
 export const PatchNodeSchema = z.object({
   title: z.string().min(1).max(200).optional(),
-  type: z.enum(['task_cluster', 'note', 'goal', 'reference', 'brain_dump']).optional(),
+  type: z.enum(['task_cluster', 'note', 'goal', 'reference', 'brain_dump', 'project']).optional(),
   body: z.string().max(10000).nullable().optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
   priority: z.enum(['low', 'normal', 'high', 'critical']).optional(),
@@ -19,6 +19,7 @@ export const PatchNodeSchema = z.object({
   fontFamily: z.enum(['sans', 'serif', 'mono', 'display']).optional(),
   fontSize: z.enum(['sm', 'md', 'lg']).optional(),
   fontBold: z.boolean().optional(),
+  projectId: z.string().nullable().optional(),
 })
 
 type RouteContext = { params: Promise<{ id: string }> }
@@ -61,14 +62,34 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   }
 }
 
+/**
+ * DELETE /api/heap/nodes/[id]
+ * Deletes a heap node. Returns 404 if not found or not owned by current user.
+ * Returns 409 if the node is a project type and still has child nodes — caller
+ * must reassign or delete children before the project can be removed.
+ */
 export async function DELETE(_request: Request, { params }: RouteContext) {
   try {
     const user = await getCurrentUser()
     const { id } = await params
     const db = getDb()
+
     const [existing] = await db.select().from(heapNodes)
       .where(and(eq(heapNodes.id, id), eq(heapNodes.userId, user.id)))
     if (!existing) return NextResponse.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 })
+
+    // Prevent deleting a project that still has child nodes
+    if (existing.type === 'project') {
+      const [child] = await db.select().from(heapNodes)
+        .where(and(eq(heapNodes.projectId, id), eq(heapNodes.userId, user.id)))
+        .limit(1)
+      if (child) {
+        return NextResponse.json(
+          { error: 'Assign or delete child nodes before deleting this project.', code: 'HAS_CHILDREN' },
+          { status: 409 },
+        )
+      }
+    }
 
     await db.delete(heapNodes).where(and(eq(heapNodes.id, id), eq(heapNodes.userId, user.id)))
     return new NextResponse(null, { status: 204 })

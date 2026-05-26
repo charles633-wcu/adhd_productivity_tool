@@ -138,7 +138,7 @@ describe('GET /api/heap/nodes', () => {
       groupBy: vi.fn(() => Promise.resolve([node])),
     }
     getDb.mockReturnValue(db)
-    const res = await GET()
+    const res = await GET(new Request('http://localhost/api/heap/nodes'))
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body).toHaveLength(1)
@@ -155,7 +155,7 @@ describe('GET /api/heap/nodes', () => {
       groupBy: vi.fn(() => Promise.resolve([node])),
     }
     getDb.mockReturnValue(db)
-    const res = await GET()
+    const res = await GET(new Request('http://localhost/api/heap/nodes'))
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body[0].todoCount).toBe(2)
@@ -425,5 +425,158 @@ describe('PATCH /api/heap/nodes/[id] — shape and dimensions', () => {
     const body = await res.json()
     expect(body.width).toBe(120)
     expect(body.height).toBe(120)
+  })
+})
+
+describe('GET /api/heap/nodes with type filter', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getCurrentUser.mockResolvedValue({ id: 'u1' })
+  })
+
+  it('filters nodes by type=project', async () => {
+    const mockSelect = {
+      from: vi.fn().mockReturnThis(),
+      leftJoin: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      groupBy: vi.fn().mockResolvedValue([
+        { id: 'p1', userId: 'u1', type: 'project', title: 'My Project', projectId: null, todoCount: 0 },
+      ]),
+    }
+    getDb.mockReturnValue({ select: vi.fn().mockReturnValue(mockSelect) })
+    const request = new Request('http://localhost/api/heap/nodes?type=project')
+    const response = await GET(request)
+    expect(response.status).toBe(200)
+    const data = await response.json()
+    expect(Array.isArray(data)).toBe(true)
+  })
+
+  it('filters nodes by projectId', async () => {
+    const mockSelect = {
+      from: vi.fn().mockReturnThis(),
+      leftJoin: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      groupBy: vi.fn().mockResolvedValue([
+        { id: 'n1', userId: 'u1', type: 'note', title: 'Node 1', projectId: 'p1', todoCount: 0 },
+      ]),
+    }
+    getDb.mockReturnValue({ select: vi.fn().mockReturnValue(mockSelect) })
+    const request = new Request('http://localhost/api/heap/nodes?projectId=p1')
+    const response = await GET(request)
+    expect(response.status).toBe(200)
+  })
+
+  it('returns 400 for an invalid type value', async () => {
+    const request = new Request('http://localhost/api/heap/nodes?type=invalid_type')
+    const response = await GET(request)
+    expect(response.status).toBe(400)
+    const data = await response.json()
+    expect(data.code).toBe('VALIDATION_ERROR')
+  })
+})
+
+describe('POST /api/heap/nodes projectId validation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getCurrentUser.mockResolvedValue({ id: 'u1' })
+  })
+
+  it('rejects type=project with projectId (nested project)', async () => {
+    // Zod + nesting guard runs before any DB call — no db mock needed
+    const request = new Request('http://localhost/api/heap/nodes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Nested', type: 'project', projectId: 'p1' }),
+    })
+    const response = await POST(request)
+    expect(response.status).toBe(400)
+  })
+
+  it('rejects projectId that does not belong to user', async () => {
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockResolvedValue([]),  // no node found for user
+    }
+    getDb.mockReturnValue({ select: vi.fn().mockReturnValue(selectChain) })
+    const request = new Request('http://localhost/api/heap/nodes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'New', type: 'note', projectId: 'other-project' }),
+    })
+    const response = await POST(request)
+    expect(response.status).toBe(400)
+  })
+
+  it('rejects projectId pointing to a non-project node', async () => {
+    // Returns a node that exists but is not type=project
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockResolvedValue([mockNode({ id: 'n1', type: 'note' })]),
+    }
+    getDb.mockReturnValue({ select: vi.fn().mockReturnValue(selectChain) })
+    const request = new Request('http://localhost/api/heap/nodes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'New', type: 'note', projectId: 'n1' }),
+    })
+    const response = await POST(request)
+    expect(response.status).toBe(400)
+  })
+})
+
+describe('DELETE /api/heap/nodes/[id] project guard', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getCurrentUser.mockResolvedValue({ id: 'u1' })
+  })
+
+  it('returns 409 when deleting a project node that has children', async () => {
+    const projectNode = { id: 'p1', userId: 'u1', type: 'project', title: 'My Project' }
+    const childNode = { id: 'n1', userId: 'u1', type: 'note', projectId: 'p1' }
+
+    // First select() call: fetch existing node — resolves to projectNode array
+    // Second select() call: check for children — resolves to chain with .limit()
+    let callCount = 0
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockImplementation(() => {
+        callCount++
+        if (callCount === 1) return Promise.resolve([projectNode])
+        return { limit: vi.fn().mockResolvedValue([childNode]) }
+      }),
+    }
+    getDb.mockReturnValue({ select: vi.fn().mockReturnValue(selectChain) })
+
+    const context = { params: Promise.resolve({ id: 'p1' }) }
+    const response = await DELETE(new Request('http://localhost'), context)
+    expect(response.status).toBe(409)
+    const data = await response.json()
+    expect(data.code).toBe('HAS_CHILDREN')
+  })
+
+  it('deletes a project node with no children and returns 204', async () => {
+    const projectNode = { id: 'p1', userId: 'u1', type: 'project', title: 'Empty Project' }
+
+    let callCount = 0
+    const selectChain = {
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockImplementation(() => {
+        callCount++
+        if (callCount === 1) return Promise.resolve([projectNode])
+        // No children found
+        return { limit: vi.fn().mockResolvedValue([]) }
+      }),
+    }
+    const deleteChain = {
+      where: vi.fn().mockResolvedValue(undefined),
+    }
+    getDb.mockReturnValue({
+      select: vi.fn().mockReturnValue(selectChain),
+      delete: vi.fn().mockReturnValue(deleteChain),
+    })
+
+    const context = { params: Promise.resolve({ id: 'p1' }) }
+    const response = await DELETE(new Request('http://localhost'), context)
+    expect(response.status).toBe(204)
   })
 })
