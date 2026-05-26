@@ -90,7 +90,7 @@ function numericDimension(value: unknown): number | undefined {
   return undefined
 }
 
-export function HeapCanvas() {
+export function HeapCanvas({ projectId }: { projectId?: string } = {}) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
@@ -111,8 +111,12 @@ export function HeapCanvas() {
 
     async function load() {
       try {
+        // Scope the node fetch to a specific project when projectId is provided
+        const nodesUrl = projectId
+          ? `/api/heap/nodes?projectId=${encodeURIComponent(projectId)}`
+          : '/api/heap/nodes'
         const [nodesRes, edgesRes] = await Promise.all([
-          fetch('/api/heap/nodes'),
+          fetch(nodesUrl),
           fetch('/api/heap/edges'),
         ])
         if (!nodesRes.ok || !edgesRes.ok) throw new Error('fetch failed')
@@ -121,8 +125,13 @@ export function HeapCanvas() {
           edgesRes.json(),
         ])
         if (cancelled) return
+        // Filter edges to only those whose both endpoints exist in the loaded nodes
+        const nodeIdSet = new Set(rawNodes.map((n: HeapNodeType) => n.id))
+        const scopedEdges = (rawEdges as Edge[]).filter(
+          (e) => nodeIdSet.has(String(e.source)) && nodeIdSet.has(String(e.target))
+        )
         setNodes(rawNodes.map(toFlowNode))
-        setEdges(rawEdges)
+        setEdges(scopedEdges)
       } catch {
         toast.error('Failed to load heap - please refresh')
       } finally {
@@ -132,13 +141,15 @@ export function HeapCanvas() {
 
     load()
     return () => { cancelled = true }
-  }, [setNodes, setEdges])
+  }, [setNodes, setEdges, projectId])  // projectId triggers refetch when changed
 
   // Restore saved viewport from localStorage, or fit all nodes if none saved.
+  // The key is namespaced by projectId so each project canvas restores its own viewport.
   useEffect(() => {
     if (!isLoading) {
+      const viewportKey = projectId ? `mind-graph-viewport-${projectId}` : 'mind-graph-viewport'
       requestAnimationFrame(() => {
-        const saved = localStorage.getItem('mind-graph-viewport')
+        const saved = localStorage.getItem(viewportKey)
         if (saved) {
           try {
             const vp = JSON.parse(saved) as Viewport
@@ -151,11 +162,12 @@ export function HeapCanvas() {
         }
       })
     }
-  }, [isLoading, fitView, setViewport])
+  }, [isLoading, fitView, setViewport, projectId])
 
   const handleMoveEnd = useCallback((_event: unknown, viewport: Viewport) => {
-    localStorage.setItem('mind-graph-viewport', JSON.stringify(viewport))
-  }, [])
+    const viewportKey = projectId ? `mind-graph-viewport-${projectId}` : 'mind-graph-viewport'
+    localStorage.setItem(viewportKey, JSON.stringify(viewport))
+  }, [projectId])
 
   // Persist circle resize to the server; aborts in-flight requests for the same node
   const patchNodeSize = useCallback((nodeId: string, width: number, height: number) => {
@@ -436,7 +448,7 @@ export function HeapCanvas() {
         <Controls position="top-left" />
       </ReactFlow>
 
-      <AddNodeFab onNodeCreated={handleNodeCreated} />
+      <AddNodeFab onNodeCreated={handleNodeCreated} projectId={projectId} />
       <button
         type="button"
         onClick={() => setShowTutorial(true)}

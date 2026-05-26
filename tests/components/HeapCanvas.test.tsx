@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { HeapCanvas } from '@/components/heap/HeapCanvas'
 
-const reactFlowProps = vi.hoisted(() => ({ current: null as null | { onNodesChange?: (changes: unknown[]) => void; onNodeClick?: (event: MouseEvent, node: unknown) => void } }))
+const reactFlowProps = vi.hoisted(() => ({ current: null as null | { nodes?: unknown[]; onNodesChange?: (changes: unknown[]) => void; onNodeClick?: (event: MouseEvent, node: unknown) => void } }))
 const nodeDetailSheetProps = vi.hoisted(() => ({ current: null as null | { onUpdated: (nodeId: string, data: Record<string, unknown>) => void } }))
 
 vi.mock('@xyflow/react', async () => {
@@ -378,6 +378,17 @@ describe('HeapCanvas', () => {
       const parent = parsedNodes.find((node) => node.id === 'p')
       expect(parent?.data.shape).toBe('pill')
       expect(parent?.style).toEqual(expect.objectContaining({ width: 180, height: 180 }))
+    })
+  })
+
+  it('fetches nodes scoped to projectId when prop provided', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+    render(<HeapCanvas projectId="proj-1" />)
+    await waitFor(() => {
+      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls as string[][]
+      expect(calls.some((call) => String(call[0]).includes('projectId=proj-1'))).toBe(true)
     })
   })
 })

@@ -6,9 +6,10 @@ import type { HeapNode } from '@/lib/db/schema'
 
 interface AddNodeFabProps {
   onNodeCreated: (node: HeapNode) => void
+  projectId?: string
 }
 
-export function AddNodeFab({ onNodeCreated }: AddNodeFabProps) {
+export function AddNodeFab({ onNodeCreated, projectId }: AddNodeFabProps) {
   const { screenToFlowPosition } = useReactFlow()
 
   async function handleAdd() {
@@ -20,7 +21,13 @@ export function AddNodeFab({ onNodeCreated }: AddNodeFabProps) {
     const res = await fetch('/api/heap/nodes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'New thought', type: 'brain_dump', posX: pos.x, posY: pos.y }),
+      body: JSON.stringify({
+        title: 'New thought',
+        type: 'brain_dump',
+        posX: pos.x,
+        posY: pos.y,
+        ...(projectId ? { projectId } : {}),
+      }),
     })
     if (!res.ok) return
     const node: HeapNode = await res.json()
