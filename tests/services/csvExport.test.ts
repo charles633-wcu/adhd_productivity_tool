@@ -77,6 +77,21 @@ describe('getCsvString', () => {
     const lines = csv.split('\n')
     expect(lines[2]).toContain(',,')
   })
+
+  it('outputs empty string when categoryName is null (left join miss)', async () => {
+    const chainMock = { from: vi.fn(), leftJoin: vi.fn(), where: vi.fn() }
+    chainMock.where.mockResolvedValue([
+      { id: 't3', title: 'No category', categoryName: null, priority: 2, reviewIntervalDays: 7, summary: null },
+    ])
+    chainMock.leftJoin.mockReturnValue(chainMock)
+    chainMock.from.mockReturnValue(chainMock)
+    mockDb.select.mockReturnValue(chainMock)
+
+    const csv = await getCsvString(mockDb as any)
+    const lines = csv.split('\n')
+    // Category field should be empty, not "null"
+    expect(lines[1]).toMatch(/^No category,,/)
+  })
 })
 
 describe('regenerateCsv', () => {
