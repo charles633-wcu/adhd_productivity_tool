@@ -85,6 +85,20 @@
       "when": 1778400000000,
       "tag": "0011_heap_node_font",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1748304000000,
+      "tag": "0012_mind_projects",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1748476800000,
+      "tag": "0013_notion_page_id",
+      "breakpoints": true
     }
   ]
 }

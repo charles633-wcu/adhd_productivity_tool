@@ -1,7 +1,7 @@
 // Database schema — Drizzle ORM table definitions and inferred TypeScript types.
 // Single source of truth for all DB column shapes; consumed by lib/db/client.ts,
 // lib/db/triggers.ts, and all API route and service functions.
-import { sqliteTable, text, integer, real, primaryKey, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, real, primaryKey, uniqueIndex, AnySQLiteColumn } from 'drizzle-orm/sqlite-core'
 import { createId } from '@paralleldrive/cuid2'
 import { sql } from 'drizzle-orm'
 
@@ -80,6 +80,9 @@ export const triggers = sqliteTable('triggers', {
     .notNull()
     .default(sql`(unixepoch())`)
     .$onUpdate(() => new Date()),
+
+  // Notion mirror — populated on first sync, null for pre-feature triggers
+  notionPageId: text('notion_page_id'),
 })
 
 // Saved chat conversations — user-scoped, messages stored as JSON
@@ -215,7 +218,7 @@ export const todoTaskLabels = sqliteTable('todo_task_labels', {
 // Heap Knowledge Graph
 // Shape options for heap canvas nodes
 export type HeapNodeShape = 'rectangle' | 'circle' | 'diamond' | 'pill'
-export type HeapNodeType = 'task_cluster' | 'note' | 'goal' | 'reference' | 'brain_dump'
+export type HeapNodeType = 'task_cluster' | 'note' | 'goal' | 'reference' | 'brain_dump' | 'project'
 export type HeapNodePriority = 'low' | 'normal' | 'high' | 'critical'
 export type HeapNodeFontFamily = 'sans' | 'serif' | 'mono' | 'display'
 export type HeapNodeFontSize = 'sm' | 'md' | 'lg'
@@ -240,6 +243,8 @@ export const heapNodes = sqliteTable('heap_nodes', {
   fontFamily: text('font_family').$type<HeapNodeFontFamily>(),
   fontSize: text('font_size').$type<HeapNodeFontSize>(),
   fontBold: integer('font_bold', { mode: 'boolean' }),
+  // Project scoping — null means this is a project node or an unassigned node
+  projectId: text('project_id').references((): AnySQLiteColumn => heapNodes.id),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`).$onUpdate(() => new Date()),
 })

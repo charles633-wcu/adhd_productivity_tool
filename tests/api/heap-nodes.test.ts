@@ -47,9 +47,27 @@ describe('heap schema columns', () => {
     const cols = getTableColumns(heapNodes) as Record<string, { name: string }>
     expect(cols.priority.name).toBe('priority')
   })
+
+  it('heap_nodes has projectId column', () => {
+    const cols = getTableColumns(heapNodes) as Record<string, { name: string }>
+    expect(cols.projectId.name).toBe('project_id')
+  })
 })
 
 describe('heap migrations', () => {
+  it('adds project_id column in migration 0012', () => {
+    const migrationPath = 'lib/db/migrations/0012_mind_projects.sql'
+    expect(existsSync(migrationPath)).toBe(true)
+    const sql = readFileSync(migrationPath, 'utf8').trim()
+    expect(sql).toContain('project_id')
+    expect(sql).toContain('heap_nodes')
+
+    const journal = JSON.parse(readFileSync('lib/db/migrations/meta/_journal.json', 'utf8')) as {
+      entries: Array<{ idx: number; tag: string }>
+    }
+    expect(journal.entries.some((e) => e.idx === 12 && e.tag === '0012_mind_projects')).toBe(true)
+  })
+
   it('adds priority column to migrated heap_nodes tables', () => {
     const migrationPath = 'lib/db/migrations/0010_heap_node_priority.sql'
     expect(existsSync(migrationPath)).toBe(true)

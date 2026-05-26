@@ -16,6 +16,7 @@ const TYPE_ICON: Record<HeapNodeType, string> = {
   goal: 'Goal',
   reference: 'Ref',
   brain_dump: 'Idea',
+  project: 'Project',
 }
 
 export type HeapNodeData = {
