@@ -10,6 +10,8 @@ import { deriveNextReviewAt, snapToDate } from '@/lib/services/reviewClock'
 import { getCurrentUser } from '@/lib/auth'
 import { eq, and } from 'drizzle-orm'
 import { logTriggerAction } from '@/lib/dev/triggerActionLogger'
+import { syncTriggerToNotion, archiveTriggerInNotion } from '@/lib/services/notionSync'
+import { regenerateCsv } from '@/lib/services/csvExport'
 
 // Zod schema for partial trigger updates
 const UpdateTriggerSchema = z.object({
@@ -82,6 +84,8 @@ export async function PATCH(
         await logTriggerAction('acknowledge', result)
       }
 
+      await syncTriggerToNotion(result, db)
+      await regenerateCsv(db)
       revalidateTriggerViews(result.categoryId)
       return NextResponse.json(result)
     }
@@ -108,6 +112,8 @@ export async function PATCH(
 
       const trigger = await rescheduleTrigger(db, id, snapped)
       await logTriggerAction('reschedule', trigger)
+      await syncTriggerToNotion(trigger, db)
+      await regenerateCsv(db)
       revalidateTriggerViews(trigger.categoryId)
       return NextResponse.json(trigger)
     }
@@ -151,6 +157,8 @@ export async function PATCH(
 
     if (!updated) return NextResponse.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 })
     await logTriggerAction('edit', updated)
+    await syncTriggerToNotion(updated, db)
+    await regenerateCsv(db)
     revalidateTriggerViews(updated.categoryId)
     return NextResponse.json(updated)
   } catch (error) {
@@ -173,6 +181,8 @@ export async function DELETE(
     if (!owned) return new NextResponse(null, { status: 204 })
     await db.delete(triggers).where(and(eq(triggers.id, id), eq(triggers.userId, user.id)))
     await logTriggerAction('delete', { ...owned, deleted: true })
+    await archiveTriggerInNotion(owned.notionPageId)
+    await regenerateCsv(db)
     revalidateTriggerViews(owned.categoryId)
     return new NextResponse(null, { status: 204 })
   } catch (error) {

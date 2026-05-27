@@ -9,6 +9,8 @@ const {
   makeNote,
   revalidatePath,
   logTriggerAction,
+  syncTriggerToNotion,
+  regenerateCsv,
 } = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
   getDb: vi.fn(),
@@ -18,6 +20,8 @@ const {
   makeNote: vi.fn(),
   revalidatePath: vi.fn(),
   logTriggerAction: vi.fn(),
+  syncTriggerToNotion: vi.fn(),
+  regenerateCsv: vi.fn(),
 }))
 
 vi.mock('next/cache', () => ({
@@ -48,6 +52,9 @@ vi.mock('@/lib/db/notes', () => ({
 vi.mock('@/lib/dev/triggerActionLogger', () => ({
   logTriggerAction,
 }))
+
+vi.mock('@/lib/services/notionSync', () => ({ syncTriggerToNotion }))
+vi.mock('@/lib/services/csvExport', () => ({ regenerateCsv }))
 
 import { POST } from '@/app/api/triggers/route'
 
@@ -101,6 +108,8 @@ describe('trigger create route scheduling', () => {
     expect(logTriggerAction).toHaveBeenCalledWith('create', expect.objectContaining({
       id: 'trigger-1',
     }))
+    expect(syncTriggerToNotion).toHaveBeenCalledOnce()
+    expect(regenerateCsv).toHaveBeenCalledOnce()
   })
 })
 

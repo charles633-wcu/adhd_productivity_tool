@@ -7,6 +7,9 @@ const {
   acknowledgeTrigger,
   rescheduleTrigger,
   logTriggerAction,
+  syncTriggerToNotion,
+  archiveTriggerInNotion,
+  regenerateCsv,
 } = vi.hoisted(() => ({
   revalidatePath: vi.fn(),
   getCurrentUser: vi.fn(),
@@ -14,6 +17,9 @@ const {
   acknowledgeTrigger: vi.fn(),
   rescheduleTrigger: vi.fn(),
   logTriggerAction: vi.fn(),
+  syncTriggerToNotion: vi.fn(),
+  archiveTriggerInNotion: vi.fn(),
+  regenerateCsv: vi.fn(),
 }))
 
 vi.mock('next/cache', () => ({
@@ -36,6 +42,9 @@ vi.mock('@/lib/db/triggers', () => ({
 vi.mock('@/lib/dev/triggerActionLogger', () => ({
   logTriggerAction,
 }))
+
+vi.mock('@/lib/services/notionSync', () => ({ syncTriggerToNotion, archiveTriggerInNotion }))
+vi.mock('@/lib/services/csvExport', () => ({ regenerateCsv }))
 
 import { PATCH, DELETE } from '@/app/api/triggers/[id]/route'
 
@@ -88,6 +97,8 @@ describe('trigger detail route cache invalidation', () => {
     expect(logTriggerAction).toHaveBeenCalledWith('acknowledge', expect.objectContaining({
       id: 'trigger-1',
     }))
+    expect(syncTriggerToNotion).toHaveBeenCalledOnce()
+    expect(regenerateCsv).toHaveBeenCalledOnce()
   })
 })
 
@@ -139,6 +150,8 @@ describe('PATCH rescheduleDate', () => {
     expect(logTriggerAction).toHaveBeenCalledWith('reschedule', expect.objectContaining({
       id: 'trigger-1',
     }))
+    expect(syncTriggerToNotion).toHaveBeenCalledOnce()
+    expect(regenerateCsv).toHaveBeenCalledOnce()
   })
 
   it('returns 404 and does NOT call rescheduleTrigger when trigger belongs to a different user', async () => {
@@ -278,6 +291,8 @@ describe('PATCH reviewIntervalDays', () => {
     expect(logTriggerAction).toHaveBeenCalledWith('edit', expect.objectContaining({
       id: 'trigger-1',
     }))
+    expect(syncTriggerToNotion).toHaveBeenCalledOnce()
+    expect(regenerateCsv).toHaveBeenCalledOnce()
   })
 })
 
@@ -319,5 +334,7 @@ describe('DELETE /api/triggers/[id]', () => {
       id: 'trigger-1',
       title: 'Delete me',
     }))
+    expect(archiveTriggerInNotion).toHaveBeenCalledOnce()
+    expect(regenerateCsv).toHaveBeenCalledOnce()
   })
 })
