@@ -225,8 +225,8 @@ describe('TriggerCard', () => {
       />
     )
     // The outer card div should have border-indigo-500
-    const card = screen.getByText('Raw title text').closest('[class*="border-indigo"]')
-    expect(card).toBeTruthy()
+    const card = screen.getByTestId('trigger-card')
+    expect(card.className).toContain('border-indigo-500')
   })
 
   it('does not apply indigo border when selected is omitted', () => {
@@ -239,8 +239,8 @@ describe('TriggerCard', () => {
         onDelete={vi.fn()}
       />
     )
-    const card = screen.getByText('Raw title text').closest('[class*="border-indigo"]')
-    expect(card).toBeNull()
+    const card = screen.getByTestId('trigger-card')
+    expect(card.className).not.toContain('border-indigo-500')
   })
 
   it('calls onSelect when card content area is clicked', () => {
@@ -288,8 +288,25 @@ describe('TriggerCard', () => {
         isAnimatingOut={true}
       />
     )
-    const card = screen.getByText('Raw title text').closest('[class*="opacity-0"]')
-    expect(card).toBeTruthy()
+    const card = screen.getByTestId('trigger-card')
+    expect(card.className).toContain('opacity-0')
+  })
+
+  it('does not call onSelect when isAnimatingOut=true', () => {
+    const onSelect = vi.fn()
+    render(
+      <TriggerCard
+        trigger={makeTrigger()}
+        categoryName="Work"
+        onSuccess={mockSuccess}
+        onEdit={mockEdit}
+        onDelete={vi.fn()}
+        onSelect={onSelect}
+        isAnimatingOut={true}
+      />
+    )
+    fireEvent.click(screen.getByText('Raw title text'))
+    expect(onSelect).not.toHaveBeenCalled()
   })
 
   it('calls onAnimatingOut instead of onSuccess after successful acknowledge', async () => {

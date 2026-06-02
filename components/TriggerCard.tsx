@@ -115,8 +115,9 @@ export function TriggerCard({
 
   return (
     <div
+      data-testid="trigger-card"
       className={[
-        'rounded-lg border-l-2 border transition-colors overflow-hidden',
+        'rounded-lg border-l-2 border transition-all transition-colors overflow-hidden',
         config.borderClass,
         selected ? 'border-indigo-500 bg-indigo-500/5' : 'border-border bg-card hover:bg-card/80',
         isAnimatingOut ? 'opacity-0 scale-95 pointer-events-none duration-[250ms]' : '',
@@ -125,7 +126,7 @@ export function TriggerCard({
       {/* Content area — clickable when onSelect is provided; action buttons are excluded via stopPropagation */}
       <div
         className={onSelect ? 'cursor-pointer' : ''}
-        onClick={onSelect}
+        onClick={isAnimatingOut ? undefined : onSelect}
       >
       <div className="px-4 py-3 space-y-2.5">
         <div className="flex items-start gap-2.5">
