@@ -81,7 +81,7 @@ export function ReviewQueueClient({ grouped, nodeMap }: ReviewQueueClientProps) 
     )
     const anyFailed = results.some(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.ok))
     if (anyFailed) setBulkError('Some items could not be acknowledged. Refresh to try again.')
-    router.refresh()
+    doRefresh()
   }
 
   /** Delete a single trigger then refresh */

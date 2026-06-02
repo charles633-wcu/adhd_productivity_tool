@@ -31,7 +31,7 @@ vi.mock('@/components/TriggerEditSheet', () => ({
 }))
 
 function makeCategory(id: string, name: string): Category {
-  return { id, userId: 'u1', name, icon: null, createdAt: new Date(), updatedAt: new Date() }
+  return { id, userId: 'u1', name, icon: null, createdAt: new Date() }
 }
 function makeTrigger(id: string, categoryId: string, title: string): Trigger {
   return {
