@@ -43,6 +43,14 @@ interface TriggerCardProps {
   isProcessing?: boolean
   /** Optional Mind canvas nodes linked to this trigger — shown as display-only badges */
   linkedNodes?: { id: string; title: string }[]
+  /** When true, renders an indigo selection ring around the card */
+  selected?: boolean
+  /** Called when the card content area (above action buttons) is clicked */
+  onSelect?: () => void
+  /** When true, applies opacity-0 / scale-95 transition classes to animate the card out */
+  isAnimatingOut?: boolean
+  /** When provided, called instead of onSuccess() after a successful individual acknowledge */
+  onAnimatingOut?: () => void
 }
 
 function formatCardDate(date: Date): string {
@@ -58,6 +66,10 @@ export function TriggerCard({
   onRetry,
   isProcessing = false,
   linkedNodes,
+  selected = false,
+  onSelect,
+  isAnimatingOut = false,
+  onAnimatingOut,
 }: TriggerCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -90,7 +102,12 @@ export function TriggerCard({
         body: JSON.stringify({ acknowledge: true }),
       })
       if (!res.ok) throw new Error(`Request failed: ${res.status}`)
-      onSuccess()
+      // Prefer onAnimatingOut when provided so the parent can drive the exit animation
+      if (onAnimatingOut) {
+        onAnimatingOut()
+      } else {
+        onSuccess()
+      }
     } finally {
       setAcknowledging(false)
     }
@@ -98,8 +115,18 @@ export function TriggerCard({
 
   return (
     <div
-      className={`rounded-lg border-l-2 border border-border bg-card hover:bg-card/80 transition-colors ${config.borderClass} overflow-hidden`}
+      className={[
+        'rounded-lg border-l-2 border transition-colors overflow-hidden',
+        config.borderClass,
+        selected ? 'border-indigo-500 bg-indigo-500/5' : 'border-border bg-card hover:bg-card/80',
+        isAnimatingOut ? 'opacity-0 scale-95 pointer-events-none duration-[250ms]' : '',
+      ].filter(Boolean).join(' ')}
     >
+      {/* Content area — clickable when onSelect is provided; action buttons are excluded via stopPropagation */}
+      <div
+        className={onSelect ? 'cursor-pointer' : ''}
+        onClick={onSelect}
+      >
       <div className="px-4 py-3 space-y-2.5">
         <div className="flex items-start gap-2.5">
           <span
@@ -149,7 +176,10 @@ export function TriggerCard({
           ))}
         </div>
       )}
+      </div>{/* end clickable content area */}
 
+      {/* Action buttons row — stopPropagation prevents clicks from bubbling to the onSelect handler */}
+      <div onClick={e => e.stopPropagation()}>
       <div className="px-4 pb-3 flex items-center gap-2">
         <button
           type="button"
@@ -237,6 +267,7 @@ export function TriggerCard({
           )}
         </div>
       </div>
+      </div>{/* end stopPropagation wrapper */}
 
       {expanded && (
         <div className="border-t border-border px-4 py-3 space-y-3 bg-background/40 animate-in">
