@@ -58,7 +58,7 @@ export default async function ReviewPage() {
       <AppHeader active="triggers" />
 
       <div className="border-b border-border bg-background/55">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
           <h1 className="text-lg font-bold leading-none">Review Queue</h1>
           <span className="ml-auto text-xs font-mono text-muted-foreground">
             {dueTriggers.length} {dueTriggers.length === 1 ? 'item' : 'items'}
@@ -66,7 +66,7 @@ export default async function ReviewPage() {
         </div>
       </div>
 
-      <main className="max-w-2xl mx-auto w-full px-4 py-6">
+      <main className="max-w-5xl mx-auto w-full px-4 py-6">
         <ReviewQueueClient grouped={grouped} nodeMap={nodeMap} />
       </main>
     </div>
