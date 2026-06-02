@@ -68,6 +68,9 @@ function buildProperties(trigger: Trigger, categoryName: string) {
  * Resolves categoryName from the DB internally — callers do not need to provide it.
  * If notionPageId is null, creates a new page and writes the page ID back to the DB.
  * Errors are swallowed — never thrown to callers.
+ * @param trigger - Trigger row to create or update in Notion.
+ * @param db - Database client used to resolve category data and store new page IDs.
+ * @returns A promise resolving after the best-effort sync attempt completes.
  */
 export async function syncTriggerToNotion(trigger: Trigger, db: DrizzleDb): Promise<void> {
   try {
@@ -111,6 +114,8 @@ export async function syncTriggerToNotion(trigger: Trigger, db: DrizzleDb): Prom
  * Archives a Notion page (soft-delete — recoverable for 30 days).
  * No-ops if notionPageId is null (trigger was never synced).
  * Errors are swallowed — never thrown to callers.
+ * @param notionPageId - Notion page identifier, or null when no mirror exists.
+ * @returns A promise resolving after the best-effort archive attempt completes.
  */
 export async function archiveTriggerInNotion(notionPageId: string | null): Promise<void> {
   if (!notionPageId) return

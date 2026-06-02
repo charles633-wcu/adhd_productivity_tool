@@ -25,6 +25,8 @@ function escapeField(value: string): string {
 /**
  * Returns a Notion-compatible CSV string of all active triggers.
  * Column order matches the original Notion export exactly.
+ * @param db - Database client used to load active triggers and category names.
+ * @returns A promise resolving to CSV text including its header row.
  */
 export async function getCsvString(db: DrizzleDb): Promise<string> {
   const rows = await db
@@ -62,6 +64,8 @@ export async function getCsvString(db: DrizzleDb): Promise<string> {
 /**
  * Regenerates notion_backup/latest/triggers_export.csv from the current DB state.
  * Local dev only — swallows all errors to never block trigger operations.
+ * @param db - Database client used to generate the exported trigger data.
+ * @returns A promise resolving after the best-effort file write attempt.
  */
 export async function regenerateCsv(db: DrizzleDb): Promise<void> {
   try {

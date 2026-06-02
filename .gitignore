@@ -44,6 +44,10 @@ next-env.d.ts
 sentinel.db
 sentinel.db-shm
 sentinel.db-wal
+# local databases — personal data, never commit (covers local.db + any *.db)
+*.db
+*.db-shm
+*.db-wal
 context/
 .superpowers/
 graphify-out/
@@ -69,6 +73,12 @@ sample_csv/
 docs/*.log
 docs/**/*.log
 
-
+# root-level dev/runtime logs & internal scratch notes (not for public repo)
+dev-stdout.txt
+dev-stderr.txt
+race_conditions_check.txt
 goal_adhd_research_features.txt
+goal_adhd_research_featues.txt
+product-public-release-audit.md
+docs/product-public-release-audit.md
 notion_backup/latest/

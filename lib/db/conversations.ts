@@ -8,6 +8,9 @@ import type { DrizzleDb } from './client'
 /**
  * Persists a conversation to the DB.
  * Caller is responsible for truncating title to 60 chars before calling.
+ * @param db - Database client used for persistence.
+ * @param data - Complete conversation record to insert.
+ * @returns A promise resolving to the inserted conversation row.
  */
 export async function saveConversation(
   db: DrizzleDb,
@@ -20,6 +23,9 @@ export async function saveConversation(
 /**
  * Returns all saved conversations for a user, newest first.
  * Only returns id, title, createdAt — messages JSON excluded for list efficiency.
+ * @param db - Database client used for the query.
+ * @param userId - Owner identifier used to restrict conversations.
+ * @returns A promise resolving to conversation summaries ordered newest first.
  */
 export async function listConversations(
   db: DrizzleDb,

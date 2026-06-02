@@ -21,6 +21,10 @@ export interface SummarizeContext {
  * Summarizes trigger content in one sentence using gpt-4o-mini.
  * When context is provided, incorporates condensed history and review notes.
  * Backwards-compatible: callers that pass only content behave identically to before.
+ * @param content - Original trigger text; truncated to 10,000 characters for the request.
+ * @param context - Optional condensed history and chronological review notes.
+ * @returns A promise resolving to the trimmed model-generated summary sentence.
+ * @throws If content is blank or the model request fails.
  */
 export async function summarizeTrigger(
   content: string,

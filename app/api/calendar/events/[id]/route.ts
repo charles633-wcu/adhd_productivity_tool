@@ -14,6 +14,11 @@ type RecurScope = 'this' | 'thisAndFollowing' | 'all'
 
 const OCCURRENCE_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z$/
 
+/**
+ * Tests whether a recurrence rule can be parsed and contains a frequency.
+ * @param value - RRULE text without event data.
+ * @returns `true` when the value is a usable recurrence rule.
+ */
 function isValidRRule(value: string) {
   try {
     return RRule.parseString(value).freq != null
@@ -45,6 +50,11 @@ const DeleteSchema = z.object({
   occurrenceDate: z.string().regex(OCCURRENCE_RE).optional(),
 })
 
+/**
+ * Converts validated JSON patch fields into persistence-ready event fields.
+ * @param data - Parsed PATCH body, including control fields ignored by persistence.
+ * @returns A partial event row with date strings converted to `Date` values.
+ */
 function eventPatchFromInput(data: z.infer<typeof PatchSchema>): Partial<NewCalendarEvent> {
   const patch: Partial<NewCalendarEvent> = {}
   if ('title' in data) patch.title = data.title
@@ -57,14 +67,30 @@ function eventPatchFromInput(data: z.infer<typeof PatchSchema>): Partial<NewCale
   return patch
 }
 
+/**
+ * Removes generated DTSTART and RRULE prefixes from serialized recurrence text.
+ * @param value - Serialized `RRule` output.
+ * @returns Bare recurrence options text stored on calendar events.
+ */
 function stripRRulePrefix(value: string) {
   return value.replace(/^DTSTART[^\n]*\n/, '').replace(/^RRULE:/, '')
 }
 
+/**
+ * Serializes recurrence options in the database's bare RRULE representation.
+ * @param options - Recurrence options to serialize.
+ * @returns Bare recurrence rule text.
+ */
 function serializeOptions(options: Partial<Options>) {
   return stripRRulePrefix(new RRule(options).toString())
 }
 
+/**
+ * Computes recurrence changes required to split a series at an occurrence.
+ * @param event - Recurring master event to split.
+ * @param occurrenceDate - Normalized ISO occurrence at which the future segment starts.
+ * @returns Split mode and, where needed, replacement recurrence rules.
+ */
 function splitOptions(event: CalendarEvent, occurrenceDate: string) {
   const opts = RRule.parseString(event.rrule!)
   const occurrenceStart = new Date(occurrenceDate)
@@ -97,6 +123,14 @@ function splitOptions(event: CalendarEvent, occurrenceDate: string) {
   }
 }
 
+/**
+ * Clears override/exclusion data at and after a recurrence split boundary.
+ * @param db - Database client used for deletion and master update.
+ * @param event - Master event being truncated or split.
+ * @param occurrenceDate - Normalized split occurrence ISO string.
+ * @param extraPatch - Additional master fields to persist with trimmed exclusions.
+ * @returns A promise resolving after forward recurrence state is purged.
+ */
 async function purgeForwardData(
   db: ReturnType<typeof getDb>,
   event: CalendarEvent,
@@ -118,6 +152,14 @@ async function purgeForwardData(
     .where(eq(calendarEvents.id, event.id))
 }
 
+/**
+ * Builds the new master row representing a recurring series' future segment.
+ * @param event - Existing master event used for unchanged values.
+ * @param occurrenceDate - First occurrence in the new segment.
+ * @param patch - Updated values to apply to the new segment.
+ * @param rrule - Recurrence rule assigned to the new segment.
+ * @returns Values for inserting the split calendar event.
+ */
 function buildSplitRow(event: CalendarEvent, occurrenceDate: string, patch: Partial<NewCalendarEvent>, rrule: string): NewCalendarEvent {
   const startAt = patch.startAt ?? new Date(occurrenceDate)
   const endAt = patch.endAt ?? new Date(startAt.getTime() + event.endAt.getTime() - event.startAt.getTime())
@@ -136,6 +178,14 @@ function buildSplitRow(event: CalendarEvent, occurrenceDate: string, patch: Part
   }
 }
 
+/**
+ * Applies an update to one occurrence and every subsequent occurrence in its series.
+ * @param db - Database client used for recurrence mutations.
+ * @param event - Existing recurring master event.
+ * @param occurrenceDate - First affected occurrence in normalized ISO form.
+ * @param patch - Event field replacements for the future segment.
+ * @returns A promise resolving to the updated or newly inserted segment row.
+ */
 async function applyThisAndFollowingPatch(
   db: ReturnType<typeof getDb>,
   event: CalendarEvent,
@@ -162,6 +212,13 @@ async function applyThisAndFollowingPatch(
   return row
 }
 
+/**
+ * Deletes a recurring occurrence and all later occurrences in that series.
+ * @param db - Database client used for recurrence mutations.
+ * @param event - Existing recurring master event.
+ * @param occurrenceDate - First removed occurrence in normalized ISO form.
+ * @returns A promise resolving after the series is removed or truncated.
+ */
 async function truncateThisAndFollowing(db: ReturnType<typeof getDb>, event: CalendarEvent, occurrenceDate: string) {
   const split = splitOptions(event, occurrenceDate)
 
@@ -180,6 +237,12 @@ async function truncateThisAndFollowing(db: ReturnType<typeof getDb>, event: Cal
   await purgeForwardData(db, event, occurrenceDate, { rrule: split.masterRrule })
 }
 
+/**
+ * Updates a base event or a selected scope of a recurring event.
+ * @param request - Request with patch JSON and optional `scope`/`occurrenceDate` recurrence controls.
+ * @param params - Promise resolving to the base event `id` path parameter.
+ * @returns A promise resolving to updated event/override JSON or an error response.
+ */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getCurrentUser()
@@ -238,6 +301,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 }
 
+/**
+ * Deletes a base event or a selected scope of a recurring event.
+ * @param request - Request whose query may contain `scope` and `occurrenceDate`.
+ * @param params - Promise resolving to the base event `id` path parameter.
+ * @returns A promise resolving to an empty 204 response or an error response.
+ */
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getCurrentUser()

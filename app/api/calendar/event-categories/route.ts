@@ -11,6 +11,10 @@ const CreateSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#6366f1'),
 })
 
+/**
+ * Lists calendar event categories for the authenticated user.
+ * @returns A promise resolving to a JSON response containing category rows or an error.
+ */
 export async function GET() {
   try {
     const user = await getCurrentUser()
@@ -22,6 +26,11 @@ export async function GET() {
   }
 }
 
+/**
+ * Creates a calendar event category for the authenticated user.
+ * @param request - Request with JSON `{ name: string, color?: "#RRGGBB" }`.
+ * @returns A promise resolving to the created category response or a validation/server error.
+ */
 export async function POST(request: Request) {
   try {
     const user = await getCurrentUser()

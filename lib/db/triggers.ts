@@ -9,7 +9,10 @@ import { deriveNextReviewAt } from '@/lib/services/reviewClock'
 
 /**
  * Inserts a new trigger. Validates that title is non-empty.
- * Returns the full trigger row including the generated cuid id.
+ * @param db - Database client used for the insert.
+ * @param data - Complete trigger record to persist.
+ * @returns A promise resolving to the full inserted trigger row.
+ * @throws If `data.title` is empty or whitespace-only.
  */
 export async function createTrigger(db: DrizzleDb, data: NewTrigger): Promise<Trigger> {
   // Validate: title must not be empty
@@ -25,6 +28,10 @@ export async function createTrigger(db: DrizzleDb, data: NewTrigger): Promise<Tr
  * Resets last_reviewed_at = now and recalculates next_review_at from the acknowledge time.
  * Note: two queries by design — Drizzle cannot reference existing column values in .set().
  * updatedAt is handled automatically by the .$onUpdate() hook defined in schema.ts.
+ * @param db - Database client used for lookup and update.
+ * @param triggerId - Identifier of the trigger to acknowledge.
+ * @returns A promise resolving to the updated trigger row.
+ * @throws If no trigger exists with `triggerId`.
  */
 export async function acknowledgeTrigger(db: DrizzleDb, triggerId: string): Promise<Trigger> {
   // Fetch current trigger to read review_interval_days before updating
@@ -61,6 +68,9 @@ export async function acknowledgeTrigger(db: DrizzleDb, triggerId: string): Prom
 /**
  * Returns all triggers for a category, sorted by priority ASC then next_review_at ASC.
  * Secondary sort ensures deterministic order when multiple triggers share a priority.
+ * @param db - Database client used for the query.
+ * @param categoryId - Category identifier used to restrict triggers.
+ * @returns A promise resolving to matching trigger rows in review order.
  */
 export async function getTriggersForCategory(db: DrizzleDb, categoryId: string): Promise<Trigger[]> {
   return db
@@ -74,6 +84,11 @@ export async function getTriggersForCategory(db: DrizzleDb, categoryId: string):
  * Directly overrides nextReviewAt for a trigger (one-time anchor override).
  * Does NOT touch lastReviewedAt or reviewIntervalDays — this is not an acknowledgement.
  * Subsequent acknowledgeTrigger calls will compute from the new anchor as normal.
+ * @param db - Database client used for the update.
+ * @param triggerId - Identifier of the trigger to reschedule.
+ * @param date - Exact next review timestamp to persist.
+ * @returns A promise resolving to the updated trigger row.
+ * @throws If no trigger exists with `triggerId`.
  */
 export async function rescheduleTrigger(
   db: DrizzleDb,

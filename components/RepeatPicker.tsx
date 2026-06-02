@@ -115,8 +115,10 @@ function buildRRule(state: PickerState): string {
     }
   }
 
-  if (state.freq === RRule.YEARLY) {
-    opts.bymonth = state.bymonth ?? 1
+  // Only constrain by month/day when the user has explicitly chosen them.
+  // Without BYMONTH, FREQ=YEARLY naturally recurs on the same month+day as dtstart.
+  if (state.freq === RRule.YEARLY && state.bymonth !== null) {
+    opts.bymonth = state.bymonth
     if (state.patternMode === 'weekday') {
       opts.byweekday = state.byweekday[0] ? [state.byweekday[0]] : [RRule.MO]
       opts.bysetpos = state.bysetpos ?? 1
@@ -216,8 +218,8 @@ export function RepeatPicker({ value, onChange }: RepeatPickerProps) {
     { label: 'Every day', value: buildRRule({ ...DEFAULT_STATE, freq: RRule.DAILY }) },
     { label: 'Every week', value: buildRRule({ ...DEFAULT_STATE, freq: RRule.WEEKLY }) },
     { label: 'Every 2 weeks', value: buildRRule({ ...DEFAULT_STATE, freq: RRule.WEEKLY, interval: 2 }) },
-    { label: 'Every month', value: buildRRule({ ...DEFAULT_STATE, freq: RRule.MONTHLY, bymonthday: 1 }) },
-    { label: 'Every year', value: buildRRule({ ...DEFAULT_STATE, freq: RRule.YEARLY, bymonth: 1, bymonthday: 1 }) },
+    { label: 'Every month', value: buildRRule({ ...DEFAULT_STATE, freq: RRule.MONTHLY, bymonthday: null }) },
+    { label: 'Every year', value: buildRRule({ ...DEFAULT_STATE, freq: RRule.YEARLY }) },
   ], [])
 
   function commit(next: PickerState) {
@@ -231,6 +233,30 @@ export function RepeatPicker({ value, onChange }: RepeatPickerProps) {
       ? state.byweekday.filter(item => item.weekday !== day.weekday)
       : [...state.byweekday, day]
     commit({ ...state, byweekday })
+  }
+
+  function selectPreset(option: { label: string; value: string | null }) {
+    if (!option.value) {
+      onChange(null)
+      setState(DEFAULT_STATE)
+      setOpen(false)
+      return
+    }
+    // Merge new frequency with existing end condition so users don't lose their "For" setting
+    const presetState = parseValue(option.value)
+    const merged: PickerState = { ...presetState, endMode: state.endMode, until: state.until, count: state.count }
+    setState(merged)
+    onChange(buildRRule(merged))
+    // Only close when no end condition is active (simple / quick-pick case)
+    if (state.endMode === 'never') setOpen(false)
+  }
+
+  function presetMatchesValue(presetValue: string | null) {
+    if (value === presetValue) return true
+    if (!value || !presetValue) return false
+    const v = parseValue(value)
+    const p = parseValue(presetValue)
+    return v.freq === p.freq && v.interval === p.interval
   }
 
   return (
@@ -257,17 +283,93 @@ export function RepeatPicker({ value, onChange }: RepeatPickerProps) {
             <button
               key={option.label}
               type="button"
-              onClick={() => {
-                onChange(option.value)
-                setOpen(false)
-              }}
+              onClick={() => selectPreset(option)}
               className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-muted ${
-                value === option.value ? 'font-semibold text-primary' : ''
+                presetMatchesValue(option.value) ? 'font-semibold text-primary' : ''
               }`}
             >
               {option.label}
             </button>
           ))}
+
+          {/* Ends section — Pocket Informant style: visible directly in the preset dropdown */}
+          {value !== null && (
+            <div className="border-t border-border px-2 pb-2 pt-2">
+              <p className="px-1 pb-1 text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">Ends</p>
+              <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted/60 p-1">
+                {(['never', 'until', 'count'] as EndMode[]).map(mode => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-label={mode === 'count' ? 'For' : mode === 'until' ? 'Until' : 'Never'}
+                    onClick={() => {
+                      if (mode === 'never') {
+                        const next: PickerState = { ...state, endMode: 'never', until: null, count: null }
+                        setState(next)
+                        onChange(buildRRule(next))
+                        setOpen(false)
+                      } else {
+                        setState(prev => ({ ...prev, endMode: mode }))
+                      }
+                    }}
+                    className={`rounded-md py-1.5 text-xs font-medium ${
+                      state.endMode === mode
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {mode === 'count' ? 'For' : mode === 'until' ? 'Until' : 'Never'}
+                  </button>
+                ))}
+              </div>
+
+              {state.endMode === 'count' && (
+                <div className="mt-2 flex items-center gap-2 px-1">
+                  <span className="text-sm text-muted-foreground">For</span>
+                  <input
+                    type="number"
+                    aria-label="Occurrence count"
+                    min={1}
+                    max={999}
+                    value={state.count ?? 10}
+                    onChange={e => {
+                      const count = Math.max(1, parseInt(e.target.value, 10) || 1)
+                      setState(prev => ({ ...prev, count }))
+                    }}
+                    className="w-20 rounded-md border border-input bg-muted/40 px-2 py-1.5 text-center text-sm"
+                  />
+                  <span className="text-sm text-muted-foreground">times</span>
+                </div>
+              )}
+
+              {state.endMode === 'until' && (
+                <input
+                  type="date"
+                  aria-label="End date"
+                  value={state.until ? state.until.toISOString().split('T')[0] : ''}
+                  onChange={e => {
+                    const date = e.target.value ? new Date(`${e.target.value}T12:00:00`) : null
+                    setState(prev => ({ ...prev, until: date }))
+                  }}
+                  className="mt-2 w-full rounded-md border border-input bg-muted/40 px-2 py-1.5 text-sm"
+                />
+              )}
+
+              {state.endMode !== 'never' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(buildRRule(state))
+                    setOpen(false)
+                  }}
+                  className="mt-2 w-full rounded-lg bg-primary py-1.5 text-xs font-semibold text-primary-foreground"
+                >
+                  Done
+                </button>
+              )}
+            </div>
+          )}
+
           <button
             type="button"
             onClick={() => setCustomOpen(true)}

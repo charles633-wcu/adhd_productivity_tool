@@ -23,6 +23,7 @@ import {
 import { HelpCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { HeapNode, type HeapNodeData } from './HeapNode'
+import { PriorityEdge, type PriorityEdgeData } from './PriorityEdge'
 import { AddNodeFab } from './AddNodeFab'
 import { HeapTodoOverlay } from './HeapTodoOverlay'
 import { HeapTutorial } from './HeapTutorial'
@@ -32,6 +33,7 @@ import { deriveFocusVisibility, type FocusEdge, type FocusNode } from '@/lib/hea
 import { assignEdgeHandles, buildNodeHandles, type HandleNode } from '@/lib/heap/handles'
 
 const nodeTypes = { heapNode: HeapNode }
+const edgeTypes = { priorityEdge: PriorityEdge }
 
 function exportGraph(nodes: Node[], edges: Edge[]) {
   const snapshot = {
@@ -52,9 +54,10 @@ function exportGraph(nodes: Node[], edges: Edge[]) {
 }
 
 function toFlowNode(node: HeapNodeType & { todoCount?: number }): Node {
-  // Circle nodes need an explicit size so they render at the correct dimensions on load.
-  // Other shapes are content-sized by ReactFlow.
-  const isCircle = node.shape === 'circle'
+  // Project root nodes are always rendered as large circles regardless of stored shape.
+  const isProjectRoot = node.type === 'project'
+  const isCircle = node.shape === 'circle' || isProjectRoot
+  const defaultCircleSize = isProjectRoot ? 160 : 80
   return {
     id: node.id,
     type: 'heapNode',
@@ -64,9 +67,9 @@ function toFlowNode(node: HeapNodeType & { todoCount?: number }): Node {
       type: node.type,
       color: node.color,
       todoCount: node.todoCount ?? 0,
-      shape: node.shape,
-      width: node.width,
-      height: node.height,
+      shape: isProjectRoot ? 'circle' : node.shape,
+      width: node.width ?? (isProjectRoot ? defaultCircleSize : undefined),
+      height: node.height ?? (isProjectRoot ? defaultCircleSize : undefined),
       priority: node.priority ?? 'normal',
       updatedAt: node.updatedAt,
       fontFamily: node.fontFamily ?? null,
@@ -74,7 +77,7 @@ function toFlowNode(node: HeapNodeType & { todoCount?: number }): Node {
       fontBold: node.fontBold ?? null,
     } satisfies HeapNodeData,
     style: isCircle
-      ? { width: node.width ?? 80, height: node.height ?? 80 }
+      ? { width: node.width ?? defaultCircleSize, height: node.height ?? defaultCircleSize }
       : node.width != null
         ? { width: node.width, height: node.height ?? node.width }
         : undefined,
@@ -90,7 +93,7 @@ function numericDimension(value: unknown): number | undefined {
   return undefined
 }
 
-export function HeapCanvas({ projectId }: { projectId?: string } = {}) {
+export function HeapCanvas({ projectId, projectNode }: { projectId?: string; projectNode?: HeapNodeType } = {}) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
@@ -120,17 +123,24 @@ export function HeapCanvas({ projectId }: { projectId?: string } = {}) {
           fetch('/api/heap/edges'),
         ])
         if (!nodesRes.ok || !edgesRes.ok) throw new Error('fetch failed')
-        const [rawNodes, rawEdges]: [HeapNodeType[], Edge[]] = await Promise.all([
+        type RawEdge = { id: string; source: string; target: string; label: string | null; priority: string; createdAt: string }
+        const [rawNodes, rawEdges]: [HeapNodeType[], RawEdge[]] = await Promise.all([
           nodesRes.json(),
           edgesRes.json(),
         ])
         if (cancelled) return
         // Filter edges to only those whose both endpoints exist in the loaded nodes
         const nodeIdSet = new Set(rawNodes.map((n: HeapNodeType) => n.id))
-        const scopedEdges = (rawEdges as Edge[]).filter(
-          (e) => nodeIdSet.has(String(e.source)) && nodeIdSet.has(String(e.target))
-        )
-        setNodes(rawNodes.map(toFlowNode))
+        const scopedEdges = rawEdges
+          .filter((e) => nodeIdSet.has(e.source) && nodeIdSet.has(e.target))
+          .map((e) => ({ ...e, type: 'priorityEdge', data: { priority: e.priority ?? 'normal' } } as Edge))
+        // Prepend the project root node so it appears on the canvas as a parent circle
+        const childFlowNodes = rawNodes.map(toFlowNode)
+        if (projectNode) {
+          setNodes([toFlowNode({ ...projectNode, todoCount: 0 }), ...childFlowNodes])
+        } else {
+          setNodes(childFlowNodes)
+        }
         setEdges(scopedEdges)
       } catch {
         toast.error('Failed to load heap - please refresh')
@@ -141,7 +151,8 @@ export function HeapCanvas({ projectId }: { projectId?: string } = {}) {
 
     load()
     return () => { cancelled = true }
-  }, [setNodes, setEdges, projectId])  // projectId triggers refetch when changed
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setNodes, setEdges, projectId, projectNode?.id])  // projectNode?.id re-fetches if project changes
 
   // Restore saved viewport from localStorage, or fit all nodes if none saved.
   // The key is namespaced by projectId so each project canvas restores its own viewport.
@@ -239,9 +250,36 @@ export function HeapCanvas({ projectId }: { projectId?: string } = {}) {
     })
   }, [])
 
+  const handleEdgePriorityChange = useCallback((id: string, priority: 'normal' | 'high') => {
+    // Capture previous priority for rollback
+    let prevPriority: string | undefined
+    setEdges((current) => current.map((e) => {
+      if (e.id !== id) return e
+      prevPriority = (e.data as PriorityEdgeData)?.priority
+      return { ...e, data: { ...e.data, priority } }
+    }))
+    fetch(`/api/heap/edges/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ priority }),
+    }).catch(() => {
+      toast.error('Failed to update connection priority')
+      setEdges((current) => current.map((e) =>
+        e.id === id ? { ...e, data: { ...e.data, priority: prevPriority ?? 'normal' } } : e
+      ))
+    })
+  }, [setEdges])
+
+  const handleEdgeDeleteFromToolbar = useCallback((id: string) => {
+    setEdges((current) => current.filter((e) => e.id !== id))
+    fetch(`/api/heap/edges/${id}`, { method: 'DELETE' }).catch(() => {
+      toast.error('Failed to delete connection')
+    })
+  }, [setEdges])
+
   const handleConnect: OnConnect = useCallback(async (params: Connection) => {
     const tempId = `temp-${Date.now()}`
-    const optimisticEdge: Edge = { ...params, id: tempId } as Edge
+    const optimisticEdge: Edge = { ...params, id: tempId, type: 'priorityEdge', data: { priority: 'normal' } } as Edge
     setEdges((currentEdges) => addEdge(optimisticEdge, currentEdges))
     try {
       const res = await fetch('/api/heap/edges', {
@@ -254,7 +292,8 @@ export function HeapCanvas({ projectId }: { projectId?: string } = {}) {
         if (res.status !== 409) toast.error('Failed to create connection')
         return
       }
-      const realEdge: Edge = await res.json()
+      const rawEdge = await res.json()
+      const realEdge: Edge = { ...rawEdge, type: 'priorityEdge', data: { priority: rawEdge.priority ?? 'normal' } }
       setEdges((currentEdges) => currentEdges.map((edge) => edge.id === tempId ? realEdge : edge))
     } catch {
       setEdges((currentEdges) => currentEdges.filter((edge) => edge.id !== tempId))
@@ -286,6 +325,8 @@ export function HeapCanvas({ projectId }: { projectId?: string } = {}) {
   }
 
   function handleNodeDeleted(nodeId: string) {
+    // The project root node cannot be deleted from the canvas — use the overview page instead
+    if (projectNode && nodeId === projectNode.id) return
     setNodes((currentNodes) => currentNodes.filter((node) => node.id !== nodeId))
     setEdges((currentEdges) => currentEdges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId))
     if (selectedNodeId === nodeId) setSelectedNodeId(null)
@@ -381,13 +422,39 @@ export function HeapCanvas({ projectId }: { projectId?: string } = {}) {
   }))
 
   const assignedEdges = assignEdgeHandles(handleNodes, edges)
-  const renderedEdges = focusVisibility
-    ? assignedEdges.map((edge) => ({
-        ...edge,
+  // Edges touching the project root get a colored glow to visually distinguish them.
+  const projectGlowColor = projectNode?.color ?? '#64748b'
+  const renderedEdges = assignedEdges.map((edge) => {
+    const isProjectEdge = !!projectNode && (
+      String(edge.source) === projectNode.id || String(edge.target) === projectNode.id
+    )
+    const baseStyle = {
+      ...(edge.style ?? {}),
+      ...(isProjectEdge ? {
+        stroke: projectGlowColor,
+        strokeWidth: 2.5,
+        filter: `drop-shadow(0 0 5px ${projectGlowColor}bb)`,
+      } : {}),
+    }
+    // Pass toolbar callbacks through data so PriorityEdge can invoke them
+    const edgeWithCallbacks = {
+      ...edge,
+      type: 'priorityEdge',
+      data: {
+        ...(edge.data ?? {}),
+        onPriorityChange: handleEdgePriorityChange,
+        onDelete: handleEdgeDeleteFromToolbar,
+      },
+    }
+    if (focusVisibility) {
+      return {
+        ...edgeWithCallbacks,
         animated: focusVisibility.brightEdgeIds.has(edge.id),
-        style: { ...(edge.style ?? {}), opacity: focusVisibility.dimmedEdgeIds.has(edge.id) ? 0.18 : 1 },
-      }))
-    : assignedEdges
+        style: { ...baseStyle, opacity: focusVisibility.dimmedEdgeIds.has(edge.id) ? 0.18 : 1 },
+      }
+    }
+    return { ...edgeWithCallbacks, style: baseStyle, animated: isProjectEdge }
+  })
 
   return (
     <div className="h-full w-full relative" data-testid="heap-canvas-container" data-selected-node-id={selectedNodeId ?? undefined}>
@@ -440,6 +507,7 @@ export function HeapCanvas({ projectId }: { projectId?: string } = {}) {
         onNodeClick={handleNodeClick}
         onMoveEnd={handleMoveEnd}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         connectionMode={ConnectionMode.Loose}
         colorMode="dark"
       >
@@ -458,11 +526,12 @@ export function HeapCanvas({ projectId }: { projectId?: string } = {}) {
         <HelpCircle className="w-5 h-5" />
       </button>
       {showTutorial && <HeapTutorial onClose={() => setShowTutorial(false)} />}
-      <HeapTodoOverlay
-        selectedNodeId={selectedNodeId}
-        selectedNodeTitle={selectedNodeId ? ((nodes.find(n => n.id === selectedNodeId)?.data as HeapNodeData | undefined)?.title ?? null) : null}
-        onClose={() => setSelectedNodeId(null)}
-      />
+      {projectNode && (
+        <HeapTodoOverlay
+          projectNodeId={projectNode.id}
+          projectTitle={projectNode.title}
+        />
+      )}
       <NodeDetailSheet
         nodeId={sheetNodeId}
         onClose={() => setSheetNodeId(null)}

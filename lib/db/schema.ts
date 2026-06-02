@@ -250,12 +250,16 @@ export const heapNodes = sqliteTable('heap_nodes', {
 })
 
 // heap_edges - directed connections between nodes; unique per user+source+target
+export type HeapEdgePriority = 'normal' | 'high'
+
 export const heapEdges = sqliteTable('heap_edges', {
   id: text('id').primaryKey().$defaultFn(() => createId()),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   sourceId: text('source_id').notNull().references(() => heapNodes.id, { onDelete: 'cascade' }),
   targetId: text('target_id').notNull().references(() => heapNodes.id, { onDelete: 'cascade' }),
   label: text('label'),
+  // Edge priority — 'high' renders as gold glow + bold stroke
+  priority: text('priority').$type<HeapEdgePriority>().notNull().default('normal'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 }, (t) => ({
   uniqueSourceTarget: uniqueIndex('heap_edges_user_source_target_idx').on(t.userId, t.sourceId, t.targetId),

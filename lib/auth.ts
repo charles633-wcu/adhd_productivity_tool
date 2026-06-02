@@ -5,7 +5,8 @@ import { users } from './db/schema'
 
 /**
  * Returns the current user. MVP: always returns the single seeded local user.
- * Throws if no user exists — run `npm run db:seed` to fix.
+ * @returns A promise resolving to the first persisted user row.
+ * @throws If no seeded user exists.
  */
 export async function getCurrentUser() {
   const db = getDb()

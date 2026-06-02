@@ -10,6 +10,12 @@ const PatchSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
 })
 
+/**
+ * Updates an authenticated user's calendar event category.
+ * @param request - Request with JSON optional `name` and `color` replacement fields.
+ * @param params - Promise resolving to the category `id` path parameter.
+ * @returns A promise resolving to the updated category response or an error response.
+ */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getCurrentUser()
@@ -25,6 +31,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 }
 
+/**
+ * Deletes an authenticated user's event category and clears its event references.
+ * @param _req - Unused request object supplied by the route runtime.
+ * @param params - Promise resolving to the category `id` path parameter.
+ * @returns A promise resolving to an empty 204 response or a server error response.
+ */
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getCurrentUser()

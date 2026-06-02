@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { GET, POST } from '@/app/api/heap/edges/route'
-import { DELETE } from '@/app/api/heap/edges/[id]/route'
+import { DELETE, PATCH } from '@/app/api/heap/edges/[id]/route'
 
 const { getCurrentUser, getDb } = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
@@ -11,7 +11,7 @@ vi.mock('@/lib/auth', () => ({ getCurrentUser }))
 vi.mock('@/lib/db/client', () => ({ getDb }))
 
 function mockEdge(overrides = {}) {
-  return { id: 'e-1', userId: 'u1', sourceId: 'n-1', targetId: 'n-2', label: null, createdAt: new Date(), ...overrides }
+  return { id: 'e-1', userId: 'u1', sourceId: 'n-1', targetId: 'n-2', label: null, priority: 'normal', createdAt: new Date(), ...overrides }
 }
 
 function mockNode(id: string) {
@@ -38,7 +38,7 @@ describe('GET /api/heap/edges', () => {
     const res = await GET()
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body[0]).toMatchObject({ id: 'e-1', source: 'n-1', target: 'n-2' })
+    expect(body[0]).toMatchObject({ id: 'e-1', source: 'n-1', target: 'n-2', priority: 'normal' })
     expect(body[0].sourceId).toBeUndefined()
   })
 })
@@ -90,6 +90,59 @@ describe('POST /api/heap/edges', () => {
     expect(res.status).toBe(201)
     const body = await res.json()
     expect(body).toMatchObject({ source: 'n-1', target: 'n-2' })
+  })
+})
+
+describe('PATCH /api/heap/edges/[id]', () => {
+  beforeEach(() => { vi.clearAllMocks(); getCurrentUser.mockResolvedValue({ id: 'u1' }) })
+
+  it('returns 400 for invalid priority value', async () => {
+    getDb.mockReturnValue(mockDb([mockEdge()]))
+    const res = await PATCH(
+      new Request('http://localhost/api/heap/edges/e-1', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priority: 'critical' }),
+      }),
+      { params: Promise.resolve({ id: 'e-1' }) }
+    )
+    expect(res.status).toBe(400)
+  })
+
+  it('returns 404 when edge not owned by user', async () => {
+    getDb.mockReturnValue(mockDb([]))
+    const res = await PATCH(
+      new Request('http://localhost/api/heap/edges/e-1', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priority: 'high' }),
+      }),
+      { params: Promise.resolve({ id: 'e-1' }) }
+    )
+    expect(res.status).toBe(404)
+  })
+
+  it('updates priority to high and returns updated edge', async () => {
+    const updated = mockEdge({ priority: 'high' })
+    let whereCallCount = 0
+    const db: Record<string, unknown> = {}
+    db.select = vi.fn(() => db)
+    db.from = vi.fn(() => db)
+    db.update = vi.fn(() => db)
+    db.set = vi.fn(() => db)
+    db.delete = vi.fn(() => db)
+    db.returning = vi.fn(() => Promise.resolve([updated]))
+    // First where() is the SELECT ownership check (return Promise); second is the UPDATE chain (return db for .returning())
+    db.where = vi.fn(() => { whereCallCount++; return whereCallCount === 1 ? Promise.resolve([mockEdge()]) : db })
+    getDb.mockReturnValue(db)
+    const res = await PATCH(
+      new Request('http://localhost/api/heap/edges/e-1', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priority: 'high' }),
+      }),
+      { params: Promise.resolve({ id: 'e-1' }) }
+    )
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toMatchObject({ id: 'e-1', priority: 'high', source: 'n-1', target: 'n-2' })
   })
 })
 

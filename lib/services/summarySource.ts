@@ -14,6 +14,11 @@ export interface SummarySource {
   hasEnoughDetail: boolean
 }
 
+/**
+ * Prepares a trigger's original content and review context for summarization.
+ * @param trigger - Trigger fields containing title, content, and optional agent metadata.
+ * @returns Content, normalized context, total character count, and sufficiency flag.
+ */
 export function buildSummarySource(trigger: TriggerSummaryInput): SummarySource {
   const meta = trigger.agentMetadata ?? {}
   const content = trigger.fullContent.trim() || trigger.title.trim()

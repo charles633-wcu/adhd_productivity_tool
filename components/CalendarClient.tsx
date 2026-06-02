@@ -4,7 +4,7 @@
  */
 'use client'
 
-import React, { useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react'
+import React, { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react'
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion'
 import { ChevronLeft, ChevronRight, FolderOpen, Link2, Maximize2, Minimize2, Plus } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
@@ -143,6 +143,18 @@ export function CalendarClient({
   const [dragStartX, setDragStartX] = useState<number | null>(null)
   const [isExpanded, setIsExpanded] = useState(false)
   const wheelState = useRef({ amount: 0, direction: 0, lastFlipAt: 0, streak: 0 })
+  const isInitialMount = useRef(true)
+
+  // Re-fetch the event window whenever the user navigates to a new month.
+  // Skip the very first render — the server already supplied initialEvents.
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      return
+    }
+    void loadMonth(currentMonth)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMonth])
 
   const todayKey = toLocalDateKey(today)
 
@@ -305,7 +317,7 @@ export function CalendarClient({
         className={[
           'rounded-2xl border border-border bg-card shadow-sm',
           isCenter
-            ? `relative shrink-0 w-full p-3 sm:p-4 ${isExpanded ? 'h-[min(42rem,calc(100vh-14rem))] max-w-6xl pb-8' : 'max-w-xl'}`
+            ? `relative shrink-0 w-full p-3 sm:p-4 ${isExpanded ? (selectedDay ? 'h-full max-w-6xl pb-8' : 'h-[min(42rem,calc(100vh-14rem))] max-w-6xl pb-8') : 'max-w-xl'}`
             : isExpanded
               ? 'w-0 overflow-hidden p-0'
               : 'hidden w-[18rem] shrink-0 flex-col p-3 opacity-70 cursor-pointer hover:bg-muted/50 hover:opacity-90 md:flex',
@@ -522,7 +534,74 @@ export function CalendarClient({
       </div>
 
       <div className="flex-1 overflow-hidden px-3 py-2">
-        <div data-testid="calendar-stack" className="mx-auto flex h-full max-w-7xl flex-col items-center gap-1">
+        <div data-testid="calendar-stack" className={`mx-auto flex max-w-7xl ${isExpanded && selectedDay ? 'h-full flex-row items-start gap-3' : 'flex-col items-center gap-1'}`}>
+          {/* Left panel — visible only in expanded view when a day is selected */}
+          {isExpanded && selectedDay && selectedDate && (
+            <motion.section
+              data-testid="selected-day-panel"
+              initial={{ opacity: 0, x: -16 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.2 }}
+              className="flex h-full w-72 shrink-0 flex-col overflow-y-auto rounded-2xl border border-border bg-card p-3 shadow-sm"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-mono uppercase tracking-widest text-muted-foreground">Selected day</p>
+                  <h2 className="text-sm font-semibold">{dateLabel(selectedDate)}</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleAddEventClick(selectedDay)}
+                  className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+                >
+                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                  Add event
+                </button>
+              </div>
+
+              <div className="mt-3 flex flex-col gap-2">
+                {selectedCalEvents.map(ev => (
+                  <button
+                    key={ev.occurrenceId}
+                    type="button"
+                    onClick={() => setEditingEvent({
+                      occurrenceId: ev.occurrenceId,
+                      sourceEventId: ev.sourceEventId,
+                      title: ev.title,
+                      startAt: ev.startAtDate,
+                      endAt: ev.endAtDate,
+                      notes: ev.notes ?? null,
+                      color: ev.color ?? null,
+                      categoryId: ev.categoryId ?? null,
+                      rrule: ev.rrule ?? null,
+                      isOverride: ev.isOverride ?? false,
+                      originalDate: ev.originalDate ?? null,
+                    })}
+                    aria-label={ev.title}
+                    className="flex items-center gap-2 rounded-lg border border-border/70 bg-background px-3 py-2 text-left text-xs transition-colors hover:bg-muted/50"
+                  >
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: ev.resolvedColor }} />
+                    <span className="min-w-0 flex-1 truncate font-medium">{ev.title}</span>
+                    <span className="shrink-0 font-mono text-muted-foreground">{timeLabel(ev.startAtDate)}</span>
+                    <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/50" aria-hidden="true" />
+                  </button>
+                ))}
+                {selectedIcsDockItems.map(item => (
+                  <div key={item.id} className="flex items-center gap-2 rounded-lg border border-border/70 bg-background px-3 py-2 text-xs">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+                    <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
+                    <span className="shrink-0 font-mono text-muted-foreground">{timeLabel(item.startAt)}</span>
+                  </div>
+                ))}
+                {selectedCalEvents.length === 0 && selectedIcsDockItems.length === 0 && (
+                  <p className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+                    No events scheduled.
+                  </p>
+                )}
+              </div>
+            </motion.section>
+          )}
+
           <LayoutGroup id="calendar">
           <div
             data-testid="month-carousel"
@@ -532,7 +611,7 @@ export function CalendarClient({
             onPointerCancel={() => setDragStartX(null)}
             onKeyDown={handleCarouselKeyDown}
             tabIndex={isExpanded ? 0 : -1}
-            className={`flex min-h-0 w-full ${isExpanded ? 'max-w-6xl gap-0' : 'gap-4'} shrink-0 cursor-grab touch-pan-y select-none items-start justify-center overflow-visible pt-1 active:cursor-grabbing`}
+            className={`flex min-h-0 ${isExpanded && selectedDay ? 'flex-1 min-w-0 h-full' : 'w-full'} ${isExpanded ? 'max-w-6xl gap-0' : 'gap-4'} shrink-0 cursor-grab touch-pan-y select-none items-start justify-center overflow-visible pt-1 active:cursor-grabbing`}
           >
             <AnimatePresence mode="popLayout" initial={false}>
               {carouselMonths.map((month, idx) =>
@@ -556,7 +635,7 @@ export function CalendarClient({
             </div>
           )}
 
-          {selectedDay && selectedDate && (
+          {!isExpanded && selectedDay && selectedDate && (
             <motion.section
               data-testid="selected-day-dock"
               initial={{ opacity: 0, y: 12 }}

@@ -11,6 +11,12 @@ type TriggerActionSnapshot = {
   [key: string]: unknown
 }
 
+/**
+ * Appends one development-only trigger mutation record to the local audit log.
+ * @param action - Short operation name recorded in the log line.
+ * @param trigger - Snapshot whose ID, title, and state will be serialized.
+ * @returns A promise resolving after append, or immediately outside development.
+ */
 export async function logTriggerAction(action: string, trigger: TriggerActionSnapshot): Promise<void> {
   if (process.env.NODE_ENV !== 'development') return
 

@@ -11,9 +11,22 @@ import { CHAT_TOOL_DESCS } from './chatToolDefs'
 
 export interface ChatTool {
   definition: ToolDefinition
+  /**
+   * Executes the tool for the authenticated user's data.
+   * @param args - JSON-compatible model arguments validated by the tool's schema contract.
+   * @param userId - Authenticated owner identifier used to restrict queries.
+   * @param db - Database client used for tool queries.
+   * @returns A promise resolving to JSON-serializable tool output.
+   */
   handler(args: Record<string, unknown>, userId: string, db: DrizzleDb): Promise<unknown>
 }
 
+/**
+ * Tool registry exposed to the chat orchestration route.
+ *
+ * Each handler accepts schema-shaped arguments, an authenticated user ID, and a database
+ * client, then returns JSON-serializable results suitable for a tool response.
+ */
 export const CHAT_TOOLS: ChatTool[] = [
   // ── search_triggers ──────────────────────────────────────────────────────────
   {

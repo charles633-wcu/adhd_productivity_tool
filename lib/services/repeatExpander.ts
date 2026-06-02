@@ -16,10 +16,23 @@ interface ExpandableEvent {
   exdates: string[] | null
 }
 
+/**
+ * Normalizes an occurrence timestamp to whole-second ISO format.
+ * @param date - Timestamp to normalize.
+ * @returns An ISO string with milliseconds truncated to zero.
+ */
 export function toNormalizedIso(date: Date): string {
   return new Date(Math.floor(date.getTime() / 1000) * 1000).toISOString()
 }
 
+/**
+ * Expands base calendar events and stored overrides into occurrences in a time range.
+ * @param events - Base one-time or recurring event records to project.
+ * @param overridesByMasterId - Overrides grouped by their master event identifier.
+ * @param rangeStart - Inclusive lower occurrence overlap boundary.
+ * @param rangeEnd - Inclusive upper occurrence overlap boundary.
+ * @returns Occurrences overlapping the range, sorted chronologically.
+ */
 export function expandEvents(
   events: ExpandableEvent[],
   overridesByMasterId: Map<string, CalendarEventOverride[]>,

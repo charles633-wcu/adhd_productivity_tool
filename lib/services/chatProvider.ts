@@ -32,11 +32,21 @@ export type ChatProviderResponse =
   | { type: 'tool_calls'; toolCalls: ToolCall[]; text: string | null }
 
 export interface ChatProvider {
+  /**
+   * Sends a conversation and callable tool schemas to the configured chat model.
+   * @param messages - Ordered conversation transcript, including any tool-result turns.
+   * @param tools - Tool definitions available for this model turn.
+   * @returns A promise resolving to assistant text or requested tool invocations.
+   */
   chat(messages: ChatMessage[], tools: ToolDefinition[]): Promise<ChatProviderResponse>
 }
 
 // ── OpenAI implementation ─────────────────────────────────────────────────────
 
+/**
+ * Constructs the OpenAI-backed implementation of the chat provider contract.
+ * @returns A provider whose `chat` method calls the configured OpenAI chat model.
+ */
 function makeOpenAiProvider(): ChatProvider {
   return {
     async chat(messages, tools) {

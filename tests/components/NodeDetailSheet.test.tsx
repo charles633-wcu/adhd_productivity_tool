@@ -53,7 +53,7 @@ describe('NodeDetailSheet', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('shows linked todos and create-and-link input', async () => {
+  it('shows linked todos without task mutation controls', async () => {
     const linkedTodo = { id: 't-1', userId: 'u1', title: 'Linked task', completed: 0 }
     ;(global.fetch as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({ ok: true, json: async () => mockNode })
@@ -61,22 +61,8 @@ describe('NodeDetailSheet', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => [] })  // triggers
     render(<NodeDetailSheet nodeId="n-1" onClose={vi.fn()} onDeleted={vi.fn()} onUpdated={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('Linked task')).toBeTruthy())
-    expect(screen.getByPlaceholderText(/create and link/i)).toBeTruthy()
-  })
-
-  it('create-and-link fires POST /api/todos then POST /api/heap/nodes/[id]/todos', async () => {
-    ;(global.fetch as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce({ ok: true, json: async () => mockNode })
-      .mockResolvedValueOnce({ ok: true, json: async () => [] })  // todos
-      .mockResolvedValueOnce({ ok: true, json: async () => [] })  // triggers
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 't-new', title: 'New task' }) })  // POST /api/todos
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ nodeId: 'n-1', todoId: 't-new' }) })  // POST /api/heap/nodes/[id]/todos
-    render(<NodeDetailSheet nodeId="n-1" onClose={vi.fn()} onDeleted={vi.fn()} onUpdated={vi.fn()} />)
-    await waitFor(() => screen.getByDisplayValue('My node'))
-    const input = screen.getByPlaceholderText(/create and link/i)
-    fireEvent.change(input, { target: { value: 'New task' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
-    await waitFor(() => expect(screen.getByText('New task')).toBeTruthy())
+    expect(screen.queryByPlaceholderText(/create and link/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: /unlink task/i })).toBeNull()
   })
 
   it('does not update node type locally when PATCH fails', async () => {
@@ -97,25 +83,6 @@ describe('NodeDetailSheet', () => {
     expect(screen.getByRole('button', { name: 'Dump' }).className).toContain('border-primary')
   })
 
-  it('does not show a created todo when linking it to the node fails', async () => {
-    ;(global.fetch as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce({ ok: true, json: async () => mockNode })
-      .mockResolvedValueOnce({ ok: true, json: async () => [] })  // todos
-      .mockResolvedValueOnce({ ok: true, json: async () => [] })  // triggers
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 't-new', title: 'Unlinked task' }) })  // POST /api/todos
-      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'failed' }) })  // POST /api/heap/nodes/[id]/todos
-    render(<NodeDetailSheet nodeId="n-1" onClose={vi.fn()} onDeleted={vi.fn()} onUpdated={vi.fn()} />)
-    await waitFor(() => screen.getByDisplayValue('My node'))
-    const input = screen.getByPlaceholderText(/create and link/i)
-    fireEvent.change(input, { target: { value: 'Unlinked task' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
-    await waitFor(() => {
-      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
-      expect(calls.filter((c: unknown[]) => (c[1] as RequestInit)?.method === 'POST')).toHaveLength(2)
-    })
-    expect(screen.queryByText('Unlinked task')).toBeNull()
-    expect((input as HTMLInputElement).value).toBe('Unlinked task')
-  })
 })
 
 const mockLinkedTrigger = {

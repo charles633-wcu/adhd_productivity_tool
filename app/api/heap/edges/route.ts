@@ -11,7 +11,7 @@ const CreateEdgeSchema = z.object({
   targetId: z.string().min(1),
 })
 
-function toReactFlowEdge(edge: { id: string; userId: string; sourceId: string; targetId: string; label: string | null; createdAt: Date }) {
+function toReactFlowEdge(edge: { id: string; userId: string; sourceId: string; targetId: string; label: string | null; priority: string; createdAt: Date }) {
   const { sourceId, targetId, userId: _userId, ...rest } = edge
   return { ...rest, source: sourceId, target: targetId }
 }

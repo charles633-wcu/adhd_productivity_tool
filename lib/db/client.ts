@@ -5,6 +5,11 @@ import * as schema from './schema'
 // Singleton DB connection — reused across all API route invocations in the same process
 let _db: ReturnType<typeof drizzle> | null = null
 
+/**
+ * Opens or reuses the application SQLite/Drizzle connection.
+ *
+ * @returns The singleton Drizzle database client configured with the application schema.
+ */
 export function getDb() {
   if (!_db) {
     const sqlite = new Database('./sentinel.db')

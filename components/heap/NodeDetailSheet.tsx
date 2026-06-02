@@ -46,7 +46,6 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [linkedTodos, setLinkedTodos] = useState<{ id: string; title: string }[]>([])
-  const [newTodoInput, setNewTodoInput] = useState('')
   const [deleteConfirm, setConfirm] = useState(false)
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pickerBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -178,36 +177,6 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
     }
     setNode((current) => current ? { ...current, priority } : current)
     onUpdated(currentNodeId, { priority })
-  }
-
-  async function handleCreateAndLink() {
-    if (!newTodoInput.trim()) return
-    const res = await fetch('/api/todos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: newTodoInput.trim() }),
-    })
-    if (!res.ok) {
-      toast.error('Failed to create todo')
-      return
-    }
-    const newTodo = await res.json()
-    const linkRes = await fetch(`/api/heap/nodes/${currentNodeId}/todos`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ todoId: newTodo.id }),
-    })
-    if (!linkRes.ok) {
-      toast.error('Failed to link todo')
-      return
-    }
-    setLinkedTodos((current) => [...current, { id: newTodo.id, title: newTodo.title }])
-    setNewTodoInput('')
-  }
-
-  async function handleDetachTodo(todoId: string) {
-    await fetch(`/api/heap/nodes/${currentNodeId}/todos/${todoId}`, { method: 'DELETE' })
-    setLinkedTodos((current) => current.filter((todo) => todo.id !== todoId))
   }
 
   // Unlink a trigger from this node
@@ -386,19 +355,10 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
         <div>
           <p className="text-xs text-muted-foreground uppercase tracking-widest mb-2">Linked tasks</p>
           {linkedTodos.map((todo) => (
-            <div key={todo.id} className="flex items-center justify-between py-1 gap-2">
+            <div key={todo.id} className="py-1">
               <span className="text-sm truncate">{todo.title}</span>
-              <button type="button" onClick={() => handleDetachTodo(todo.id)} className="text-muted-foreground hover:text-destructive flex-shrink-0 text-xs">x</button>
             </div>
           ))}
-          <input
-            value={newTodoInput}
-            onChange={(event) => setNewTodoInput(event.target.value)}
-            onKeyDown={(event) => { if (event.key === 'Enter') void handleCreateAndLink() }}
-            placeholder="Create and link task..."
-            className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/50 mt-1"
-            aria-label="Create and link task"
-          />
         </div>
 
         {/* Linked triggers section */}
@@ -464,14 +424,18 @@ export function NodeDetailSheet({ nodeId, onClose, onDeleted, onUpdated }: NodeD
       </div>
 
       <div className="px-4 py-3 border-t border-border">
-        <button
-          type="button"
-          onClick={handleDeleteClick}
-          className={cn('flex items-center gap-2 text-sm transition-colors w-full', deleteConfirm ? 'text-destructive font-medium' : 'text-muted-foreground hover:text-destructive')}
-        >
-          <Trash2 className="w-4 h-4" />
-          {deleteConfirm ? 'Tap again to delete' : 'Delete node'}
-        </button>
+        {node?.type === 'project' ? (
+          <p className="text-xs text-muted-foreground">To rename or delete this project, use the Projects overview.</p>
+        ) : (
+          <button
+            type="button"
+            onClick={handleDeleteClick}
+            className={cn('flex items-center gap-2 text-sm transition-colors w-full', deleteConfirm ? 'text-destructive font-medium' : 'text-muted-foreground hover:text-destructive')}
+          >
+            <Trash2 className="w-4 h-4" />
+            {deleteConfirm ? 'Tap again to delete' : 'Delete node'}
+          </button>
+        )}
       </div>
     </div>
   )

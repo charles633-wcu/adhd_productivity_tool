@@ -7,6 +7,8 @@ import { todoLists, type TodoList } from './schema'
  * Todo list persistence helpers.
  * Centralizes first-run Inbox creation so server components do not need to call
  * their own HTTP API through a localhost URL.
+ * @param userId - Owner identifier for lists to fetch or initialize.
+ * @returns A promise resolving to existing lists, or the newly created Inbox list.
  */
 export async function ensureTodoListsForUser(userId: string): Promise<TodoList[]> {
   const db = getDb()

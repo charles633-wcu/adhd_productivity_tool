@@ -10,6 +10,10 @@ import OpenAI from 'openai'
  * Compacts a notes array into a condensed history string using gpt-4o-mini.
  * Notes are serialized as "- [date]: [text]" lines (same format as summarizeTrigger context).
  * Caller writes result to agentMetadata.condensedHistory and clears notes.
+ * @param notes - Chronological timestamped note bodies to condense.
+ * @param existingHistory - Optional prior condensed history to fold into the result.
+ * @returns A promise resolving to trimmed condensed history text.
+ * @throws If the model request fails.
  */
 export async function compactNotes(
   notes: { date: string; text: string }[],

@@ -43,6 +43,12 @@ function parseIcsDate(value: string): Date {
     : new Date(y, mo, d, h, mi, s)
 }
 
+/**
+ * Fetches a remote ICS document and parses its complete VEVENT entries.
+ * @param url - HTTP(S) location of an ICS feed.
+ * @returns A promise resolving to parsed events that contain UID, title, start, and end.
+ * @throws If the remote response is not successful.
+ */
 export async function fetchAndParseIcs(url: string): Promise<IcsEvent[]> {
   const res = await fetch(url)
   if (!res.ok) throw new Error(`ICS fetch failed: ${res.status}`)
@@ -50,6 +56,11 @@ export async function fetchAndParseIcs(url: string): Promise<IcsEvent[]> {
   return parseIcsText(text)
 }
 
+/**
+ * Parses VEVENT entries from unfolded iCalendar source text.
+ * @param raw - Raw ICS document text, optionally containing folded lines.
+ * @returns Complete events; incomplete VEVENT records are omitted.
+ */
 export function parseIcsText(raw: string): IcsEvent[] {
   const lines  = unfold(raw).split(/\r?\n/)
   const events: IcsEvent[] = []

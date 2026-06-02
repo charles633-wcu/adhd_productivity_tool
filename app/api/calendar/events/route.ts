@@ -9,6 +9,11 @@ import { createCalendarEvent, listEventOverridesForIds, listEventsInRange } from
 import { expandEvents } from '@/lib/services/repeatExpander'
 import type { CalendarEventOverride } from '@/lib/db/schema'
 
+/**
+ * Tests whether a recurrence rule can be parsed and contains a frequency.
+ * @param value - RRULE text without event data.
+ * @returns `true` when the value is a usable recurrence rule.
+ */
 function isValidRRule(value: string) {
   try {
     return RRule.parseString(value).freq != null
@@ -31,6 +36,11 @@ const CreateSchema = z
   })
   .refine(d => new Date(d.endAt) >= new Date(d.startAt), { message: 'endAt must be >= startAt' })
 
+/**
+ * Lists expanded calendar occurrences in an authenticated user's requested range.
+ * @param request - Request with required ISO `from` and `to` query parameters.
+ * @returns A promise resolving to a JSON array of occurrences or an error response.
+ */
 export async function GET(request: Request) {
   try {
     const user = await getCurrentUser()
@@ -58,6 +68,11 @@ export async function GET(request: Request) {
   }
 }
 
+/**
+ * Creates one calendar event for the authenticated user.
+ * @param request - Request containing validated event JSON fields and optional RRULE metadata.
+ * @returns A promise resolving to the created base event response or an error response.
+ */
 export async function POST(request: Request) {
   try {
     const user = await getCurrentUser()

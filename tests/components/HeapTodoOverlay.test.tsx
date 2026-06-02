@@ -4,64 +4,79 @@ import { HeapTodoOverlay } from '@/components/heap/HeapTodoOverlay'
 
 global.fetch = vi.fn()
 
-const mockTodos = [
-  { id: 't-1', title: 'Fix bug', priority: 'high', dueDate: null, completed: 0, subtasks: [] },
+const linkedTodos = [
+  { id: 't-1', title: 'Fix bug', priority: 'high', dueDate: null, completed: 0 },
+]
+
+const allTodos = [
+  { id: 't-1', title: 'Fix bug', priority: 'high', dueDate: null, completed: 0 },
+  { id: 't-2', title: 'Write tests', priority: 'normal', dueDate: null, completed: 0 },
 ]
 
 describe('HeapTodoOverlay', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('renders minimized pill by default', () => {
-    render(<HeapTodoOverlay selectedNodeId={null} selectedNodeTitle={null} onClose={vi.fn()} />)
-    expect(screen.getByRole('button', { name: /tasks/i })).toBeTruthy()
+  it('renders minimized Tasks button by default', () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+    render(<HeapTodoOverlay projectNodeId="node-1" projectTitle="My Project" />)
+    expect(screen.getByRole('button', { name: /open project tasks/i })).toBeTruthy()
   })
 
-  it('expands to half-open on pill click', async () => {
+  it('shows badge count for incomplete todos', async () => {
     ;(global.fetch as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce({ ok: true, json: async () => mockTodos })
-    render(<HeapTodoOverlay selectedNodeId={null} selectedNodeTitle={null} onClose={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: /tasks/i }))
+      .mockResolvedValueOnce({ ok: true, json: async () => linkedTodos })
+    render(<HeapTodoOverlay projectNodeId="node-1" projectTitle="My Project" />)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /open project tasks/i }).textContent).toContain('(1)'),
+    )
+  })
+
+  it('opens the panel when Tasks button is clicked', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+    render(<HeapTodoOverlay projectNodeId="node-1" projectTitle="My Project" />)
+    fireEvent.click(screen.getByRole('button', { name: /open project tasks/i }))
+    await waitFor(() => expect(screen.getByText('My Project — Tasks')).toBeTruthy())
+  })
+
+  it('shows linked todos when panel is open', async () => {
+    ;(global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ ok: true, json: async () => linkedTodos })
+    render(<HeapTodoOverlay projectNodeId="node-1" projectTitle="My Project" />)
+    // Open the panel
+    fireEvent.click(screen.getByRole('button', { name: /open project tasks/i }))
     await waitFor(() => expect(screen.getByText('Fix bug')).toBeTruthy())
   })
 
-  it('shows node-filtered tasks and node title when selectedNodeId is set', async () => {
+  it('closes when X button is clicked', async () => {
     ;(global.fetch as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce({ ok: true, json: async () => mockTodos })
-    render(<HeapTodoOverlay selectedNodeId="n-1" selectedNodeTitle="Side project" onClose={vi.fn()} />)
-    await waitFor(() => expect(screen.getByText('Fix bug')).toBeTruthy())
-    expect(screen.getByText('Side project')).toBeTruthy()
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+    render(<HeapTodoOverlay projectNodeId="node-1" projectTitle="My Project" />)
+    fireEvent.click(screen.getByRole('button', { name: /open project tasks/i }))
+    await waitFor(() => screen.getByRole('button', { name: /close tasks/i }))
+    fireEvent.click(screen.getByRole('button', { name: /close tasks/i }))
+    expect(screen.queryByText('My Project — Tasks')).toBeNull()
   })
 
-  it('does not show a quick-added node task when node linking fails', async () => {
-    ;(global.fetch as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce({ ok: true, json: async () => [] })  // node todos
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 't-new', title: 'New task', completed: 0, subtasks: [] }) })  // POST /api/todos
-      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'failed' }) })  // node link
-    render(<HeapTodoOverlay selectedNodeId="n-1" selectedNodeTitle="Side project" onClose={vi.fn()} />)
-    await waitFor(() => expect(screen.getByText('Side project')).toBeTruthy())
-    const input = screen.getByPlaceholderText(/add task/i)
-    fireEvent.change(input, { target: { value: 'New task' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
-    await waitFor(() => {
-      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
-      expect(calls.filter((c: unknown[]) => (c[1] as RequestInit)?.method === 'POST')).toHaveLength(2)
-    })
-    expect(screen.queryByText('New task')).toBeNull()
-    expect((input as HTMLInputElement).value).toBe('New task')
-  })
+  it('shows import candidates excluding already-linked todos', async () => {
+    const fetchMock = global.fetch as ReturnType<typeof vi.fn>
+    // mount fetch: linked todos
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => linkedTodos })
+    render(<HeapTodoOverlay projectNodeId="node-1" projectTitle="My Project" />)
+    // Open panel
+    fireEvent.click(screen.getByRole('button', { name: /open project tasks/i }))
+    await waitFor(() => screen.getByRole('button', { name: /import from to-dos/i }))
 
-  it('keeps a todo visible when completing it fails', async () => {
-    ;(global.fetch as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce({ ok: true, json: async () => mockTodos })
-      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'failed' }) })  // PATCH
-    render(<HeapTodoOverlay selectedNodeId={null} selectedNodeTitle={null} onClose={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: /tasks/i }))
-    await waitFor(() => screen.getByText('Fix bug'))
-    fireEvent.click(screen.getByRole('checkbox'))
-    await waitFor(() => {
-      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
-      expect(calls.some((c: unknown[]) => (c[1] as RequestInit)?.method === 'PATCH')).toBe(true)
-    })
-    expect(screen.getByText('Fix bug')).toBeTruthy()
+    // Open import: all todos + linked todos
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, json: async () => allTodos })
+      .mockResolvedValueOnce({ ok: true, json: async () => linkedTodos })
+    fireEvent.click(screen.getByRole('button', { name: /import from to-dos/i }))
+    await waitFor(() => expect(screen.getByText('Write tests')).toBeTruthy())
+    // Already linked todo should not appear in import list
+    const addButtons = screen.getAllByRole('button')
+    const writeBugBtn = addButtons.find((b) => b.textContent?.includes('Fix bug'))
+    expect(writeBugBtn).toBeUndefined()
   })
 })

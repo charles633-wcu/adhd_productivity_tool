@@ -288,7 +288,9 @@ export function HeapNode({ data, selected }: NodeProps) {
   // Circle — resizable via NodeResizer drag handles (visible when selected)
   // Size is controlled by the ReactFlow node's style prop set in HeapCanvas.toFlowNode;
   // the component fills 100% of that container.
+  // Project root nodes get auto-scaling bold text (percentage font-size) + a glow border.
   if (shape === 'circle') {
+    const isProjectRoot = d.type === 'project'
     return (
       <div
         data-priority={d.priority ?? 'normal'}
@@ -309,25 +311,49 @@ export function HeapNode({ data, selected }: NodeProps) {
             overflow-hidden on the inner surface would clip them. */}
         <DynamicHandles handles={d.handles} />
         <div
-          style={{ borderColor }}
+          style={{
+            borderColor,
+            // Project root: multi-layer glow that pulses outward from the border color
+            ...(isProjectRoot ? {
+              boxShadow: `0 0 0 1px ${borderColor}55, 0 0 18px 4px ${borderColor}44, 0 0 40px 10px ${borderColor}22`,
+            } : {}),
+          }}
           className={cn(
-            'absolute inset-0 bg-card border-2 rounded-full overflow-hidden shadow-md transition-shadow',
+            'absolute inset-0 bg-card rounded-full overflow-hidden shadow-md transition-shadow',
+            isProjectRoot ? 'border-[3px]' : 'border-2',
             ring,
             !d.dimmed && priorityClass(d.priority),
           )}
         >
-          <div className="absolute inset-0 flex items-center justify-center p-2">
-            <span
-              data-testid="node-title"
-              style={titleTextStyle(d)}
-              className={cn(
-                'text-center break-words leading-tight text-foreground',
-                titleSizeClass(d.fontSize),
-                d.fontBold ? 'font-bold' : 'font-medium',
-              )}
-            >
-              {d.title}
-            </span>
+          <div className="absolute inset-0 flex items-center justify-center p-3">
+            {isProjectRoot ? (
+              // Auto-scaling bold text for the project root: font-size as % of container
+              // so resizing the circle grows/shrinks the title proportionally.
+              <span
+                data-testid="node-title"
+                style={{
+                  ...titleTextStyle(d),
+                  fontSize: '13%',
+                  fontWeight: 'bold',
+                  lineHeight: 1.15,
+                }}
+                className="text-center break-words text-foreground"
+              >
+                {d.title}
+              </span>
+            ) : (
+              <span
+                data-testid="node-title"
+                style={titleTextStyle(d)}
+                className={cn(
+                  'text-center break-words leading-tight text-foreground',
+                  titleSizeClass(d.fontSize),
+                  d.fontBold ? 'font-bold' : 'font-medium',
+                )}
+              >
+                {d.title}
+              </span>
+            )}
           </div>
         </div>
       </div>

@@ -21,6 +21,8 @@ export type NotificationTrigger = {
  * Dispatches a review notification for a trigger.
  * MVP: in-app only — logs to console, does nothing else.
  * Replace this body when wiring real notification channels.
+ * @param trigger - Trigger identification, summary state, review time, and delivery channel.
+ * @returns A promise resolving after dispatch handling completes.
  */
 export async function dispatchReviewNotification(trigger: NotificationTrigger): Promise<void> {
   // MVP no-op: log only — external channels not yet wired
