@@ -138,6 +138,26 @@ describe('ReviewQueueClient', () => {
     expect(t1Calls).toHaveLength(1)
   })
 
+  it('Select all selects every visible grid card', () => {
+    render(<ReviewQueueClient grouped={grouped} nodeMap={nodeMap} />)
+    fireEvent.click(screen.getByRole('button', { name: /^select all$/i }))
+    expect(screen.getByText('3 selected')).toBeTruthy()
+  })
+
+  it('Select all flips to Deselect all and clears the selection', () => {
+    render(<ReviewQueueClient grouped={grouped} nodeMap={nodeMap} />)
+    fireEvent.click(screen.getByRole('button', { name: /^select all$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^deselect all$/i }))
+    expect(screen.queryByText(/selected/)).toBeNull()
+  })
+
+  it('Select all only selects cards in the active category filter', () => {
+    render(<ReviewQueueClient grouped={grouped} nodeMap={nodeMap} />)
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'cat-1' } })
+    fireEvent.click(screen.getByRole('button', { name: /^select all$/i }))
+    expect(screen.getByText('2 selected')).toBeTruthy()
+  })
+
   it('clear button resets selection and hides bulk bar', () => {
     render(<ReviewQueueClient grouped={grouped} nodeMap={nodeMap} />)
     fireEvent.click(screen.getByText('select-t1'))

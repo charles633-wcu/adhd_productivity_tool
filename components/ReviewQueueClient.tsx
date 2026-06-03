@@ -15,6 +15,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { Check, PanelRightOpen } from 'lucide-react'
 import { TriggerCard } from '@/components/TriggerCard'
 import { TriggerGridCard } from '@/components/TriggerGridCard'
 import { TriggerEditSheet } from '@/components/TriggerEditSheet'
@@ -136,6 +137,21 @@ export function ReviewQueueClient({ grouped, nodeMap }: ReviewQueueClientProps) 
     })
   }
 
+  /** Select-all toggle for the grid — operates only on currently-visible (filtered) cards */
+  function toggleSelectAll() {
+    if (isRefreshing) return
+    setGridSelected(prev => {
+      if (allVisibleSelected) {
+        // Deselect: remove only the visible IDs, leaving any off-screen selections intact
+        const next = new Set(prev)
+        visibleIds.forEach(id => next.delete(id))
+        return next
+      }
+      // Select: union existing selection with all visible IDs
+      return new Set([...prev, ...visibleIds])
+    })
+  }
+
   // ── Computed values ────────────────────────────────────────────────────────
 
   const allTriggers = grouped.flatMap(g => g.triggers)
@@ -144,6 +160,9 @@ export function ReviewQueueClient({ grouped, nodeMap }: ReviewQueueClientProps) 
     ? grouped
     : grouped.filter(g => g.category.id === categoryFilter)
   const bulkCount = new Set([...gridSelected, ...drawerSelected]).size
+  // IDs currently shown in the grid (after the category filter) — drives Select all
+  const visibleIds = filteredGrouped.flatMap(g => g.triggers.map(t => t.id))
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => gridSelected.has(id))
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -157,17 +176,45 @@ export function ReviewQueueClient({ grouped, nodeMap }: ReviewQueueClientProps) 
         onSuccess={() => { setEditingTriggerId(null); doRefresh() }}
       />
 
-      {/* Sticky header: title, item count, category filter */}
-      <div className="sticky top-[60px] z-10 border-b border-border bg-background/80 backdrop-blur-sm">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
-          <h1 className="text-lg font-bold leading-none">Review Queue</h1>
-          <span className="text-xs font-mono text-muted-foreground">
-            {allTriggers.length} {allTriggers.length === 1 ? 'item' : 'items'}
-          </span>
+      {/* Header — title, item count, and the Select all + filter toolbar.
+          Contained to the content column so it reads as a header, not a
+          full-width bar. Lives above the scroll region so it never moves. */}
+      <div className="max-w-5xl mx-auto w-full px-4 pt-5 pb-3 flex items-center gap-3">
+        <h1 className="text-lg font-bold leading-none">Review Queue</h1>
+        <span className="text-xs font-mono text-muted-foreground">
+          {allTriggers.length} {allTriggers.length === 1 ? 'item' : 'items'}
+        </span>
+
+        {/* Right-aligned toolbar: Select all toggle + category filter */}
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            aria-label={allVisibleSelected ? 'Deselect all' : 'Select all'}
+            onClick={toggleSelectAll}
+            disabled={isRefreshing || visibleIds.length === 0}
+            className={[
+              'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-mono ring-1 transition-colors disabled:opacity-40',
+              allVisibleSelected
+                ? 'bg-indigo-500/15 text-indigo-300 ring-indigo-500/40 hover:bg-indigo-500/25'
+                : 'text-muted-foreground ring-border hover:text-foreground hover:bg-muted',
+            ].join(' ')}
+          >
+            {/* Mirror the card checkbox so the affordance reads as the same control */}
+            <span
+              className={[
+                'flex h-3.5 w-3.5 items-center justify-center rounded-full border transition-colors',
+                allVisibleSelected ? 'border-indigo-400 bg-indigo-500 text-white' : 'border-muted-foreground/40 text-transparent',
+              ].join(' ')}
+            >
+              <Check className="h-2.5 w-2.5" strokeWidth={3} />
+            </span>
+            {allVisibleSelected ? 'Deselect all' : 'Select all'}
+          </button>
+
           <select
             value={categoryFilter}
             onChange={e => setCategoryFilter(e.target.value)}
-            className="ml-auto bg-background border border-border rounded px-2 py-1 text-xs text-muted-foreground font-mono"
+            className="bg-background border border-border rounded px-2 py-1 text-xs text-muted-foreground font-mono"
             aria-label="Filter by category"
           >
             <option value="all">All Categories</option>
@@ -178,15 +225,14 @@ export function ReviewQueueClient({ grouped, nodeMap }: ReviewQueueClientProps) 
         </div>
       </div>
 
-      {/* Empty state */}
-      {grouped.length === 0 && (
-        <p className="text-sm text-muted-foreground py-12 text-center">Nothing due for review right now.</p>
-      )}
-
-      {/* 3-column responsive grid — filtered by category filter */}
-      {grouped.length > 0 && (
-        <main className="max-w-5xl mx-auto w-full px-4 py-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Scrollable content region — the cards scroll inside here so the header
+          above stays fixed and never overlaps or blocks anything. */}
+      <main className="flex-1 min-h-0 overflow-y-auto">
+        <div className="max-w-5xl mx-auto w-full px-4 pb-6">
+          {grouped.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-12 text-center">Nothing due for review right now.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredGrouped.flatMap(({ category, triggers }) =>
               triggers.map(trigger => (
                 <TriggerGridCard
@@ -211,20 +257,20 @@ export function ReviewQueueClient({ grouped, nodeMap }: ReviewQueueClientProps) 
                 />
               ))
             )}
-          </div>
-        </main>
-      )}
+            </div>
+          )}
+        </div>
+      </main>
 
-      {/* Hamburger tab — fixed to center-right edge, opens drawer */}
+      {/* Drawer tab — pulled in from the edge and accented so it's clearly a button */}
       <button
         type="button"
         aria-label="Open list"
         onClick={() => setDrawerOpen(true)}
-        className="fixed right-0 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-1 items-center justify-center bg-background/90 border border-border border-r-0 rounded-l-lg px-2.5 py-4 hover:bg-muted transition-colors"
+        className="fixed right-4 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center gap-1 rounded-xl bg-indigo-500/15 text-indigo-200 ring-1 ring-indigo-500/40 px-3 py-3.5 shadow-lg shadow-indigo-500/20 backdrop-blur-sm hover:bg-indigo-500/25 hover:ring-indigo-400/60 hover:text-indigo-100 transition-colors"
       >
-        <span className="block w-4 h-0.5 bg-muted-foreground rounded" />
-        <span className="block w-4 h-0.5 bg-muted-foreground rounded" />
-        <span className="block w-4 h-0.5 bg-muted-foreground rounded" />
+        <PanelRightOpen className="h-5 w-5" />
+        <span className="text-[10px] font-mono font-semibold tracking-wide">List</span>
       </button>
 
       {/* Backdrop — clicking it closes the drawer */}

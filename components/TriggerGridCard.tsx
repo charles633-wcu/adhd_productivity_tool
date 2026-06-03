@@ -8,7 +8,7 @@
  */
 
 import { useState } from 'react'
-import { CheckCircle, Pencil } from 'lucide-react'
+import { Check, CheckCircle, Pencil } from 'lucide-react'
 import { TriggerMemorySheet } from '@/components/TriggerMemorySheet'
 import type { Trigger } from '@/lib/db/schema'
 
@@ -73,33 +73,53 @@ export function TriggerGridCard({
     <div
       data-testid="trigger-grid-card"
       className={[
-        'rounded-lg border-l-2 border transition-all overflow-hidden',
+        'relative group rounded-lg border-l-2 border transition-all overflow-hidden',
         config.borderClass,
-        // Selection ring overrides default border when selected
-        selected ? 'border-indigo-500 bg-indigo-500/5' : 'border-border bg-card hover:bg-card/80',
+        // Selection ring overrides default border when selected; hover lifts the card
+        // with an indigo ring + soft outer glow (no layout shift).
+        selected
+          ? 'border-indigo-500 bg-indigo-500/5 shadow-[0_0_0_1px_rgba(99,102,241,0.35)]'
+          : 'border-border bg-card hover:bg-card/80 hover:-translate-y-0.5 hover:ring-1 hover:ring-indigo-400/40 hover:shadow-[0_0_22px_-6px_rgba(99,102,241,0.55)]',
         // Animate-out: fade + scale down; pointer-events off to prevent race clicks
         isAnimatingOut ? 'opacity-0 scale-95 pointer-events-none duration-[250ms]' : '',
       ]
         .filter(Boolean)
         .join(' ')}
     >
-      {/* Selectable body — clicking anywhere here calls onSelect; disabled while animating out */}
+      {/* Corner select checkbox — a recessed "hole" that fills with an indigo glow
+          when checked, like selecting an email. Stops propagation so it toggles once. */}
+      <button
+        type="button"
+        aria-label="Select"
+        aria-pressed={selected}
+        disabled={isAnimatingOut}
+        onClick={e => {
+          e.stopPropagation()
+          onSelect()
+        }}
+        className={[
+          'absolute top-2.5 right-2.5 z-10 flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all',
+          selected
+            ? 'border-indigo-400 bg-indigo-500 text-white shadow-[0_0_10px_rgba(99,102,241,0.7)]'
+            : 'border-muted-foreground/30 bg-background/50 text-transparent shadow-[inset_0_1px_3px_rgba(0,0,0,0.55)] group-hover:border-indigo-400/70 hover:!border-indigo-400 hover:bg-indigo-500/10',
+        ].join(' ')}
+      >
+        <Check className="h-3 w-3" strokeWidth={3} />
+      </button>
+
+      {/* Selectable body — clicking anywhere here calls onSelect; disabled while animating out.
+          Right padding leaves room for the corner checkbox. */}
       <div
-        className="px-3 py-3 cursor-pointer space-y-2"
+        className="px-3 py-3 pr-9 cursor-pointer space-y-2"
         onClick={isAnimatingOut ? undefined : onSelect}
       >
-        {/* Priority badge row with optional selected checkmark */}
+        {/* Priority badge row */}
         <div className="flex items-start gap-2">
           <span
             className={`shrink-0 mt-0.5 rounded px-1.5 py-0.5 text-[10px] font-mono font-bold ${config.badgeClass}`}
           >
             {config.label}
           </span>
-          {selected && (
-            <span className="ml-auto shrink-0 w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center text-[9px] text-white font-bold">
-              ✓
-            </span>
-          )}
         </div>
 
         {/* Main text: AI summary or title */}

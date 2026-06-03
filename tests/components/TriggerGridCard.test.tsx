@@ -143,6 +143,23 @@ describe('TriggerGridCard', () => {
     expect(screen.getByText('Memory sheet open')).toBeTruthy()
   })
 
+  it('calls onSelect when the corner checkbox is clicked', () => {
+    const onSelect = vi.fn()
+    render(<TriggerGridCard {...defaultProps({ onSelect })} />)
+    fireEvent.click(screen.getByRole('button', { name: /^select$/i }))
+    expect(onSelect).toHaveBeenCalledTimes(1)
+  })
+
+  it('marks the corner checkbox pressed when selected=true', () => {
+    render(<TriggerGridCard {...defaultProps({ selected: true })} />)
+    expect(screen.getByRole('button', { name: /^select$/i }).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('disables the corner checkbox when isAnimatingOut=true', () => {
+    render(<TriggerGridCard {...defaultProps({ isAnimatingOut: true })} />)
+    expect(screen.getByRole('button', { name: /^select$/i })).toBeDisabled()
+  })
+
   it('renders Mind badges when linkedNodes is non-empty', () => {
     render(
       <TriggerGridCard
