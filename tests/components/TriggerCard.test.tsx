@@ -211,4 +211,120 @@ describe('TriggerCard', () => {
     )
     expect(screen.queryByText(/Mind:/)).toBeNull()
   })
+
+  it('applies indigo border when selected=true', () => {
+    render(
+      <TriggerCard
+        trigger={makeTrigger()}
+        categoryName="Work"
+        onSuccess={mockSuccess}
+        onEdit={mockEdit}
+        onDelete={vi.fn()}
+        selected={true}
+        onSelect={vi.fn()}
+      />
+    )
+    // The outer card div should have border-indigo-500
+    const card = screen.getByTestId('trigger-card')
+    expect(card.className).toContain('border-indigo-500')
+  })
+
+  it('does not apply indigo border when selected is omitted', () => {
+    render(
+      <TriggerCard
+        trigger={makeTrigger()}
+        categoryName="Work"
+        onSuccess={mockSuccess}
+        onEdit={mockEdit}
+        onDelete={vi.fn()}
+      />
+    )
+    const card = screen.getByTestId('trigger-card')
+    expect(card.className).not.toContain('border-indigo-500')
+  })
+
+  it('calls onSelect when card content area is clicked', () => {
+    const onSelect = vi.fn()
+    render(
+      <TriggerCard
+        trigger={makeTrigger()}
+        categoryName="Work"
+        onSuccess={mockSuccess}
+        onEdit={mockEdit}
+        onDelete={vi.fn()}
+        onSelect={onSelect}
+      />
+    )
+    fireEvent.click(screen.getByText('Raw title text'))
+    expect(onSelect).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not call onSelect when an action button is clicked', async () => {
+    vi.useRealTimers()
+    const onSelect = vi.fn()
+    render(
+      <TriggerCard
+        trigger={makeTrigger()}
+        categoryName="Work"
+        onSuccess={mockSuccess}
+        onEdit={mockEdit}
+        onDelete={vi.fn()}
+        onSelect={onSelect}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^acknowledge$/i }))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled())
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('applies animate-out class when isAnimatingOut=true', () => {
+    render(
+      <TriggerCard
+        trigger={makeTrigger()}
+        categoryName="Work"
+        onSuccess={mockSuccess}
+        onEdit={mockEdit}
+        onDelete={vi.fn()}
+        isAnimatingOut={true}
+      />
+    )
+    const card = screen.getByTestId('trigger-card')
+    expect(card.className).toContain('opacity-0')
+  })
+
+  it('does not call onSelect when isAnimatingOut=true', () => {
+    const onSelect = vi.fn()
+    render(
+      <TriggerCard
+        trigger={makeTrigger()}
+        categoryName="Work"
+        onSuccess={mockSuccess}
+        onEdit={mockEdit}
+        onDelete={vi.fn()}
+        onSelect={onSelect}
+        isAnimatingOut={true}
+      />
+    )
+    fireEvent.click(screen.getByText('Raw title text'))
+    expect(onSelect).not.toHaveBeenCalled()
+  })
+
+  it('calls onAnimatingOut instead of onSuccess after successful acknowledge', async () => {
+    vi.useRealTimers()
+    const onAnimatingOut = vi.fn()
+    render(
+      <TriggerCard
+        trigger={makeTrigger()}
+        categoryName="Work"
+        onSuccess={mockSuccess}
+        onEdit={mockEdit}
+        onDelete={vi.fn()}
+        onAnimatingOut={onAnimatingOut}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^acknowledge$/i }))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    expect(onAnimatingOut).toHaveBeenCalledTimes(1)
+    expect(mockSuccess).not.toHaveBeenCalled()
+  })
 })

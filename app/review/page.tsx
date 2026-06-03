@@ -54,21 +54,11 @@ export default async function ReviewPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col pt-[60px]">
+    // h-screen + overflow-hidden bounds the column so the client's grid region
+    // is the only thing that scrolls; the header stays pinned beneath AppHeader.
+    <div className="h-screen flex flex-col pt-[60px] overflow-hidden">
       <AppHeader active="triggers" />
-
-      <div className="border-b border-border bg-background/55">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
-          <h1 className="text-lg font-bold leading-none">Review Queue</h1>
-          <span className="ml-auto text-xs font-mono text-muted-foreground">
-            {dueTriggers.length} {dueTriggers.length === 1 ? 'item' : 'items'}
-          </span>
-        </div>
-      </div>
-
-      <main className="max-w-2xl mx-auto w-full px-4 py-6">
-        <ReviewQueueClient grouped={grouped} nodeMap={nodeMap} />
-      </main>
+      <ReviewQueueClient grouped={grouped} nodeMap={nodeMap} />
     </div>
   )
 }
