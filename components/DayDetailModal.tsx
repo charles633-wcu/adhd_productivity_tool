@@ -45,6 +45,12 @@ function formatHeading(d: Date) {
   return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
 }
 
+function addOneMinute(time: string): string {
+  const [h, m] = time.split(':').map(Number)
+  const next = h * 60 + m + 1
+  return `${String(Math.floor(next / 60) % 24).padStart(2, '0')}:${String(next % 60).padStart(2, '0')}`
+}
+
 function isInteractiveTarget(target: EventTarget | null) {
   return target instanceof Element && target.closest('button, input, select, textarea, a, [role="button"]') !== null
 }
@@ -110,6 +116,10 @@ export function DayDetailModal({
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
+    if (endTime < startTime) {
+      setError('End time must be after start time')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -254,7 +264,16 @@ export function DayDetailModal({
               <div className="flex gap-2">
                 <div className="flex-1">
                   <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Start</label>
-                  <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm" />
+                  <input
+                    type="time"
+                    value={startTime}
+                    onChange={e => {
+                      const next = e.target.value
+                      setStartTime(next)
+                      if (endTime <= next) setEndTime(addOneMinute(next))
+                    }}
+                    className="w-full rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm"
+                  />
                 </div>
                 <div className="flex-1">
                   <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">End</label>

@@ -88,6 +88,7 @@ describe('EventDetailSheet', () => {
       isOverride: true,
       originalDate: '2026-04-15T09:00:00.000Z',
       startAt: new Date('2026-04-15T14:00:00.000Z'),
+      endAt: new Date('2026-04-15T14:30:00.000Z'),
     })} />)
 
     fireEvent.click(screen.getByRole('button', { name: /done/i }))

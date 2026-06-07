@@ -317,7 +317,7 @@ export function CalendarClient({
         className={[
           'rounded-2xl border border-border bg-card shadow-sm',
           isCenter
-            ? `relative shrink-0 w-full p-3 sm:p-4 ${isExpanded ? (selectedDay ? 'h-full max-w-6xl pb-8' : 'h-[min(42rem,calc(100vh-14rem))] max-w-6xl pb-8') : 'max-w-xl'}`
+            ? `relative shrink-0 w-full p-3 sm:p-4 ${isExpanded ? (selectedDay ? 'h-full max-w-6xl pb-8 overflow-y-auto' : 'h-[min(42rem,calc(100vh-14rem))] max-w-6xl pb-8 overflow-y-auto') : 'max-w-xl'}`
             : isExpanded
               ? 'w-0 overflow-hidden p-0'
               : 'hidden w-[18rem] shrink-0 flex-col p-3 opacity-70 cursor-pointer hover:bg-muted/50 hover:opacity-90 md:flex',
@@ -393,7 +393,7 @@ export function CalendarClient({
                     whileTap={isCurrentMonth ? { scale: 0.97 } : {}}
                     className={[
                       'relative flex flex-col items-center justify-start overflow-hidden rounded-xl text-xs',
-                      isExpanded ? 'h-24 px-1 py-1.5 sm:h-28' : 'aspect-square pt-1',
+                      isExpanded ? 'min-h-40 h-auto px-1 py-1.5' : 'aspect-square pt-1',
                       isCurrentMonth ? 'text-foreground cursor-pointer' : 'text-muted-foreground/30 cursor-default',
                       isSelected ? 'bg-muted shadow-sm' : '',
                     ].filter(Boolean).join(' ')}
@@ -421,7 +421,7 @@ export function CalendarClient({
 
                     {totalDots > 0 && isExpanded && (
                       <div className="relative z-10 mt-1 flex w-full min-w-0 flex-col gap-0.5 px-0.5">
-                        {dayEvents.slice(0, 2).map((ev, i) => {
+                        {dayEvents.slice(0, 8).map((ev, i) => {
                           const cat = categories.find(c => c.id === ev.categoryId)
                           return (
                             <div
@@ -448,7 +448,7 @@ export function CalendarClient({
                             <span className="min-w-0 truncate text-left text-muted-foreground">{ev.title}</span>
                           </div>
                         ))}
-                        {totalDots > 3 && <span className="pl-1 text-[9px] leading-none text-muted-foreground">+{totalDots - 3}</span>}
+                        {totalDots > 9 && <span className="pl-1 text-[9px] leading-none text-muted-foreground">+{totalDots - 9}</span>}
                       </div>
                     )}
                   </motion.div>
