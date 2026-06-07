@@ -1,4 +1,10 @@
 // Trigger detail API — update and delete individual triggers.
+//
+// Side-effect policy: Notion sync (syncTriggerToNotion/archiveTriggerInNotion) and the CSV
+// backup (regenerateCsv) are best-effort MIRRORS — they swallow their own errors and never
+// affect correctness. They are fired WITHOUT await so a slow or failing Notion API can never
+// block the user-facing response. (A previously-invalid token made the SDK retry ~8-13s per
+// call; awaiting it inline made bulk-acknowledge freeze the UI and drop requests on reload.)
 import { NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
@@ -84,8 +90,9 @@ export async function PATCH(
         await logTriggerAction('acknowledge', result)
       }
 
-      await syncTriggerToNotion(result, db)
-      await regenerateCsv(db)
+      // Best-effort mirrors — fire without awaiting (see side-effect policy at top of file).
+      void syncTriggerToNotion(result, db).catch(() => {})
+      void regenerateCsv(db).catch(() => {})
       revalidateTriggerViews(result.categoryId)
       return NextResponse.json(result)
     }
@@ -112,8 +119,8 @@ export async function PATCH(
 
       const trigger = await rescheduleTrigger(db, id, snapped)
       await logTriggerAction('reschedule', trigger)
-      await syncTriggerToNotion(trigger, db)
-      await regenerateCsv(db)
+      void syncTriggerToNotion(trigger, db).catch(() => {})
+      void regenerateCsv(db).catch(() => {})
       revalidateTriggerViews(trigger.categoryId)
       return NextResponse.json(trigger)
     }
@@ -157,8 +164,8 @@ export async function PATCH(
 
     if (!updated) return NextResponse.json({ error: 'Not found', code: 'NOT_FOUND' }, { status: 404 })
     await logTriggerAction('edit', updated)
-    await syncTriggerToNotion(updated, db)
-    await regenerateCsv(db)
+    void syncTriggerToNotion(updated, db).catch(() => {})
+    void regenerateCsv(db).catch(() => {})
     revalidateTriggerViews(updated.categoryId)
     return NextResponse.json(updated)
   } catch (error) {
@@ -181,8 +188,8 @@ export async function DELETE(
     if (!owned) return new NextResponse(null, { status: 204 })
     await db.delete(triggers).where(and(eq(triggers.id, id), eq(triggers.userId, user.id)))
     await logTriggerAction('delete', { ...owned, deleted: true })
-    await archiveTriggerInNotion(owned.notionPageId)
-    await regenerateCsv(db)
+    void archiveTriggerInNotion(owned.notionPageId).catch(() => {})
+    void regenerateCsv(db).catch(() => {})
     revalidateTriggerViews(owned.categoryId)
     return new NextResponse(null, { status: 204 })
   } catch (error) {

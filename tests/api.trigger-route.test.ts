@@ -48,6 +48,14 @@ vi.mock('@/lib/services/csvExport', () => ({ regenerateCsv }))
 
 import { PATCH, DELETE } from '@/app/api/triggers/[id]/route'
 
+// The best-effort mirrors are fired without await but with a .catch(), so their mocks must
+// return promises (the real services are async). Re-establish resolved impls before each test.
+beforeEach(() => {
+  syncTriggerToNotion.mockResolvedValue(undefined)
+  archiveTriggerInNotion.mockResolvedValue(undefined)
+  regenerateCsv.mockResolvedValue(undefined)
+})
+
 describe('trigger detail route cache invalidation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -99,6 +107,50 @@ describe('trigger detail route cache invalidation', () => {
     }))
     expect(syncTriggerToNotion).toHaveBeenCalledOnce()
     expect(regenerateCsv).toHaveBeenCalledOnce()
+  })
+
+  it('responds without waiting for the Notion/CSV mirror to settle (non-blocking side effects)', async () => {
+    getCurrentUser.mockResolvedValue({ id: 'user-1' })
+
+    const ownershipQuery = {
+      limit: vi.fn().mockResolvedValue([
+        { id: 'trigger-1', userId: 'user-1', categoryId: 'cat-1' },
+      ]),
+    }
+    getDb.mockReturnValue({
+      select: vi.fn(() => ({
+        from: vi.fn(() => ({
+          where: vi.fn(() => ownershipQuery),
+        })),
+      })),
+    })
+    acknowledgeTrigger.mockResolvedValue({
+      id: 'trigger-1', userId: 'user-1', categoryId: 'cat-1', title: 'Review docs',
+    })
+
+    // Gate the mirrors on a promise we never resolve — simulates a slow/hung Notion API.
+    // If the route awaited these, PATCH would hang and this test would time out.
+    let releaseNotion: () => void = () => {}
+    let releaseCsv: () => void = () => {}
+    syncTriggerToNotion.mockReturnValue(new Promise<void>(r => { releaseNotion = r }))
+    regenerateCsv.mockReturnValue(new Promise<void>(r => { releaseCsv = r }))
+
+    const response = await PATCH(
+      new Request('http://localhost/api/triggers/trigger-1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acknowledge: true }),
+      }),
+      { params: Promise.resolve({ id: 'trigger-1' }) }
+    )
+
+    expect(response.status).toBe(200)
+    expect(syncTriggerToNotion).toHaveBeenCalledOnce()
+    expect(regenerateCsv).toHaveBeenCalledOnce()
+
+    // Release the gates so the floating promises settle (avoids open handles).
+    releaseNotion()
+    releaseCsv()
   })
 })
 

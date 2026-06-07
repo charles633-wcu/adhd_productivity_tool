@@ -119,6 +119,9 @@ describe('PATCH /api/triggers/[id] — note on acknowledge', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-16T12:00:00.000Z'))
     getCurrentUser.mockResolvedValue({ id: 'user-1' })
+    // Best-effort mirrors are fired without await but with .catch(); mocks must return promises.
+    syncTriggerToNotion.mockResolvedValue(undefined)
+    regenerateCsv.mockResolvedValue(undefined)
   })
 
   it('appends note to agentMetadata when acknowledge + note provided', async () => {
