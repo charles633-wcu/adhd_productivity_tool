@@ -12,6 +12,11 @@ import { Check, CheckCircle, Pencil } from 'lucide-react'
 import { TriggerMemorySheet } from '@/components/TriggerMemorySheet'
 import type { Trigger } from '@/lib/db/schema'
 
+// Short "Mon D" date format — identical to TriggerCard's formatCardDate (locale-pinned for stable output)
+function formatCardDate(date: Date): string {
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 // Priority display config — identical to TriggerCard's config (not exported from there)
 const PRIORITY_CONFIG: Record<number, { label: string; borderClass: string; badgeClass: string }> = {
   0: { label: 'Very High', borderClass: 'border-l-red-500',     badgeClass: 'bg-red-500/15 text-red-400 ring-1 ring-red-500/30' },
@@ -125,8 +130,22 @@ export function TriggerGridCard({
         {/* Main text: AI summary or title */}
         <p className="text-sm font-medium leading-snug text-foreground">{displayText}</p>
 
-        {/* Category label */}
-        <p className="text-xs text-muted-foreground">{categoryName}</p>
+        {/* Metadata row — mirrors TriggerCard's list view: category + review-clock pills */}
+        <div className="flex items-center gap-1.5 pl-0.5 flex-wrap">
+          <span className="text-xs text-muted-foreground">{categoryName}</span>
+          <span className="rounded bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground ring-1 ring-border">
+            Created {formatCardDate(trigger.createdAt)}
+          </span>
+          <span className="rounded bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground ring-1 ring-border">
+            {trigger.lastReviewedAt ? `Reviewed ${formatCardDate(trigger.lastReviewedAt)}` : 'Not yet reviewed'}
+          </span>
+          <span className="rounded bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground ring-1 ring-border">
+            Next {formatCardDate(trigger.nextReviewAt)}
+          </span>
+          <span className="rounded bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground ring-1 ring-border">
+            Every {trigger.reviewIntervalDays}d
+          </span>
+        </div>
       </div>
 
       {/* Mind canvas node badges — only rendered when linkedNodes is non-empty */}
