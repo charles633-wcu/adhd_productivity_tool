@@ -48,6 +48,8 @@ sentinel.db-wal
 *.db
 *.db-shm
 *.db-wal
+# DB safety backups — real personal data, never commit (filenames end in .backup-*)
+db-backups/
 context/
 .superpowers/
 graphify-out/
