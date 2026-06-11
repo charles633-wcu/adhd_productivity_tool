@@ -3,11 +3,16 @@
 // To add a new tool: push one { definition, handler } object to CHAT_TOOLS.
 // The API route iterates this array automatically — no other changes needed.
 
-import { eq, and, lte, like, or, count as drizzleCount } from 'drizzle-orm'
-import { triggers, categories } from '@/lib/db/schema'
+import { eq, and, lte, like, or, isNotNull, asc, desc, sql, count as drizzleCount } from 'drizzle-orm'
+import { triggers, categories, todos, heapNodes } from '@/lib/db/schema'
 import type { DrizzleDb } from '@/lib/db/client'
 import type { ToolDefinition } from './chatProvider'
 import { CHAT_TOOL_DESCS } from './chatToolDefs'
+import { listEventsInRange, listEventOverridesForIds } from '@/lib/db/calendar'
+import { expandEvents } from '@/lib/services/repeatExpander'
+import type { CalendarEventOverride } from '@/lib/db/schema'
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000
 
 export interface ChatTool {
   definition: ToolDefinition
@@ -161,6 +166,141 @@ export const CHAT_TOOLS: ChatTool[] = [
         notes: row.agentMetadata?.notes ?? [],
         condensedHistory: row.agentMetadata?.condensedHistory ?? null,
       }
+    },
+  },
+
+  // ── get_due_todos ─────────────────────────────────────────────────────────────
+  // Incomplete tasks with a due date on or before today+N days (overdue tasks included
+  // because their dueDate is < today). Undated and completed tasks are excluded — this
+  // tool is about time-bound, actionable work for a briefing.
+  {
+    definition: {
+      name: 'get_due_todos',
+      description: CHAT_TOOL_DESCS.get_due_todos,
+      parameters: {
+        type: 'object',
+        properties: {
+          days: { type: 'number', description: 'How many days ahead to look (default 7, max 365)' },
+        },
+        required: [],
+      },
+    },
+    async handler(args, userId, db) {
+      const days = Math.min(Number(args.days ?? 7), 365)
+      // dueDate is stored as a 'YYYY-MM-DD' string; ISO date prefixes compare lexicographically
+      const cutoff = new Date(Date.now() + days * MS_PER_DAY).toISOString().slice(0, 10)
+
+      const rows = await db
+        .select({
+          id: todos.id,
+          title: todos.title,
+          priority: todos.priority,
+          dueDate: todos.dueDate,
+          dueTime: todos.dueTime,
+          listId: todos.listId,
+        })
+        .from(todos)
+        .where(
+          and(
+            eq(todos.userId, userId),
+            eq(todos.completed, 0),
+            isNotNull(todos.dueDate),
+            lte(todos.dueDate, cutoff),
+          )
+        )
+        .orderBy(asc(todos.dueDate))
+        .limit(50)
+
+      return rows
+    },
+  },
+
+  // ── get_calendar ──────────────────────────────────────────────────────────────
+  // Reuses the calendar GET route's logic: load base events, attach overrides, expand
+  // recurring rules into concrete occurrences within [now, now+N days].
+  {
+    definition: {
+      name: 'get_calendar',
+      description: CHAT_TOOL_DESCS.get_calendar,
+      parameters: {
+        type: 'object',
+        properties: {
+          days: { type: 'number', description: 'How many days ahead to look (default 7, max 90)' },
+        },
+        required: [],
+      },
+    },
+    async handler(args, userId, db) {
+      const days = Math.min(Number(args.days ?? 7), 90)
+      const rangeFrom = new Date()
+      const rangeTo = new Date(Date.now() + days * MS_PER_DAY)
+
+      const events = await listEventsInRange(db, userId, rangeFrom, rangeTo)
+      const overrides = listEventOverridesForIds(db, events.map(e => e.id))
+      const overridesByMasterId = new Map<string, CalendarEventOverride[]>()
+      for (const override of overrides) {
+        const group = overridesByMasterId.get(override.masterEventId) ?? []
+        group.push(override)
+        overridesByMasterId.set(override.masterEventId, group)
+      }
+
+      const occurrences = expandEvents(events, overridesByMasterId, rangeFrom, rangeTo)
+      // Serialize Date fields to ISO strings for the model
+      return occurrences.map(o => ({
+        title: o.title,
+        startAt: o.startAt.toISOString(),
+        endAt: o.endAt.toISOString(),
+        categoryId: o.categoryId,
+      }))
+    },
+  },
+
+  // ── get_heap_nodes ────────────────────────────────────────────────────────────
+  // Mind/heap knowledge-graph nodes. Optional exact priority filter. Ordered by priority
+  // (critical → high → normal → low) via a CASE expression, then most-recently-updated.
+  {
+    definition: {
+      name: 'get_heap_nodes',
+      description: CHAT_TOOL_DESCS.get_heap_nodes,
+      parameters: {
+        type: 'object',
+        properties: {
+          priority: {
+            type: 'string',
+            enum: ['low', 'normal', 'high', 'critical'],
+            description: 'Optional exact priority filter',
+          },
+        },
+        required: [],
+      },
+    },
+    async handler(args, userId, db) {
+      const priority = args.priority ? String(args.priority) : null
+      const priorityRank = sql`CASE ${heapNodes.priority} WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END`
+
+      const rows = await db
+        .select({
+          id: heapNodes.id,
+          title: heapNodes.title,
+          type: heapNodes.type,
+          priority: heapNodes.priority,
+          body: heapNodes.body,
+        })
+        .from(heapNodes)
+        .where(
+          and(
+            eq(heapNodes.userId, userId),
+            priority ? eq(heapNodes.priority, priority as typeof heapNodes.priority._.data) : undefined,
+          )
+        )
+        .orderBy(priorityRank, desc(heapNodes.updatedAt))
+        .limit(50)
+
+      // Truncate long bodies so the model context stays lean
+      return rows.map(r => ({
+        ...r,
+        body: r.body && r.body.length > 200 ? `${r.body.slice(0, 200)}…` : r.body,
+      }))
     },
   },
 ]

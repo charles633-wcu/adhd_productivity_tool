@@ -13,6 +13,9 @@ export const CHAT_TOOL_DESCS = {
   search_categories:  'Return all categories for the user including trigger counts.',
   get_due_triggers:   'Return triggers due for review within the next N days (default 7, max 90).',
   get_trigger_detail: 'Return full details for a single trigger including notes, summary, and review history.',
+  get_due_todos:      "Return the user's incomplete to-do tasks that have a due date within the next N days (default 7, max 365), including overdue tasks. Ordered by due date. Use this to brief the user on actionable tasks.",
+  get_calendar:       "Return the user's calendar events (recurring events expanded into individual occurrences) for the next N days (default 7, max 90). Ordered by start time.",
+  get_heap_nodes:     "Return the user's Mind/heap knowledge-graph nodes (ideas, goals, notes, projects). Optionally filter by priority ('low'|'normal'|'high'|'critical'). Ordered by priority then recency.",
 } as const
 
 // Derived array for DevTrace iteration
