@@ -61,3 +61,42 @@ describe('VerticalCalendar', () => {
     expect(onSelectDay).toHaveBeenCalledWith('2026-06-17')
   })
 })
+
+describe('VerticalCalendar quick-jump', () => {
+  it('shows a month pill with the top-most month label, opening a 12-month popover', () => {
+    renderCal()
+    const pill = screen.getByTestId('vcal-month-pill')
+    expect(pill).toHaveTextContent('June 2026')
+    fireEvent.click(pill)
+    expect(screen.getByTestId('vcal-jump-popover')).toBeTruthy()
+    expect(screen.getAllByTestId('vcal-jump-month')).toHaveLength(12)
+  })
+
+  it('scrolls to a month that is already loaded', () => {
+    const scrollSpy = vi.fn()
+    Element.prototype.scrollIntoView = scrollSpy
+    renderCal()
+    fireEvent.click(screen.getByTestId('vcal-month-pill'))
+    // June = index 5, and June 2026 is the only loaded month
+    fireEvent.click(screen.getAllByTestId('vcal-jump-month')[5])
+    expect(scrollSpy).toHaveBeenCalled()
+  })
+
+  it('requests a jump when the target month is outside the loaded range', () => {
+    const onJumpRequest = vi.fn()
+    renderCal({ onJumpRequest })
+    fireEvent.click(screen.getByTestId('vcal-month-pill'))
+    // July = index 6, not loaded
+    fireEvent.click(screen.getAllByTestId('vcal-jump-month')[6])
+    expect(onJumpRequest).toHaveBeenCalled()
+    expect((onJumpRequest.mock.calls[0][0] as Date).getMonth()).toBe(6)
+  })
+
+  it('steps the popover year forward', () => {
+    renderCal()
+    fireEvent.click(screen.getByTestId('vcal-month-pill'))
+    expect(screen.getByTestId('vcal-jump-year')).toHaveTextContent('2026')
+    fireEvent.click(screen.getByTestId('vcal-jump-year-next'))
+    expect(screen.getByTestId('vcal-jump-year')).toHaveTextContent('2027')
+  })
+})

@@ -10,9 +10,10 @@
  */
 'use client'
 
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
-  DOW, DAY_EVENT_CAP, monthAnchorKey, toLocalDateKey, monthLabel,
+  DOW, MONTHS, DAY_EVENT_CAP, monthAnchorKey, toLocalDateKey, monthLabel,
   formatAccessibleDate, compactTimeLabel, truncateTitle, capDayEvents, buildMonthDays,
 } from '@/lib/calendar/calendarView'
 
@@ -47,6 +48,7 @@ interface VerticalCalendarProps {
   categories: EventCategory[]
   onSelectDay: (key: string) => void
   onReachEnd?: (side: 'past' | 'future') => void
+  onJumpRequest?: (month: Date) => void
 }
 
 const DEFAULT_DOT = '#6366f1'
@@ -61,12 +63,38 @@ interface Chip {
 }
 
 export function VerticalCalendar({
-  today, months, eventsByDate, icsEventsByDate, categories, onSelectDay, onReachEnd,
+  today, months, eventsByDate, icsEventsByDate, categories, onSelectDay, onReachEnd, onJumpRequest,
 }: VerticalCalendarProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const topSentinel = useRef<HTMLDivElement | null>(null)
   const bottomSentinel = useRef<HTMLDivElement | null>(null)
   const todayKey = toLocalDateKey(today)
+
+  // Quick-jump: the month currently at the top of the viewport drives the pill
+  // label; clicking it opens a year-stepper + 12-month grid popover.
+  const [topMonthKey, setTopMonthKey] = useState(() => months[0] ? monthAnchorKey(months[0]) : '')
+  const [jumpOpen, setJumpOpen] = useState(false)
+  const [jumpYear, setJumpYear] = useState(() => (months[0] ?? today).getFullYear())
+
+  const topMonth = months.find(m => monthAnchorKey(m) === topMonthKey) ?? months[0] ?? today
+  const loadedKeys = new Set(months.map(monthAnchorKey))
+
+  function openJump() {
+    setJumpYear(topMonth.getFullYear())
+    setJumpOpen(open => !open)
+  }
+
+  function jumpToMonth(monthIndex: number) {
+    const target = new Date(jumpYear, monthIndex, 1)
+    setJumpOpen(false)
+    if (loadedKeys.has(monthAnchorKey(target))) {
+      scrollRef.current
+        ?.querySelector(`[data-month="${monthAnchorKey(target)}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } else {
+      onJumpRequest?.(target)
+    }
+  }
 
   // Resolve a chip's color: explicit event color → category color → default.
   function resolveColor(ev: CalendarEventItem): string {
@@ -100,6 +128,23 @@ export function VerticalCalendar({
     return () => obs.disconnect()
   }, [onReachEnd, months.length])
 
+  // Track the top-most visible month section to drive the quick-jump pill label.
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return
+    const root = scrollRef.current
+    const sections = root?.querySelectorAll('[data-month]')
+    if (!sections?.length) return
+    const obs = new IntersectionObserver(entries => {
+      const visible = entries
+        .filter(e => e.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0]
+      const key = visible?.target.getAttribute('data-month')
+      if (key) setTopMonthKey(key)
+    }, { root, rootMargin: '0px 0px -85% 0px' })
+    sections.forEach(s => obs.observe(s))
+    return () => obs.disconnect()
+  }, [months.length])
+
   return (
     <div
       ref={scrollRef}
@@ -108,14 +153,78 @@ export function VerticalCalendar({
     >
       <div ref={topSentinel} aria-hidden="true" className="h-px w-full" />
 
+      {/* Sticky quick-jump pill — shows the top-most visible month; opens a
+          year-stepper + 12-month grid popover. */}
+      <div className="sticky top-0 z-20 flex items-start px-3 py-2 backdrop-blur bg-background/95">
+        <div className="relative">
+          <button
+            type="button"
+            data-testid="vcal-month-pill"
+            onClick={openJump}
+            aria-expanded={jumpOpen}
+            className="flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-muted"
+          >
+            {monthLabel(topMonth)}
+            <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${jumpOpen ? 'rotate-90' : ''}`} />
+          </button>
+
+          {jumpOpen && (
+            <div
+              data-testid="vcal-jump-popover"
+              className="absolute left-0 top-full z-30 mt-2 w-60 rounded-2xl border border-border bg-card p-3 shadow-xl"
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <button
+                  type="button"
+                  aria-label="Previous year"
+                  onClick={() => setJumpYear(y => y - 1)}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted/60 hover:bg-muted"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span data-testid="vcal-jump-year" className="text-sm font-bold text-foreground">{jumpYear}</span>
+                <button
+                  type="button"
+                  data-testid="vcal-jump-year-next"
+                  aria-label="Next year"
+                  onClick={() => setJumpYear(y => y + 1)}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted/60 hover:bg-muted"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {MONTHS.map((m, idx) => {
+                  const isCurrent = monthAnchorKey(new Date(jumpYear, idx, 1)) === topMonthKey
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      data-testid="vcal-jump-month"
+                      onClick={() => jumpToMonth(idx)}
+                      className={[
+                        'rounded-lg py-1.5 text-xs transition-colors',
+                        isCurrent ? 'bg-primary font-bold text-primary-foreground' : 'bg-muted/40 text-foreground hover:bg-muted',
+                      ].join(' ')}
+                    >
+                      {m.slice(0, 3)}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
       {months.map(month => {
         const days = buildMonthDays(month)
         const label = monthLabel(month)
         return (
           <section key={monthAnchorKey(month)} data-month={monthAnchorKey(month)} className="mb-2">
-            {/* Sticky month header (the quick-jump pill is added in a later task) */}
-            <div className="sticky top-0 z-10 bg-background/95 px-3 py-2 backdrop-blur">
-              <span className="text-base font-semibold text-foreground">{label}</span>
+            {/* Plain month divider label (the sticky pill above tracks the live month) */}
+            <div className="px-3 pb-1 pt-2">
+              <span className="text-sm font-semibold text-muted-foreground">{label}</span>
             </div>
 
             {/* Day-of-week header */}
