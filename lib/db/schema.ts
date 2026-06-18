@@ -15,6 +15,8 @@ export const users = sqliteTable('users', {
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .default(sql`(unixepoch())`),
+  // Timestamp of the last 24h scratch-notes reminder shown in chat; null = never.
+  lastTodoReminderAt: integer('last_todo_reminder_at', { mode: 'timestamp' }),
 })
 
 // Categories — user-scoped, created on the fly
@@ -214,6 +216,27 @@ export const todoTaskLabels = sqliteTable('todo_task_labels', {
 }, (table) => ({
   pk: primaryKey({ columns: [table.todoId, table.labelId] }),
 }))
+
+// scratch_notes — quick free-text jots from the triggers-page Quick Notes pad.
+// Each line can be checked off and optionally promoted into a real /todos item.
+export const scratchNotes = sqliteTable('scratch_notes', {
+  id: text('id').primaryKey().$defaultFn(() => createId()),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  content: text('content').notNull(),
+  checked: integer('checked').notNull().default(0),
+  sortOrder: integer('sort_order').notNull().default(0),
+  // FK to todos.id, enforced at API layer (mirrors todos.parentId convention).
+  promotedTodoId: text('promoted_todo_id'),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`)
+    .$onUpdate(() => new Date()),
+})
+
+export type ScratchNote = typeof scratchNotes.$inferSelect
 
 // Heap Knowledge Graph
 // Shape options for heap canvas nodes
