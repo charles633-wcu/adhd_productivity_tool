@@ -18,6 +18,16 @@ await page.waitForSelector('[data-month]', { timeout: 15000 })
 check('vertical view is default (data-month present)', await page.locator('[data-month]').count() > 0)
 check('carousel NOT rendered by default', await page.locator('[data-testid="month-carousel"]').count() === 0)
 
+// Regression: the month-section count must be stable (no runaway auto-extension).
+const countA = await page.locator('[data-month]').count()
+await page.waitForTimeout(1500)
+const countB = await page.locator('[data-month]').count()
+check(`no runaway extension (sections stable: ${countA} -> ${countB})`, countA === countB && countB <= 31)
+
+// Regression: opens anchored on the current month, not 12 months in the past.
+const topMonthVisible = await page.getByTestId('vcal-month-pill').first().textContent()
+check(`opens near today's month (pill: "${topMonthVisible?.trim()}")`, /2026/.test(topMonthVisible ?? ''))
+
 // Busy day Jun 18 (11 events) → 8-cap shows 7 chips + "+N more".
 const busy = page.getByTestId('vcal-day-2026-06-18')
 await busy.scrollIntoViewIfNeeded()

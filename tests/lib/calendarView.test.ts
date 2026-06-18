@@ -80,9 +80,12 @@ describe('shared date helpers (extracted from CalendarClient)', () => {
 })
 
 describe('accelerationMultiplier', () => {
-  it('is 1 at streak 1 and grows, clamped to a max', () => {
+  it('stays native (1) for casual scrolling up to the threshold', () => {
     expect(accelerationMultiplier(1)).toBe(1)
-    expect(accelerationMultiplier(5)).toBeGreaterThan(1)
-    expect(accelerationMultiplier(999)).toBeLessThanOrEqual(6)
+    expect(accelerationMultiplier(6)).toBe(1)
+  })
+  it('accelerates gently past the threshold, clamped to a low max', () => {
+    expect(accelerationMultiplier(15)).toBeGreaterThan(1)
+    expect(accelerationMultiplier(999)).toBeLessThanOrEqual(2.2)
   })
 })

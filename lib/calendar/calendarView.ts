@@ -114,13 +114,17 @@ export function capDayEvents<T>(items: T[], cap = DAY_EVENT_CAP): { shown: T[]; 
   return { shown: items.slice(0, cap - 1), overflow: items.length - (cap - 1) }
 }
 
+// Casual scrolling (streak <= threshold) stays fully native (multiplier 1).
+// Only a sustained fast flick gently accelerates, capped well below the old 6x.
+const ACCEL_THRESHOLD = 6
 const ACCEL_BASE = 1
-const ACCEL_STEP = 0.5
-const ACCEL_MAX = 6
+const ACCEL_STEP = 0.12
+const ACCEL_MAX = 2.2
 /**
- * Wheel-velocity multiplier that grows with a consecutive same-direction
- * scroll streak, clamped to ACCEL_MAX. Streak 1 → 1 (no amplification).
+ * Wheel-velocity multiplier. Returns 1 (native scroll) until a same-direction
+ * streak exceeds ACCEL_THRESHOLD, then grows gently, clamped to ACCEL_MAX.
  */
 export function accelerationMultiplier(streak: number): number {
-  return Math.min(ACCEL_MAX, ACCEL_BASE + (Math.max(1, streak) - 1) * ACCEL_STEP)
+  if (streak <= ACCEL_THRESHOLD) return ACCEL_BASE
+  return Math.min(ACCEL_MAX, ACCEL_BASE + (streak - ACCEL_THRESHOLD) * ACCEL_STEP)
 }

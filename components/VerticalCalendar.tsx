@@ -10,7 +10,7 @@
  */
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   DOW, MONTHS, DAY_EVENT_CAP, monthAnchorKey, toLocalDateKey, monthLabel,
@@ -75,6 +75,9 @@ export function VerticalCalendar({
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const topSentinel = useRef<HTMLDivElement | null>(null)
   const bottomSentinel = useRef<HTMLDivElement | null>(null)
+  const didInitScroll = useRef(false)
+  const prevFirstKey = useRef<string | null>(null)
+  const prevScrollHeight = useRef(0)
   const todayKey = toLocalDateKey(today)
 
   // Quick-jump: the month currently at the top of the viewport drives the pill
@@ -118,6 +121,27 @@ export function VerticalCalendar({
     }))
     return [...own, ...ics].sort((a, b) => a.startAt.localeCompare(b.startAt))
   }
+
+  // On first mount, jump to today's month. The range spans ±12 months, so the
+  // natural scrollTop=0 would open a year in the past AND leave the top sentinel
+  // intersecting — which would trigger runaway backward extension. On later
+  // prepends, preserve the viewport (shift scrollTop by the inserted height) so
+  // the top sentinel scrolls out of view and the extension loop terminates.
+  useLayoutEffect(() => {
+    const root = scrollRef.current
+    if (!root) return
+    const firstKey = months[0] ? monthAnchorKey(months[0]) : null
+    if (!didInitScroll.current) {
+      const el = root.querySelector(`[data-month="${monthAnchorKey(today)}"]`) as HTMLElement | null
+      if (el) root.scrollTop = el.offsetTop
+      didInitScroll.current = true
+    } else if (prevFirstKey.current && firstKey !== prevFirstKey.current) {
+      const added = root.scrollHeight - prevScrollHeight.current
+      if (added > 0) root.scrollTop += added
+    }
+    prevFirstKey.current = firstKey
+    prevScrollHeight.current = root.scrollHeight
+  }, [months, today])
 
   // Observe top/bottom sentinels to lazily extend the loaded range.
   useEffect(() => {
@@ -197,7 +221,7 @@ export function VerticalCalendar({
     <div
       ref={scrollRef}
       data-testid="vertical-calendar"
-      className="h-full w-full overflow-y-auto"
+      className="relative h-full w-full overflow-y-auto"
     >
       <div ref={topSentinel} aria-hidden="true" className="h-px w-full" />
 
