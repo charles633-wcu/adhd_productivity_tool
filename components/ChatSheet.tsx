@@ -47,6 +47,26 @@ export function ChatSheet({ open, onOpenChange }: ChatSheetProps) {
     }
   }, [open])
 
+  // Once per open: if a 24h scratch-notes reminder is due and there are unchecked
+  // notes, seed a deterministic assistant message (no /api/chat call) and stamp.
+  // Placed AFTER the reset effect so the close-reset never wipes the seeded message.
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    fetch('/api/scratch-notes/reminder')
+      .then(r => r.json())
+      .then((data: { due: boolean; notes: { content: string }[] }) => {
+        if (cancelled || !data.due || data.notes.length === 0) return
+        const lines = data.notes.map(n => `• ${n.content}`).join('\n')
+        const reply =
+          `⏰ Daily check-in — you still have ${data.notes.length} thing${data.notes.length === 1 ? '' : 's'} on your Quick Notes pad:\n${lines}\nWant to tackle any of these?`
+        setMessages(prev => [...prev, { role: 'assistant', content: reply }])
+        fetch('/api/scratch-notes/reminder', { method: 'POST' }).catch(() => {})
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [open])
+
   async function handleSend(e: FormEvent) {
     e.preventDefault()
     const text = input.trim()
