@@ -14,7 +14,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   DOW, MONTHS, DAY_EVENT_CAP, monthAnchorKey, toLocalDateKey, monthLabel,
-  formatAccessibleDate, compactTimeLabel, truncateTitle, capDayEvents, buildMonthDays,
+  formatAccessibleDate, compactTimeLabel, truncateTitle, capDayEvents, buildContiguousDays,
   accelerationMultiplier,
 } from '@/lib/calendar/calendarView'
 
@@ -75,10 +75,29 @@ export function VerticalCalendar({
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const topSentinel = useRef<HTMLDivElement | null>(null)
   const bottomSentinel = useRef<HTMLDivElement | null>(null)
+  const headerRef = useRef<HTMLDivElement | null>(null)
   const didInitScroll = useRef(false)
   const prevFirstKey = useRef<string | null>(null)
   const prevScrollHeight = useRef(0)
   const todayKey = toLocalDateKey(today)
+
+  // Scroll a month's first-day anchor to just below the sticky HUD.
+  function scrollToMonthKey(key: string, smooth: boolean): boolean {
+    const root = scrollRef.current
+    const el = root?.querySelector(`[data-month="${key}"]`) as HTMLElement | null
+    if (!root || !el) return false
+    const offset = headerRef.current?.offsetHeight ?? 0
+    const top = Math.max(0, el.offsetTop - offset)
+    if (smooth && typeof root.scrollTo === 'function') {
+      root.scrollTo({ top, behavior: 'smooth' })
+    } else {
+      root.scrollTop = top
+    }
+    return true
+  }
+
+  // The continuous, gapless day run (months flow into each other).
+  const days = buildContiguousDays(months)
 
   // Quick-jump: the month currently at the top of the viewport drives the pill
   // label; clicking it opens a year-stepper + 12-month grid popover.
@@ -98,9 +117,7 @@ export function VerticalCalendar({
     const target = new Date(jumpYear, monthIndex, 1)
     setJumpOpen(false)
     if (loadedKeys.has(monthAnchorKey(target))) {
-      scrollRef.current
-        ?.querySelector(`[data-month="${monthAnchorKey(target)}"]`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      scrollToMonthKey(monthAnchorKey(target), true)
     } else {
       onJumpRequest?.(target)
     }
@@ -132,8 +149,7 @@ export function VerticalCalendar({
     if (!root) return
     const firstKey = months[0] ? monthAnchorKey(months[0]) : null
     if (!didInitScroll.current) {
-      const el = root.querySelector(`[data-month="${monthAnchorKey(today)}"]`) as HTMLElement | null
-      if (el) root.scrollTop = el.offsetTop
+      scrollToMonthKey(monthAnchorKey(today), false)
       didInitScroll.current = true
     } else if (prevFirstKey.current && firstKey !== prevFirstKey.current) {
       const added = root.scrollHeight - prevScrollHeight.current
@@ -192,11 +208,7 @@ export function VerticalCalendar({
   // once that section is present, then signal the parent to clear the request.
   useEffect(() => {
     if (!scrollToKey) return
-    const el = scrollRef.current?.querySelector(`[data-month="${scrollToKey}"]`)
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      onScrolled?.()
-    }
+    if (scrollToMonthKey(scrollToKey, true)) onScrolled?.()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scrollToKey, months.length])
 
@@ -225,16 +237,16 @@ export function VerticalCalendar({
     >
       <div ref={topSentinel} aria-hidden="true" className="h-px w-full" />
 
-      {/* Sticky quick-jump pill — shows the top-most visible month; opens a
-          year-stepper + 12-month grid popover. */}
-      <div className="sticky top-0 z-20 flex items-start px-3 py-2 backdrop-blur bg-background/95">
-        <div className="relative">
+      {/* Sticky HUD — translucent header carrying the quick-jump pill and the
+          single day-of-week row that the continuous grid aligns to. */}
+      <div ref={headerRef} className="sticky top-0 z-20 bg-background/55 px-2 pb-1 pt-2 backdrop-blur-md">
+        <div className="relative px-1">
           <button
             type="button"
             data-testid="vcal-month-pill"
             onClick={openJump}
             aria-expanded={jumpOpen}
-            className="flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-muted"
+            className="flex items-center gap-1 rounded-full px-3 py-1.5 text-base font-semibold text-foreground outline-none transition-all hover:ring-2 hover:ring-sky-400/70 hover:shadow-[0_0_16px_rgba(56,189,248,0.45)] focus-visible:ring-2 focus-visible:ring-sky-400/70"
           >
             {monthLabel(topMonth)}
             <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${jumpOpen ? 'rotate-90' : ''}`} />
@@ -243,29 +255,29 @@ export function VerticalCalendar({
           {jumpOpen && (
             <div
               data-testid="vcal-jump-popover"
-              className="absolute left-0 top-full z-30 mt-2 w-60 rounded-2xl border border-border bg-card p-3 shadow-xl"
+              className="absolute left-0 top-full z-30 mt-2 w-80 rounded-2xl border border-white/10 bg-background/50 p-4 shadow-2xl backdrop-blur-2xl"
             >
-              <div className="mb-2 flex items-center justify-between">
+              <div className="mb-3 flex items-center justify-between">
                 <button
                   type="button"
                   aria-label="Previous year"
                   onClick={() => setJumpYear(y => y - 1)}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted/60 hover:bg-muted"
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                <span data-testid="vcal-jump-year" className="text-sm font-bold text-foreground">{jumpYear}</span>
+                <span data-testid="vcal-jump-year" className="text-base font-bold tracking-wide text-foreground">{jumpYear}</span>
                 <button
                   type="button"
                   data-testid="vcal-jump-year-next"
                   aria-label="Next year"
                   onClick={() => setJumpYear(y => y + 1)}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted/60 hover:bg-muted"
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-4 gap-1">
                 {MONTHS.map((m, idx) => {
                   const isCurrent = monthAnchorKey(new Date(jumpYear, idx, 1)) === topMonthKey
                   return (
@@ -275,8 +287,8 @@ export function VerticalCalendar({
                       data-testid="vcal-jump-month"
                       onClick={() => jumpToMonth(idx)}
                       className={[
-                        'rounded-lg py-1.5 text-xs transition-colors',
-                        isCurrent ? 'bg-primary font-bold text-primary-foreground' : 'bg-muted/40 text-foreground hover:bg-muted',
+                        'rounded-lg py-2 text-xs transition-colors',
+                        isCurrent ? 'bg-sky-500/80 font-bold text-white' : 'text-foreground hover:bg-white/10',
                       ].join(' ')}
                     >
                       {m.slice(0, 3)}
@@ -287,82 +299,84 @@ export function VerticalCalendar({
             </div>
           )}
         </div>
+
+        {/* Day-of-week header — aligns to the continuous grid below */}
+        <div className="mt-1 grid grid-cols-7 px-1">
+          {DOW.map(d => (
+            <div key={d} className="py-1 text-center text-[10px] font-mono text-muted-foreground">{d}</div>
+          ))}
+        </div>
       </div>
 
-      {months.map(month => {
-        const days = buildMonthDays(month)
-        const label = monthLabel(month)
-        return (
-          <section key={monthAnchorKey(month)} data-month={monthAnchorKey(month)} className="mb-2">
-            {/* Plain month divider label (the sticky pill above tracks the live month) */}
-            <div className="px-3 pb-1 pt-2">
-              <span className="text-sm font-semibold text-muted-foreground">{label}</span>
-            </div>
+      {/* Continuous grid — one gapless run of weeks. Months flow into each
+          other; each month is faintly tinted and bounded by a bold top/bottom
+          edge, and its first day carries a "Mon YYYY" tab instead of the "1". */}
+      <div className="grid grid-cols-7 gap-1 px-3 pb-8">
+        {days.map(day => {
+          const key = toLocalDateKey(day)
+          const isToday = key === todayKey
+          const isFirst = day.getDate() === 1
+          // Month bounds: an edge exists where the cell 7 days above/below is a different month.
+          const above = new Date(day); above.setDate(day.getDate() - 7)
+          const below = new Date(day); below.setDate(day.getDate() + 7)
+          const isTopEdge = above.getMonth() !== day.getMonth()
+          const isBottomEdge = below.getMonth() !== day.getMonth()
+          // Faint alternating tint per absolute month so bounds read at a glance.
+          const tinted = ((day.getFullYear() * 12 + day.getMonth()) % 2) === 0
+          const { shown, overflow } = capDayEvents(chipsForDay(key), DAY_EVENT_CAP)
 
-            {/* Day-of-week header */}
-            <div className="grid grid-cols-7 px-2">
-              {DOW.map(d => (
-                <div key={d} className="py-1 text-center text-[10px] font-mono text-muted-foreground">{d}</div>
+          return (
+            <div
+              key={key}
+              {...(isFirst ? { 'data-month': monthAnchorKey(day) } : {})}
+              data-testid={`vcal-day-${key}`}
+              role="button"
+              aria-label={`Select ${formatAccessibleDate(day)}`}
+              tabIndex={0}
+              onClick={() => onSelectDay(key)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') { if (e.key === ' ') e.preventDefault(); onSelectDay(key) }
+              }}
+              className={[
+                'flex min-h-[8.6rem] cursor-pointer flex-col gap-0.5 rounded-md p-1 text-foreground transition-colors hover:bg-muted/40',
+                tinted ? 'bg-muted/20' : '',
+                isTopEdge ? 'border-t-2 border-foreground/25' : '',
+                isBottomEdge ? 'border-b-2 border-foreground/15' : '',
+              ].filter(Boolean).join(' ')}
+            >
+              {isFirst ? (
+                <span className="self-start rounded bg-foreground/10 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-foreground">
+                  {MONTHS[day.getMonth()].slice(0, 3)} {day.getFullYear()}
+                </span>
+              ) : (
+                <span className={[
+                  'flex h-6 w-6 items-center justify-center self-start text-xs font-medium',
+                  isToday ? 'rounded-full bg-primary font-bold text-primary-foreground' : '',
+                ].filter(Boolean).join(' ')}>
+                  {day.getDate()}
+                </span>
+              )}
+
+              {shown.map(chip => (
+                <div
+                  key={chip.id}
+                  data-testid="vcal-chip"
+                  className="flex min-w-0 items-center gap-1 rounded bg-muted/55 px-1 py-0.5 text-[9px] leading-none"
+                  title={`${compactTimeLabel(chip.startAt)} ${chip.title}`}
+                >
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: chip.color }} />
+                  <span className="shrink-0 font-medium tabular-nums">{compactTimeLabel(chip.startAt)}</span>
+                  <span className="min-w-0 truncate text-muted-foreground">{truncateTitle(chip.title)}</span>
+                </div>
               ))}
+
+              {overflow > 0 && (
+                <span className="pl-1 text-[9px] leading-none text-muted-foreground">+{overflow} more</span>
+              )}
             </div>
-
-            {/* Day grid */}
-            <div className="grid grid-cols-7 gap-1 px-2">
-              {days.map(day => {
-                const key = toLocalDateKey(day)
-                const isCurrentMonth = day.getMonth() === month.getMonth()
-                const isToday = key === todayKey
-                const { shown, overflow } = capDayEvents(chipsForDay(key), DAY_EVENT_CAP)
-
-                return (
-                  <div
-                    key={key}
-                    data-testid={`vcal-day-${key}`}
-                    role={isCurrentMonth ? 'button' : undefined}
-                    aria-label={isCurrentMonth ? `Select ${formatAccessibleDate(day)}` : undefined}
-                    tabIndex={isCurrentMonth ? 0 : -1}
-                    onClick={() => { if (isCurrentMonth) onSelectDay(key) }}
-                    onKeyDown={e => {
-                      if (isCurrentMonth && (e.key === 'Enter' || e.key === ' ')) {
-                        if (e.key === ' ') e.preventDefault()
-                        onSelectDay(key)
-                      }
-                    }}
-                    className={[
-                      'flex min-h-[7.5rem] flex-col gap-0.5 rounded-lg p-1',
-                      isCurrentMonth ? 'cursor-pointer text-foreground hover:bg-muted/40' : 'text-muted-foreground/30',
-                    ].join(' ')}
-                  >
-                    <span className={[
-                      'flex h-6 w-6 items-center justify-center self-start text-xs font-medium',
-                      isToday ? 'rounded-full bg-primary font-bold text-primary-foreground' : '',
-                    ].filter(Boolean).join(' ')}>
-                      {day.getDate()}
-                    </span>
-
-                    {shown.map(chip => (
-                      <div
-                        key={chip.id}
-                        data-testid="vcal-chip"
-                        className="flex min-w-0 items-center gap-1 rounded bg-muted/55 px-1 py-0.5 text-[9px] leading-none"
-                        title={`${compactTimeLabel(chip.startAt)} ${chip.title}`}
-                      >
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: chip.color }} />
-                        <span className="shrink-0 font-medium tabular-nums">{compactTimeLabel(chip.startAt)}</span>
-                        <span className="min-w-0 truncate text-muted-foreground">{truncateTitle(chip.title)}</span>
-                      </div>
-                    ))}
-
-                    {overflow > 0 && (
-                      <span className="pl-1 text-[9px] leading-none text-muted-foreground">+{overflow} more</span>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </section>
-        )
-      })}
+          )
+        })}
+      </div>
 
       <div ref={bottomSentinel} aria-hidden="true" className="h-px w-full" />
     </div>

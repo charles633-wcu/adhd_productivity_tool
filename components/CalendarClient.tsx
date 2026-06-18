@@ -572,7 +572,7 @@ export function CalendarClient({
 
       <div className="flex-1 overflow-hidden px-3 py-2">
         {viewMode === 'scroll' ? (
-          <div className="mx-auto h-full max-w-3xl">
+          <div className="mx-auto h-full max-w-[53rem]">
             <VerticalCalendar
               today={today}
               months={monthRange}

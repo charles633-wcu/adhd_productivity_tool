@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   truncateTitle, buildMonthRange, extendMonthRange,
   capDayEvents, accelerationMultiplier, monthAnchorKey,
-  toLocalDateKey, buildMonthDays, monthLabel, dateFromKey,
+  toLocalDateKey, buildMonthDays, monthLabel, dateFromKey, buildContiguousDays,
 } from '@/lib/calendar/calendarView'
 
 describe('truncateTitle', () => {
@@ -76,6 +76,29 @@ describe('shared date helpers (extracted from CalendarClient)', () => {
   it('monthLabel and dateFromKey round-trip', () => {
     expect(monthLabel(new Date(2026, 5, 1))).toBe('June 2026')
     expect(toLocalDateKey(dateFromKey('2026-06-17'))).toBe('2026-06-17')
+  })
+})
+
+describe('buildContiguousDays', () => {
+  it('returns a gapless week-aligned run with no duplicated month padding', () => {
+    const days = buildContiguousDays([new Date(2026, 5, 1)]) // June 2026
+    expect(days.length % 7).toBe(0)
+    expect(days[0].getDay()).toBe(0) // starts Sunday
+    expect(days[days.length - 1].getDay()).toBe(6) // ends Saturday
+    // Consecutive days differ by exactly one calendar day (no gaps/dupes).
+    for (let i = 1; i < days.length; i++) {
+      const diff = (days[i].getTime() - days[i - 1].getTime()) / 86_400_000
+      expect(Math.round(diff)).toBe(1)
+    }
+    // Spans June 1 and June 30.
+    expect(days.some(d => d.getMonth() === 5 && d.getDate() === 1)).toBe(true)
+    expect(days.some(d => d.getMonth() === 5 && d.getDate() === 30)).toBe(true)
+  })
+
+  it('flows across multiple months continuously', () => {
+    const days = buildContiguousDays([new Date(2026, 5, 1), new Date(2026, 6, 1)])
+    expect(days.some(d => d.getMonth() === 5 && d.getDate() === 30)).toBe(true)
+    expect(days.some(d => d.getMonth() === 6 && d.getDate() === 1)).toBe(true)
   })
 })
 

@@ -74,7 +74,7 @@ describe('VerticalCalendar quick-jump', () => {
 
   it('scrolls to a month that is already loaded', () => {
     const scrollSpy = vi.fn()
-    Element.prototype.scrollIntoView = scrollSpy
+    Element.prototype.scrollTo = scrollSpy
     renderCal()
     fireEvent.click(screen.getByTestId('vcal-month-pill'))
     // June = index 5, and June 2026 is the only loaded month

@@ -56,6 +56,28 @@ export function dateFromKey(key: string): Date {
   return new Date(year, month - 1, day)
 }
 
+/**
+ * One continuous, gapless run of real Dates spanning the given month anchors,
+ * aligned to whole weeks (Sunday start → Saturday end). Unlike buildMonthDays,
+ * months flow into each other with no duplicated/padded "other-month" cells —
+ * the only filler is at the very top/bottom edges to complete the first/last week.
+ */
+export function buildContiguousDays(months: Date[]): Date[] {
+  if (months.length === 0) return []
+  const firstMonth = months[0]
+  const lastMonth = months[months.length - 1]
+  const start = new Date(firstMonth.getFullYear(), firstMonth.getMonth(), 1)
+  start.setDate(start.getDate() - start.getDay()) // back to Sunday
+  const end = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0) // last day of last month
+  end.setDate(end.getDate() + (6 - end.getDay())) // forward to Saturday
+
+  const days: Date[] = []
+  for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    days.push(new Date(d))
+  }
+  return days
+}
+
 /** Flat array of 42 Dates (6×7) for a month grid, padded to a Sunday start. */
 export function buildMonthDays(month: Date): Date[] {
   const firstDay = new Date(month.getFullYear(), month.getMonth(), 1)
