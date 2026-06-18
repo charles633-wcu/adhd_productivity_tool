@@ -6,18 +6,22 @@
 
 import React, { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from 'react'
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion'
-import { ChevronLeft, ChevronRight, FolderOpen, Link2, Maximize2, Minimize2, Plus } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, FolderOpen, Link2, Maximize2, Minimize2, Plus, Rows3 } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { DayDetailModal } from '@/components/DayDetailModal'
 import { EventCategoryModal } from '@/components/EventCategoryModal'
 import { EventDetailSheet } from '@/components/EventDetailSheet'
 import { IcsModal } from '@/components/IcsModal'
+import { VerticalCalendar } from '@/components/VerticalCalendar'
 import type { EventOccurrence } from '@/lib/types/calendar'
 import {
-  DOW, MONTHS, toLocalDateKey, startOfLocalToday, monthLabel,
+  DOW, MONTHS, toLocalDateKey, startOfLocalToday, monthLabel, monthAnchorKey,
   formatAccessibleDate, dateLabel, timeLabel, compactTimeLabel,
-  dateFromKey, buildMonthDays,
+  dateFromKey, buildMonthDays, buildMonthRange, extendMonthRange,
 } from '@/lib/calendar/calendarView'
+
+// localStorage key persisting the user's calendar view preference.
+const VIEW_STORAGE_KEY = 'sentinel.calendarView'
 
 type CalendarEventItem = {
   occurrenceId: string
@@ -89,6 +93,21 @@ export function CalendarClient({
   const [isExpanded, setIsExpanded] = useState(false)
   const wheelState = useRef({ amount: 0, direction: 0, lastFlipAt: 0, streak: 0 })
   const isInitialMount = useRef(true)
+
+  // View mode — 'scroll' (vertical, default) or 'month' (horizontal carousel),
+  // persisted to localStorage. Lazy initializer reads the stored preference.
+  const [viewMode, setViewMode] = useState<'scroll' | 'month'>(() => {
+    if (typeof window === 'undefined') return 'scroll'
+    return window.localStorage.getItem(VIEW_STORAGE_KEY) === 'month' ? 'month' : 'scroll'
+  })
+  useEffect(() => {
+    if (typeof window !== 'undefined') window.localStorage.setItem(VIEW_STORAGE_KEY, viewMode)
+  }, [viewMode])
+
+  // Loaded month anchors for the vertical scroll view (12 back / 12 forward),
+  // extended lazily as the user scrolls or jumps. A pending key drives auto-scroll.
+  const [monthRange, setMonthRange] = useState(() => buildMonthRange(today, 12, 12))
+  const [scrollToKey, setScrollToKey] = useState<string | null>(null)
 
   // Re-fetch the event window whenever the user navigates to a new month.
   // Skip the very first render — the server already supplied initialEvents.
@@ -212,15 +231,59 @@ export function CalendarClient({
     setModalDay(key)
   }
 
-  // Repeat fields are intentionally not re-expanded here — repeat changes reflect after next month navigation (accepted tradeoff).
-  async function loadMonth(month: Date) {
-    const rangeFrom = new Date(month.getFullYear(), month.getMonth() - 3, 1)
-    const rangeTo = new Date(month.getFullYear(), month.getMonth() + 7, 0, 23, 59, 59, 999)
-    const params = new URLSearchParams({ from: rangeFrom.toISOString(), to: rangeTo.toISOString() })
+  // Fetch events in [from, to]. Replaces local events by default, or merges
+  // (dedupe by occurrenceId) when extending the vertical view's loaded window.
+  // Repeat fields are intentionally not re-expanded here — repeat changes reflect after next navigation (accepted tradeoff).
+  async function loadRange(from: Date, to: Date, opts: { merge?: boolean } = {}) {
+    const params = new URLSearchParams({ from: from.toISOString(), to: to.toISOString() })
     const res = await fetch(`/api/calendar/events?${params}`)
     if (!res?.ok) return
     const events = await res.json() as CalendarEventItem[]
-    setLocalEvents(events)
+    setLocalEvents(prev => {
+      if (!opts.merge) return events
+      const byId = new Map(prev.map(e => [e.occurrenceId, e]))
+      for (const e of events) byId.set(e.occurrenceId, e)
+      return [...byId.values()]
+    })
+  }
+
+  // Carousel month navigation loads a ±window around the centered month.
+  async function loadMonth(month: Date) {
+    const rangeFrom = new Date(month.getFullYear(), month.getMonth() - 3, 1)
+    const rangeTo = new Date(month.getFullYear(), month.getMonth() + 7, 0, 23, 59, 59, 999)
+    await loadRange(rangeFrom, rangeTo)
+  }
+
+  // In scroll mode, keep events loaded across the full month range (merging so
+  // server-supplied initialEvents and prior fetches are preserved).
+  useEffect(() => {
+    if (viewMode !== 'scroll' || monthRange.length === 0) return
+    const first = monthRange[0]
+    const last = monthRange[monthRange.length - 1]
+    const to = new Date(last.getFullYear(), last.getMonth() + 1, 0, 23, 59, 59, 999)
+    void loadRange(first, to, { merge: true })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, monthRange])
+
+  // Scroll-view callbacks.
+  function handleScrollSelectDay(key: string) {
+    setModalStartsInAddMode(false)
+    setModalDay(key)
+  }
+
+  function handleReachEnd(side: 'past' | 'future') {
+    setMonthRange(r => extendMonthRange(r, side, 6))
+  }
+
+  function handleJumpRequest(month: Date) {
+    setMonthRange(buildMonthRange(month, 12, 12))
+    setScrollToKey(monthAnchorKey(month))
+  }
+
+  function jumpToToday() {
+    const key = monthAnchorKey(today)
+    if (!monthRange.some(m => monthAnchorKey(m) === key)) setMonthRange(buildMonthRange(today, 12, 12))
+    setScrollToKey(key)
   }
 
   function renderCalendarCard(month: Date, role: 'prev' | 'center' | 'next') {
@@ -457,9 +520,39 @@ export function CalendarClient({
       <div className="shrink-0 px-3 pb-3">
         <div
           data-testid="calendar-controls-island"
-          className="mx-auto flex w-full max-w-xl flex-wrap items-center justify-end gap-2 rounded-full border border-border/60 bg-background/90 px-3 py-2 shadow-lg backdrop-blur-md"
+          className="mx-auto flex w-full max-w-xl flex-wrap items-center justify-between gap-2 rounded-full border border-border/60 bg-background/90 px-3 py-2 shadow-lg backdrop-blur-md"
         >
+          {/* Segmented view toggle — Scroll (vertical, default) vs Month (carousel) */}
+          <div data-testid="calendar-view-toggle" className="flex items-center gap-1 rounded-full bg-muted/50 p-0.5">
+            <button
+              type="button"
+              aria-pressed={viewMode === 'scroll'}
+              onClick={() => setViewMode('scroll')}
+              className={`flex h-8 items-center gap-1.5 rounded-full px-3 text-xs transition-colors ${viewMode === 'scroll' ? 'bg-background font-semibold text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              <Rows3 className="h-3.5 w-3.5" />
+              Scroll
+            </button>
+            <button
+              type="button"
+              aria-pressed={viewMode === 'month'}
+              onClick={() => setViewMode('month')}
+              className={`flex h-8 items-center gap-1.5 rounded-full px-3 text-xs transition-colors ${viewMode === 'month' ? 'bg-background font-semibold text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              <CalendarDays className="h-3.5 w-3.5" />
+              Month
+            </button>
+          </div>
+
           <div className="flex min-w-0 items-center gap-2">
+            {viewMode === 'scroll' && (
+              <button
+                onClick={jumpToToday}
+                className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-xs transition-colors hover:bg-muted"
+              >
+                Today
+              </button>
+            )}
             <button
               onClick={() => setManageCatsOpen(true)}
               className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-xs transition-colors hover:bg-muted"
@@ -479,6 +572,22 @@ export function CalendarClient({
       </div>
 
       <div className="flex-1 overflow-hidden px-3 py-2">
+        {viewMode === 'scroll' ? (
+          <div className="mx-auto h-full max-w-3xl">
+            <VerticalCalendar
+              today={today}
+              months={monthRange}
+              eventsByDate={eventsByDate}
+              icsEventsByDate={icsEventsByDate}
+              categories={categories}
+              onSelectDay={handleScrollSelectDay}
+              onReachEnd={handleReachEnd}
+              onJumpRequest={handleJumpRequest}
+              scrollToKey={scrollToKey}
+              onScrolled={() => setScrollToKey(null)}
+            />
+          </div>
+        ) : (
         <div data-testid="calendar-stack" className={`mx-auto flex max-w-7xl ${isExpanded && selectedDay ? 'h-full flex-row items-start gap-3' : 'flex-col items-center gap-1'}`}>
           {/* Left panel — visible only in expanded view when a day is selected */}
           {isExpanded && selectedDay && selectedDate && (
@@ -645,6 +754,7 @@ export function CalendarClient({
             </motion.section>
           )}
         </div>
+        )}
       </div>
 
       {modalDay && modalDate && (

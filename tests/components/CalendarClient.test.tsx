@@ -28,15 +28,29 @@ function localIso(year: number, monthIndex: number, day: number, hour: number, m
   return new Date(year, monthIndex, day, hour, minute).toISOString()
 }
 
+// jsdom lacks IntersectionObserver — the vertical view guards against its
+// absence, but provide an inert mock so nothing throws when it mounts.
+beforeEach(() => {
+  vi.stubGlobal('IntersectionObserver', class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() { return [] }
+  })
+})
+
 describe('CalendarClient', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [] }))
+    // These tests exercise the horizontal carousel, which is now opt-in.
+    localStorage.setItem('sentinel.calendarView', 'month')
   })
 
   afterEach(() => {
     vi.useRealTimers()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+    localStorage.clear()
   })
 
   it('uses deterministic date labels instead of the runtime locale', () => {
@@ -518,4 +532,43 @@ describe('CalendarClient', () => {
     expect(within(screen.getByTestId('selected-day-dock')).getByText('Planning')).toBeTruthy()
   })
 
+})
+
+describe('CalendarClient view toggle', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [] }))
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    localStorage.clear()
+  })
+
+  it('defaults to the vertical scroll view when no preference is stored', () => {
+    render(<CalendarClient {...baseProps} />)
+    expect(document.querySelector('[data-month]')).toBeTruthy()
+    expect(screen.queryByTestId('month-carousel')).toBeNull()
+  })
+
+  it('switches to the carousel and persists the choice when Month is clicked', () => {
+    render(<CalendarClient {...baseProps} />)
+    fireEvent.click(within(screen.getByTestId('calendar-view-toggle')).getByRole('button', { name: /month/i }))
+    expect(screen.getByTestId('month-carousel')).toBeTruthy()
+    expect(localStorage.getItem('sentinel.calendarView')).toBe('month')
+  })
+
+  it('honors a stored month preference on mount', () => {
+    localStorage.setItem('sentinel.calendarView', 'month')
+    render(<CalendarClient {...baseProps} />)
+    expect(screen.getByTestId('month-carousel')).toBeTruthy()
+    expect(document.querySelector('[data-month]')).toBeNull()
+  })
+
+  it('opens the day-detail modal when a day is clicked in the scroll view', () => {
+    render(<CalendarClient {...baseProps} />)
+    // First in-month (clickable) day cell in the scroll view.
+    const dayCell = document.querySelector('[data-testid^="vcal-day-"][role="button"]') as HTMLElement
+    fireEvent.click(dayCell)
+    expect(screen.getByTestId('add-event-editor-overlay')).toBeTruthy()
+  })
 })

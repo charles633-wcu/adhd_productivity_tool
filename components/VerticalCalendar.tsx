@@ -53,6 +53,8 @@ interface VerticalCalendarProps {
   onSelectDay: (key: string) => void
   onReachEnd?: (side: 'past' | 'future') => void
   onJumpRequest?: (month: Date) => void
+  scrollToKey?: string | null
+  onScrolled?: () => void
 }
 
 const DEFAULT_DOT = '#6366f1'
@@ -68,6 +70,7 @@ interface Chip {
 
 export function VerticalCalendar({
   today, months, eventsByDate, icsEventsByDate, categories, onSelectDay, onReachEnd, onJumpRequest,
+  scrollToKey, onScrolled,
 }: VerticalCalendarProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const topSentinel = useRef<HTMLDivElement | null>(null)
@@ -160,6 +163,18 @@ export function VerticalCalendar({
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
+
+  // Auto-scroll to a requested month (quick-jump outside range, or "Today")
+  // once that section is present, then signal the parent to clear the request.
+  useEffect(() => {
+    if (!scrollToKey) return
+    const el = scrollRef.current?.querySelector(`[data-month="${scrollToKey}"]`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      onScrolled?.()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollToKey, months.length])
 
   // Track the top-most visible month section to drive the quick-jump pill label.
   useEffect(() => {
