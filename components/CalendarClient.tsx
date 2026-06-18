@@ -15,7 +15,7 @@ import { IcsModal } from '@/components/IcsModal'
 import { VerticalCalendar } from '@/components/VerticalCalendar'
 import type { EventOccurrence } from '@/lib/types/calendar'
 import {
-  DOW, MONTHS, toLocalDateKey, startOfLocalToday, monthLabel, monthAnchorKey,
+  DOW, toLocalDateKey, startOfLocalToday, monthLabel, monthAnchorKey,
   formatAccessibleDate, dateLabel, timeLabel, compactTimeLabel,
   dateFromKey, buildMonthDays, buildMonthRange, extendMonthRange,
 } from '@/lib/calendar/calendarView'
@@ -262,7 +262,6 @@ export function CalendarClient({
     const last = monthRange[monthRange.length - 1]
     const to = new Date(last.getFullYear(), last.getMonth() + 1, 0, 23, 59, 59, 999)
     void loadRange(first, to, { merge: true })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode, monthRange])
 
   // Scroll-view callbacks.
