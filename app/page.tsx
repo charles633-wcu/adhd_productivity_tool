@@ -7,6 +7,7 @@ import { HomePill } from '@/components/HomePill'
 import { CategoryCanvas } from '@/components/CategoryCanvas'
 import { TriggerStatusSummary } from '@/components/TriggerStatusSummary'
 import { ChatFab } from '@/components/ChatFab'
+import { ScratchPadFab } from '@/components/scratch/ScratchPadFab'
 import { getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db/client'
 import { categories, triggers } from '@/lib/db/schema'
@@ -119,6 +120,7 @@ export default async function HomePage() {
       </div>
 
       <ChatFab />
+      <ScratchPadFab />
 
       {categoriesWithCounts.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center px-6">
