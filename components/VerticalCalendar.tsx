@@ -15,7 +15,11 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   DOW, MONTHS, DAY_EVENT_CAP, monthAnchorKey, toLocalDateKey, monthLabel,
   formatAccessibleDate, compactTimeLabel, truncateTitle, capDayEvents, buildMonthDays,
+  accelerationMultiplier,
 } from '@/lib/calendar/calendarView'
+
+// Window (ms) within which consecutive same-direction wheel events build a streak.
+const ACCEL_WINDOW_MS = 250
 
 type CalendarEventItem = {
   occurrenceId: string
@@ -127,6 +131,35 @@ export function VerticalCalendar({
     if (bottomSentinel.current) obs.observe(bottomSentinel.current)
     return () => obs.disconnect()
   }, [onReachEnd, months.length])
+
+  // Velocity fast-scroll: amplify vertical wheel deltas by a multiplier that
+  // grows with a sustained same-direction streak, so a hard flick covers many
+  // months quickly while a gentle scroll stays 1:1. Degrades to native scroll
+  // under prefers-reduced-motion. Attached non-passively so preventDefault works.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+
+    const state = { direction: 0, lastAt: 0, streak: 0 }
+    function onWheel(e: WheelEvent) {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return // horizontal intent — leave it
+      const dir = e.deltaY > 0 ? 1 : -1
+      const now = Date.now()
+      if (dir === state.direction && now - state.lastAt < ACCEL_WINDOW_MS) state.streak += 1
+      else state.streak = 1
+      state.direction = dir
+      state.lastAt = now
+
+      const mult = accelerationMultiplier(state.streak)
+      if (mult > 1) {
+        e.preventDefault()
+        el!.scrollTop += e.deltaY * mult
+      }
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
 
   // Track the top-most visible month section to drive the quick-jump pill label.
   useEffect(() => {
