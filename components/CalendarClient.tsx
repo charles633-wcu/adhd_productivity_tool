@@ -13,6 +13,11 @@ import { EventCategoryModal } from '@/components/EventCategoryModal'
 import { EventDetailSheet } from '@/components/EventDetailSheet'
 import { IcsModal } from '@/components/IcsModal'
 import type { EventOccurrence } from '@/lib/types/calendar'
+import {
+  DOW, MONTHS, toLocalDateKey, startOfLocalToday, monthLabel,
+  formatAccessibleDate, dateLabel, timeLabel, compactTimeLabel,
+  dateFromKey, buildMonthDays,
+} from '@/lib/calendar/calendarView'
 
 type CalendarEventItem = {
   occurrenceId: string
@@ -59,68 +64,8 @@ interface CalendarClientProps {
   icsUrl: string | null
 }
 
-const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-const MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-]
-
-function toLocalDateKey(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function startOfLocalToday() {
-  const d = new Date()
-  d.setHours(0, 0, 0, 0)
-  return d
-}
-
-function monthLabel(d: Date) {
-  return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`
-}
-
-function formatAccessibleDate(d: Date) {
-  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
-}
-
-function dateLabel(d: Date) {
-  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
-}
-
-function timeLabel(d: Date) {
-  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-}
-
-function compactTimeLabel(value: string) {
-  const d = new Date(value)
-  const [time, period] = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true }).split(' ')
-  return `${time}${period?.toLowerCase() ?? ''}`
-}
-
-function dateFromKey(key: string) {
-  const [year, month, day] = key.split('-').map(Number)
-  return new Date(year, month - 1, day)
-}
-
-function buildMonthDays(month: Date) {
-  const firstDay = new Date(month.getFullYear(), month.getMonth(), 1)
-  const startDow = firstDay.getDay()
-  return Array.from({ length: 42 }, (_, i) => {
-    const d = new Date(firstDay)
-    d.setDate(1 - startDow + i)
-    return d
-  })
-}
+// Date/format helpers (DOW, MONTHS, toLocalDateKey, buildMonthDays, etc.)
+// now live in lib/calendar/calendarView.ts and are shared with VerticalCalendar.
 
 export function CalendarClient({
   initialEvents,

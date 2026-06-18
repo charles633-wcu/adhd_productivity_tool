@@ -4,6 +4,69 @@
 export const MAX_TITLE_CHARS = 13
 export const DAY_EVENT_CAP = 8
 
+// Day-of-week (Sun-indexed) and month labels — shared by both calendar views.
+export const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+export const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
+
+/** Local-time "YYYY-MM-DD" key for a Date (used to bucket events by day). */
+export function toLocalDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** Start of today at local midnight. */
+export function startOfLocalToday(): Date {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+/** "June 2026" style month + year label. */
+export function monthLabel(d: Date): string {
+  return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`
+}
+
+/** "June 17, 2026" — used for accessible day labels. */
+export function formatAccessibleDate(d: Date): string {
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
+}
+
+/** "Wed, Jun 17" — short weekday/month/day label. */
+export function dateLabel(d: Date): string {
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
+/** Locale time label, e.g. "9:00 AM". */
+export function timeLabel(d: Date): string {
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+}
+
+/** Compact time label from an ISO string, e.g. "9am", "10:30pm". */
+export function compactTimeLabel(value: string): string {
+  const d = new Date(value)
+  const [time, period] = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true }).split(' ')
+  return `${time}${period?.toLowerCase() ?? ''}`
+}
+
+/** Parse a "YYYY-MM-DD" key back into a local Date. */
+export function dateFromKey(key: string): Date {
+  const [year, month, day] = key.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
+/** Flat array of 42 Dates (6×7) for a month grid, padded to a Sunday start. */
+export function buildMonthDays(month: Date): Date[] {
+  const firstDay = new Date(month.getFullYear(), month.getMonth(), 1)
+  const startDow = firstDay.getDay()
+  return Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(firstDay)
+    d.setDate(1 - startDow + i)
+    return d
+  })
+}
+
 /** Hard-truncate a title to `max` chars, appending an ellipsis when cut. */
 export function truncateTitle(title: string, max = MAX_TITLE_CHARS): string {
   return title.length > max ? title.slice(0, max) + '…' : title

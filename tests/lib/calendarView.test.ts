@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   truncateTitle, buildMonthRange, extendMonthRange,
   capDayEvents, accelerationMultiplier, monthAnchorKey,
+  toLocalDateKey, buildMonthDays, monthLabel, dateFromKey,
 } from '@/lib/calendar/calendarView'
 
 describe('truncateTitle', () => {
@@ -60,6 +61,21 @@ describe('capDayEvents', () => {
     const { shown, overflow } = capDayEvents(items, 8)
     expect(shown).toHaveLength(7) // 7 chips + 1 "+N more" line = 8 rows
     expect(overflow).toBe(4)
+  })
+})
+
+describe('shared date helpers (extracted from CalendarClient)', () => {
+  it('toLocalDateKey formats YYYY-MM-DD in local time', () => {
+    expect(toLocalDateKey(new Date(2026, 5, 7))).toBe('2026-06-07')
+  })
+  it('buildMonthDays returns 42 days starting on a Sunday', () => {
+    const days = buildMonthDays(new Date(2026, 5, 1))
+    expect(days).toHaveLength(42)
+    expect(days[0].getDay()).toBe(0) // Sunday-aligned start
+  })
+  it('monthLabel and dateFromKey round-trip', () => {
+    expect(monthLabel(new Date(2026, 5, 1))).toBe('June 2026')
+    expect(toLocalDateKey(dateFromKey('2026-06-17'))).toBe('2026-06-17')
   })
 })
 
