@@ -325,7 +325,6 @@ export function VerticalCalendar({
           const above = new Date(day); above.setDate(day.getDate() - 7)
           const isTopEdge = above.getMonth() !== day.getMonth()
           const isLeftEdge = isFirst && day.getDay() !== 0
-          const onBoundary = isTopEdge || isLeftEdge
           // Faint alternating tint per absolute month so bounds read at a glance.
           const tinted = ((day.getFullYear() * 12 + day.getMonth()) % 2) === 0
           const { shown, overflow } = capDayEvents(chipsForDay(key), DAY_EVENT_CAP)
@@ -342,9 +341,9 @@ export function VerticalCalendar({
               onKeyDown={e => {
                 if (e.key === 'Enter' || e.key === ' ') { if (e.key === ' ') e.preventDefault(); onSelectDay(key) }
               }}
-              style={onBoundary ? { boxShadow: '0 0 7px rgba(56,189,248,0.55)' } : undefined}
               className={[
-                'flex min-h-[8.6rem] cursor-pointer flex-col gap-0.5 p-1 text-foreground transition-colors hover:bg-muted/30',
+                'flex min-h-[8.6rem] cursor-pointer flex-col gap-0.5 p-1 text-foreground transition-all',
+                'hover:bg-sky-400/5 hover:ring-1 hover:ring-inset hover:ring-sky-400/60 hover:shadow-[0_0_14px_rgba(56,189,248,0.35)]',
                 tinted ? 'bg-muted/20' : '',
                 isTopEdge ? 'border-t-2 border-sky-400/80' : '',
                 isLeftEdge ? 'border-l-2 border-sky-400/80' : '',
