@@ -55,6 +55,8 @@ interface VerticalCalendarProps {
   onJumpRequest?: (month: Date) => void
   scrollToKey?: string | null
   onScrolled?: () => void
+  zoom?: number
+  onZoomDelta?: (delta: number) => void
 }
 
 const DEFAULT_DOT = '#6366f1'
@@ -70,7 +72,7 @@ interface Chip {
 
 export function VerticalCalendar({
   today, months, eventsByDate, icsEventsByDate, categories, onSelectDay, onReachEnd, onJumpRequest,
-  scrollToKey, onScrolled,
+  scrollToKey, onScrolled, zoom = 1, onZoomDelta,
 }: VerticalCalendarProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const topSentinel = useRef<HTMLDivElement | null>(null)
@@ -87,7 +89,9 @@ export function VerticalCalendar({
     const el = root?.querySelector(`[data-month="${key}"]`) as HTMLElement | null
     if (!root || !el) return false
     const offset = headerRef.current?.offsetHeight ?? 0
-    const top = Math.max(0, el.offsetTop - offset)
+    // offsetTop/offsetHeight are reported in unzoomed layout px, but scrollTop is
+    // in rendered px — scale by the active zoom so the target lands correctly.
+    const top = Math.max(0, (el.offsetTop - offset) * zoom)
     if (smooth && typeof root.scrollTo === 'function') {
       root.scrollTo({ top, behavior: 'smooth' })
     } else {
@@ -157,6 +161,8 @@ export function VerticalCalendar({
     }
     prevFirstKey.current = firstKey
     prevScrollHeight.current = root.scrollHeight
+  // Runs on mount (init scroll) and range changes (prepend preservation) only.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [months, today])
 
   // Observe top/bottom sentinels to lazily extend the loaded range.
@@ -186,6 +192,12 @@ export function VerticalCalendar({
 
     const state = { direction: 0, lastAt: 0, streak: 0 }
     function onWheel(e: WheelEvent) {
+      // Ctrl+wheel zooms the calendar (not the page).
+      if (e.ctrlKey) {
+        e.preventDefault()
+        onZoomDelta?.(e.deltaY < 0 ? 0.1 : -0.1)
+        return
+      }
       if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return // horizontal intent — leave it
       const dir = e.deltaY > 0 ? 1 : -1
       const now = Date.now()
@@ -202,6 +214,8 @@ export function VerticalCalendar({
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
+  // onZoomDelta uses a functional state update, so a stable empty-deps listener is fine.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Auto-scroll to a requested month (quick-jump outside range, or "Today")
@@ -233,8 +247,12 @@ export function VerticalCalendar({
     <div
       ref={scrollRef}
       data-testid="vertical-calendar"
-      className="relative h-full w-full overflow-y-auto"
+      className="relative h-full w-full overflow-auto"
     >
+      {/* Zoomable content column — `zoom` scales the calendar within this
+          scroll container only (the page is unaffected); fixed width so it
+          centres and the container scrolls when zoomed past the viewport. */}
+      <div className="mx-auto w-[52rem]" style={{ zoom }}>
       <div ref={topSentinel} aria-hidden="true" className="h-px w-full" />
 
       {/* Sticky HUD — translucent header carrying the quick-jump pill and the
@@ -384,6 +402,7 @@ export function VerticalCalendar({
       </div>
 
       <div ref={bottomSentinel} aria-hidden="true" className="h-px w-full" />
+      </div>
     </div>
   )
 }

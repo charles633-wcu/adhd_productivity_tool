@@ -109,6 +109,13 @@ export function CalendarClient({
   const [monthRange, setMonthRange] = useState(() => buildMonthRange(today, 12, 12))
   const [scrollToKey, setScrollToKey] = useState<string | null>(null)
 
+  // Calendar-only zoom (scales the grid inside its scroll container, not the
+  // page). Defaults to 1.3 so the calendar opens 30% larger; user-adjustable.
+  const [zoom, setZoom] = useState(1.3)
+  function adjustZoom(delta: number) {
+    setZoom(z => Math.min(2.5, Math.max(0.7, Math.round((z + delta) * 100) / 100)))
+  }
+
   // Re-fetch the event window whenever the user navigates to a new month.
   // Skip the very first render — the server already supplied initialEvents.
   useEffect(() => {
@@ -545,12 +552,33 @@ export function CalendarClient({
 
           <div className="flex min-w-0 items-center gap-2">
             {viewMode === 'scroll' && (
-              <button
-                onClick={jumpToToday}
-                className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-xs transition-colors hover:bg-muted"
-              >
-                Today
-              </button>
+              <>
+                <div data-testid="calendar-zoom" className="flex items-center gap-0.5 rounded-full border border-border px-1">
+                  <button
+                    type="button"
+                    aria-label="Zoom out"
+                    onClick={() => adjustZoom(-0.15)}
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-base leading-none transition-colors hover:bg-muted"
+                  >
+                    −
+                  </button>
+                  <span className="w-9 text-center text-[11px] tabular-nums text-muted-foreground">{Math.round(zoom * 100)}%</span>
+                  <button
+                    type="button"
+                    aria-label="Zoom in"
+                    onClick={() => adjustZoom(0.15)}
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-base leading-none transition-colors hover:bg-muted"
+                  >
+                    +
+                  </button>
+                </div>
+                <button
+                  onClick={jumpToToday}
+                  className="flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-xs transition-colors hover:bg-muted"
+                >
+                  Today
+                </button>
+              </>
             )}
             <button
               onClick={() => setManageCatsOpen(true)}
@@ -572,7 +600,7 @@ export function CalendarClient({
 
       <div className="flex-1 overflow-hidden px-3 py-2">
         {viewMode === 'scroll' ? (
-          <div className="mx-auto h-full max-w-[53rem]">
+          <div className="mx-auto h-full w-full">
             <VerticalCalendar
               today={today}
               months={monthRange}
@@ -584,6 +612,8 @@ export function CalendarClient({
               onJumpRequest={handleJumpRequest}
               scrollToKey={scrollToKey}
               onScrolled={() => setScrollToKey(null)}
+              zoom={zoom}
+              onZoomDelta={adjustZoom}
             />
           </div>
         ) : (
