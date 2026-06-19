@@ -311,16 +311,21 @@ export function VerticalCalendar({
       {/* Continuous grid — one gapless run of weeks. Months flow into each
           other; each month is faintly tinted and bounded by a bold top/bottom
           edge, and its first day carries a "Mon YYYY" tab instead of the "1". */}
-      <div className="grid grid-cols-7 gap-1 px-3 pb-8">
+      {/* gap-0 so cell edges touch and the blue month-divider segments join
+          into one unbroken staircase line. */}
+      <div className="grid grid-cols-7 gap-0 px-3 pb-8">
         {days.map(day => {
           const key = toLocalDateKey(day)
           const isToday = key === todayKey
           const isFirst = day.getDate() === 1
-          // Month bounds: an edge exists where the cell 7 days above/below is a different month.
+          // Continuous month divider: a glowing blue rule along the TOP of any
+          // cell whose neighbour 7 days up is a different month, plus down the
+          // LEFT of the month's first day when it isn't a Sunday. These segments
+          // meet at the corner to form one unbroken staircase between months.
           const above = new Date(day); above.setDate(day.getDate() - 7)
-          const below = new Date(day); below.setDate(day.getDate() + 7)
           const isTopEdge = above.getMonth() !== day.getMonth()
-          const isBottomEdge = below.getMonth() !== day.getMonth()
+          const isLeftEdge = isFirst && day.getDay() !== 0
+          const onBoundary = isTopEdge || isLeftEdge
           // Faint alternating tint per absolute month so bounds read at a glance.
           const tinted = ((day.getFullYear() * 12 + day.getMonth()) % 2) === 0
           const { shown, overflow } = capDayEvents(chipsForDay(key), DAY_EVENT_CAP)
@@ -337,11 +342,12 @@ export function VerticalCalendar({
               onKeyDown={e => {
                 if (e.key === 'Enter' || e.key === ' ') { if (e.key === ' ') e.preventDefault(); onSelectDay(key) }
               }}
+              style={onBoundary ? { boxShadow: '0 0 7px rgba(56,189,248,0.55)' } : undefined}
               className={[
-                'flex min-h-[8.6rem] cursor-pointer flex-col gap-0.5 rounded-md p-1 text-foreground transition-colors hover:bg-muted/40',
+                'flex min-h-[8.6rem] cursor-pointer flex-col gap-0.5 p-1 text-foreground transition-colors hover:bg-muted/30',
                 tinted ? 'bg-muted/20' : '',
-                isTopEdge ? 'border-t-2 border-foreground/25' : '',
-                isBottomEdge ? 'border-b-2 border-foreground/15' : '',
+                isTopEdge ? 'border-t-2 border-sky-400/80' : '',
+                isLeftEdge ? 'border-l-2 border-sky-400/80' : '',
               ].filter(Boolean).join(' ')}
             >
               {isFirst ? (
