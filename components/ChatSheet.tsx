@@ -59,7 +59,7 @@ export function ChatSheet({ open, onOpenChange }: ChatSheetProps) {
         if (cancelled || !data.due || data.notes.length === 0) return
         const lines = data.notes.map(n => `• ${n.content}`).join('\n')
         const reply =
-          `⏰ Daily check-in — you still have ${data.notes.length} thing${data.notes.length === 1 ? '' : 's'} on your Quick Notes pad:\n${lines}\nWant to tackle any of these?`
+          `⏰ Daily check-in — you still have ${data.notes.length} thing${data.notes.length === 1 ? '' : 's'} on your to-do list:\n${lines}\nWant to tackle any of these?`
         setMessages(prev => [...prev, { role: 'assistant', content: reply }])
         fetch('/api/scratch-notes/reminder', { method: 'POST' }).catch(() => {})
       })

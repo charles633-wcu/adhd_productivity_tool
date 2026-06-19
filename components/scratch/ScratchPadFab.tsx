@@ -88,7 +88,7 @@ export function ScratchPadFab() {
     <>
       <button
         type="button"
-        aria-label="Open quick notes"
+        aria-label="Open to-do list"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}

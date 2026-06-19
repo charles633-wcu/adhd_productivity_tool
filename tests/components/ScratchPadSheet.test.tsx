@@ -27,7 +27,7 @@ it('optimistically appends a note on add', async () => {
   render(<ScratchPadSheet open onOpenChange={vi.fn()} />)
   // Wait for the initial load to settle before adding (avoids a load-vs-append race).
   await waitFor(() => expect(screen.getByText('milk')).toBeInTheDocument())
-  const input = screen.getByPlaceholderText(/add a note/i)
+  const input = screen.getByPlaceholderText(/add an item/i)
   fireEvent.change(input, { target: { value: 'eggs' } })
   fireEvent.submit(input.closest('form')!)
   await waitFor(() => expect(screen.getByText('eggs')).toBeInTheDocument())
@@ -36,6 +36,6 @@ it('optimistically appends a note on add', async () => {
 it('closes via the close button', () => {
   const onOpenChange = vi.fn()
   render(<ScratchPadSheet open onOpenChange={onOpenChange} />)
-  fireEvent.click(screen.getByRole('button', { name: /close notes/i }))
+  fireEvent.click(screen.getByRole('button', { name: /close/i }))
   expect(onOpenChange).toHaveBeenCalledWith(false)
 })
