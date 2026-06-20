@@ -4,11 +4,32 @@ import { ChatSheet } from '@/components/ChatSheet'
 
 global.fetch = vi.fn()
 
+type FetchMock = ReturnType<typeof vi.fn>
+const fetchMock = () => fetch as FetchMock
+
+// ChatSheet fetches /api/scratch-notes/reminder on open. A URL-aware default mock
+// serves that endpoint (not-due by default) so chat-send assertions stay isolated.
+// Tests that need a specific chat response override only the '/api/chat' branch.
+function mockReminder(due: boolean, notes: { content: string }[] = []) {
+  return { ok: true, json: async () => ({ due, notes }) }
+}
+
+function installFetch(chatHandler?: (url: string, opts?: RequestInit) => unknown) {
+  fetchMock().mockImplementation((url: string, opts?: RequestInit) => {
+    if (typeof url === 'string' && url.includes('/api/scratch-notes/reminder')) {
+      return Promise.resolve(mockReminder(false))
+    }
+    if (chatHandler) return Promise.resolve(chatHandler(url, opts))
+    return Promise.resolve({ ok: true, json: async () => ({ reply: 'default' }) })
+  })
+}
+
 describe('ChatSheet', () => {
   const onOpenChange = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
+    installFetch()
   })
 
   it('renders greeting when no messages', () => {
@@ -23,10 +44,7 @@ describe('ChatSheet', () => {
   })
 
   it('sends a message and displays assistant reply', async () => {
-    ;(fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ reply: 'Here are your triggers.' }),
-    })
+    installFetch(() => ({ ok: true, json: async () => ({ reply: 'Here are your triggers.' }) }))
 
     render(<ChatSheet open={true} onOpenChange={onOpenChange} />)
     const input = screen.getByPlaceholderText(/ask anything/i)
@@ -37,7 +55,7 @@ describe('ChatSheet', () => {
   })
 
   it('shows error message when API fails', async () => {
-    ;(fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ ok: false })
+    installFetch(() => ({ ok: false }))
 
     render(<ChatSheet open={true} onOpenChange={onOpenChange} />)
     const input = screen.getByPlaceholderText(/ask anything/i)
@@ -48,10 +66,7 @@ describe('ChatSheet', () => {
   })
 
   it('shows actionable server error messages when API returns one', async () => {
-    ;(fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      ok: false,
-      json: async () => ({ message: 'The OpenAI quota for this API key is exhausted.' }),
-    })
+    installFetch(() => ({ ok: false, json: async () => ({ message: 'The OpenAI quota for this API key is exhausted.' }) }))
 
     render(<ChatSheet open={true} onOpenChange={onOpenChange} />)
     const input = screen.getByPlaceholderText(/ask anything/i)
@@ -73,10 +88,7 @@ describe('ChatSheet', () => {
   })
 
   it('sends debug:true when dev mode is on', async () => {
-    ;(fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ reply: 'Got it.', trace: [] }),
-    })
+    installFetch(() => ({ ok: true, json: async () => ({ reply: 'Got it.', trace: [] }) }))
     render(<ChatSheet open={true} onOpenChange={onOpenChange} />)
     fireEvent.click(screen.getByRole('button', { name: /dev/i }))
 
@@ -84,8 +96,46 @@ describe('ChatSheet', () => {
     fireEvent.change(input, { target: { value: 'search' } })
     fireEvent.submit(input.closest('form')!)
 
-    await waitFor(() => expect(fetch).toHaveBeenCalled())
-    const body = JSON.parse((fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body)
+    await waitFor(() => expect(fetchMock().mock.calls.some(c => c[0] === '/api/chat')).toBe(true))
+    const chatCall = fetchMock().mock.calls.find(c => c[0] === '/api/chat')!
+    const body = JSON.parse((chatCall[1] as RequestInit).body as string)
     expect(body.debug).toBe(true)
+  })
+
+  // ── Task 11: 24h scratch-notes reminder ─────────────────────────────
+  it('seeds a reminder message and stamps when due with unchecked notes', async () => {
+    fetchMock().mockImplementation((url: string) => {
+      if (url.includes('/api/scratch-notes/reminder')) {
+        return Promise.resolve(mockReminder(true, [{ content: 'buy milk' }]))
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ reply: 'x' }) })
+    })
+
+    render(<ChatSheet open={true} onOpenChange={onOpenChange} />)
+
+    await waitFor(() => expect(screen.getByText(/Daily check-in/i)).toBeInTheDocument())
+    expect(screen.getByText(/buy milk/)).toBeInTheDocument()
+    // POSTs to stamp the reminder
+    await waitFor(() =>
+      expect(fetchMock().mock.calls.some(c => c[0] === '/api/scratch-notes/reminder' && (c[1] as RequestInit)?.method === 'POST')).toBe(true)
+    )
+  })
+
+  it('shows no reminder and does not stamp when not due', async () => {
+    installFetch() // reminder due:false
+    render(<ChatSheet open={true} onOpenChange={onOpenChange} />)
+    await waitFor(() => expect(screen.getByText(/Hi I'm Your Sentinel/i)).toBeInTheDocument())
+    expect(screen.queryByText(/Daily check-in/i)).toBeNull()
+    expect(fetchMock().mock.calls.some(c => (c[1] as RequestInit)?.method === 'POST')).toBe(false)
+  })
+
+  it('shows no reminder when due but there are no unchecked notes', async () => {
+    fetchMock().mockImplementation((url: string) => {
+      if (url.includes('/api/scratch-notes/reminder')) return Promise.resolve(mockReminder(true, []))
+      return Promise.resolve({ ok: true, json: async () => ({ reply: 'x' }) })
+    })
+    render(<ChatSheet open={true} onOpenChange={onOpenChange} />)
+    await waitFor(() => expect(screen.getByText(/Hi I'm Your Sentinel/i)).toBeInTheDocument())
+    expect(screen.queryByText(/Daily check-in/i)).toBeNull()
   })
 })
