@@ -9,6 +9,7 @@
 import { FormEvent, useRef, useState, type PointerEvent } from 'react'
 import { ChevronRight, Loader2 } from 'lucide-react'
 import { RepeatPicker } from '@/components/RepeatPicker'
+import { CategoryPicker } from '@/components/CategoryPicker'
 import type { EventOccurrence } from '@/lib/types/calendar'
 
 interface IcsEventItem { uid: string; title: string; startAt: Date; endAt: Date }
@@ -35,6 +36,7 @@ interface DayDetailModalProps {
   onEventCreated: (event: CreatedCalendarEventItem) => void
   onEventDeleted?: (sourceEventId: string) => void
   onEditEvent?: (event: EventOccurrence) => void
+  onCategoriesChange?: (categories: EventCategoryItem[]) => void
 }
 
 function formatTime(d: Date) {
@@ -56,7 +58,7 @@ function isInteractiveTarget(target: EventTarget | null) {
 }
 
 export function DayDetailModal({
-  date, events, icsEvents, eventCategories, startInAddMode = false, onClose, onEventCreated, onEventDeleted = () => {}, onEditEvent = () => {},
+  date, events, icsEvents, eventCategories, startInAddMode = false, onClose, onEventCreated, onEventDeleted = () => {}, onEditEvent = () => {}, onCategoriesChange = () => {},
 }: DayDetailModalProps) {
   const [showForm, setShowForm] = useState(startInAddMode)
   const [title, setTitle] = useState('')
@@ -77,6 +79,8 @@ export function DayDetailModal({
   const formRef = useRef<HTMLFormElement | null>(null)
 
   const isEmpty = events.length === 0 && icsEvents.length === 0
+  // Color the new event will be added with (its category's color, gray if none).
+  const selectedColor = eventCategories.find(c => c.id === categoryId)?.color ?? '#6b7280'
 
   function buildDateTime(time: string) {
     const [h, m] = time.split(':').map(Number)
@@ -251,16 +255,25 @@ export function DayDetailModal({
 
           {showForm && (
             <form ref={formRef} id="add-event-form" onSubmit={handleSubmit} className="space-y-3 border-t border-border pt-4">
-              <input
-                required
-                placeholder="Title"
-                aria-label="Title"
-                autoFocus
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-                maxLength={100}
-                className="w-full rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/50"
-              />
+              <div className="flex items-center gap-2">
+                {/* Live preview of the color this event will be added with */}
+                <span
+                  data-testid="add-event-color-preview"
+                  aria-label="Event color"
+                  className="h-3.5 w-3.5 shrink-0 rounded-full ring-1 ring-inset ring-white/20"
+                  style={{ backgroundColor: selectedColor }}
+                />
+                <input
+                  required
+                  placeholder="Title"
+                  aria-label="Title"
+                  autoFocus
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  maxLength={100}
+                  className="w-full rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/50"
+                />
+              </div>
               <div className="flex gap-2">
                 <div className="flex-1">
                   <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Start</label>
@@ -280,21 +293,13 @@ export function DayDetailModal({
                   <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="w-full rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm" />
                 </div>
               </div>
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <RepeatPicker value={rrule} onChange={setRrule} />
-                </div>
-                <select
-                  value={categoryId}
-                  onChange={e => setCategoryId(e.target.value)}
-                  className="flex-1 rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm"
-                >
-                  <option value="">No category</option>
-                  {eventCategories.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
+              <RepeatPicker value={rrule} onChange={setRrule} />
+              <CategoryPicker
+                categories={eventCategories}
+                value={categoryId}
+                onChange={setCategoryId}
+                onCategoryCreated={cat => onCategoriesChange([...eventCategories, cat])}
+              />
               <textarea
                 placeholder="Notes (optional)"
                 value={notes}

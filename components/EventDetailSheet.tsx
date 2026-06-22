@@ -8,14 +8,17 @@ import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { RecurringEventScopeSheet, type RecurScope } from '@/components/RecurringEventScopeSheet'
 import { RepeatPicker } from '@/components/RepeatPicker'
+import { CategoryPicker, type PickerCategory } from '@/components/CategoryPicker'
 import { toNormalizedIso } from '@/lib/services/repeatExpander'
 import type { EventOccurrence } from '@/lib/types/calendar'
 
 export interface EventDetailSheetProps {
   event: EventOccurrence | null
+  categories: PickerCategory[]
   onClose: () => void
   onSaved: (sourceEventId: string) => void
   onDeleted: (sourceEventId: string) => void
+  onCategoriesChange: (categories: PickerCategory[]) => void
 }
 
 function toTimeStr(d: Date): string {
@@ -40,11 +43,12 @@ function isInteractiveTarget(target: EventTarget | null) {
   return target instanceof Element && target.closest('button, input, select, textarea, a, [role="button"]') !== null
 }
 
-export function EventDetailSheet({ event, onClose, onSaved, onDeleted }: EventDetailSheetProps) {
+export function EventDetailSheet({ event, categories, onClose, onSaved, onDeleted, onCategoriesChange }: EventDetailSheetProps) {
   const [title, setTitle] = useState('')
   const [startTime, setStartTime] = useState('09:00')
   const [endTime, setEndTime] = useState('10:00')
   const [rrule, setRrule] = useState<string | null>(null)
+  const [categoryId, setCategoryId] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -64,6 +68,7 @@ export function EventDetailSheet({ event, onClose, onSaved, onDeleted }: EventDe
     setStartTime(toTimeStr(event.startAt))
     setEndTime(toTimeStr(event.endAt))
     setRrule(event.rrule)
+    setCategoryId(event.categoryId ?? '')
     setShowScopeSheet(false)
     setError(null)
     setPosition({ x: 0, y: 0 })
@@ -133,6 +138,7 @@ export function EventDetailSheet({ event, onClose, onSaved, onDeleted }: EventDe
         startAt: buildDateTime(occurrence.startAt, startTime),
         endAt: buildDateTime(occurrence.endAt, endTime),
         rrule,
+        categoryId: categoryId || null,
       }
       if (occurrence.rrule) {
         body.scope = scope
@@ -245,6 +251,12 @@ export function EventDetailSheet({ event, onClose, onSaved, onDeleted }: EventDe
               </div>
             </div>
             <RepeatPicker value={rrule} onChange={setRrule} />
+            <CategoryPicker
+              categories={categories}
+              value={categoryId}
+              onChange={setCategoryId}
+              onCategoryCreated={cat => onCategoriesChange([...categories, cat])}
+            />
             {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
 

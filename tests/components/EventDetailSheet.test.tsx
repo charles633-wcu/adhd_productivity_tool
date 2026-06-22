@@ -24,9 +24,11 @@ function makeOccurrence(overrides: Partial<EventOccurrence> = {}): EventOccurren
 
 const baseProps = {
   event: makeOccurrence(),
+  categories: [],
   onClose: vi.fn(),
   onSaved: vi.fn(),
   onDeleted: vi.fn(),
+  onCategoriesChange: vi.fn(),
 }
 
 describe('EventDetailSheet', () => {

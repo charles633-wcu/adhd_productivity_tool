@@ -813,11 +813,13 @@ export function CalendarClient({
           }}
           onEventCreated={() => { void loadMonth(currentMonth) }}
           onEditEvent={ev => setEditingEvent(ev)}
+          onCategoriesChange={setCategories}
         />
       )}
 
       <EventDetailSheet
         event={editingEvent}
+        categories={categories}
         onClose={() => setEditingEvent(null)}
         onSaved={() => {
           void loadMonth(currentMonth)
@@ -827,6 +829,7 @@ export function CalendarClient({
           void loadMonth(currentMonth)
           setEditingEvent(null)
         }}
+        onCategoriesChange={setCategories}
       />
 
       {manageCatsOpen && (
