@@ -4,6 +4,15 @@
 export const MAX_TITLE_CHARS = 13
 export const DAY_EVENT_CAP = 8
 
+// Built-in category that always exists and is always selectable; its events get
+// a highlighted chip on the calendar. Matched case-insensitively by name.
+export const APPOINTMENT_CATEGORY_NAME = 'Appointment'
+
+/** True when a category name is the built-in "Appointment" category. */
+export function isAppointmentName(name: string | null | undefined): boolean {
+  return (name ?? '').trim().toLowerCase() === APPOINTMENT_CATEGORY_NAME.toLowerCase()
+}
+
 // Day-of-week (Sun-indexed) and month labels — shared by both calendar views.
 export const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 export const MONTHS = [

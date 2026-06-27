@@ -15,7 +15,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   DOW, MONTHS, DAY_EVENT_CAP, monthAnchorKey, toLocalDateKey, monthLabel,
   formatAccessibleDate, compactTimeLabel, truncateTitle, capDayEvents, buildContiguousDays,
-  accelerationMultiplier,
+  accelerationMultiplier, isAppointmentName,
 } from '@/lib/calendar/calendarView'
 
 // Window (ms) within which consecutive same-direction wheel events build a streak.
@@ -68,6 +68,7 @@ interface Chip {
   startAt: string
   title: string
   color: string
+  isAppointment: boolean
 }
 
 export function VerticalCalendar({
@@ -132,13 +133,18 @@ export function VerticalCalendar({
     return ev.color ?? categories.find(c => c.id === ev.categoryId)?.color ?? DEFAULT_DOT
   }
 
+  // Category ids belonging to the built-in "Appointment" category — their
+  // events get a highlighted chip on the calendar.
+  const appointmentCategoryIds = new Set(categories.filter(c => isAppointmentName(c.name)).map(c => c.id))
+
   // Merge own + ICS events for a day into time-sorted chips.
   function chipsForDay(key: string): Chip[] {
     const own = (eventsByDate.get(key) ?? []).map(ev => ({
       id: ev.occurrenceId, startAt: ev.startAt, title: ev.title, color: resolveColor(ev),
+      isAppointment: appointmentCategoryIds.has(ev.categoryId ?? ''),
     }))
     const ics = (icsEventsByDate.get(key) ?? []).map(ev => ({
-      id: ev.uid, startAt: ev.startAt, title: ev.title, color: ICS_DOT,
+      id: ev.uid, startAt: ev.startAt, title: ev.title, color: ICS_DOT, isAppointment: false,
     }))
     return [...own, ...ics].sort((a, b) => a.startAt.localeCompare(b.startAt))
   }
@@ -384,12 +390,15 @@ export function VerticalCalendar({
                 <div
                   key={chip.id}
                   data-testid="vcal-chip"
-                  className="flex min-w-0 items-center gap-1 rounded bg-muted/55 px-1 py-0.5 text-[9px] leading-none"
+                  data-appointment={chip.isAppointment ? 'true' : undefined}
+                  className={`flex min-w-0 items-center gap-1 rounded px-1 py-0.5 text-[9px] leading-none ${chip.isAppointment ? 'bg-muted/80' : 'bg-muted/55'}`}
+                  // Appointments get a colored inset border + soft glow in their category color.
+                  style={chip.isAppointment ? { boxShadow: `inset 0 0 0 1px ${chip.color}, 0 0 6px ${chip.color}80` } : undefined}
                   title={`${compactTimeLabel(chip.startAt)} ${chip.title}`}
                 >
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: chip.color }} />
                   <span className="shrink-0 font-medium tabular-nums">{compactTimeLabel(chip.startAt)}</span>
-                  <span className="min-w-0 truncate text-muted-foreground">{truncateTitle(chip.title)}</span>
+                  <span className={`min-w-0 truncate ${chip.isAppointment ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>{truncateTitle(chip.title)}</span>
                 </div>
               ))}
 

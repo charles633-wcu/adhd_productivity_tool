@@ -54,6 +54,24 @@ describe('VerticalCalendar', () => {
     expect(screen.getByText('Quarterly bus…')).toBeTruthy()
   })
 
+  it('highlights chips in the Appointment category and not others', () => {
+    const appt = { ...eventItem('2026-06-20', 'Dentist', 9, 'a1'), categoryId: 'cap' }
+    const other = { ...eventItem('2026-06-20', 'Lunch', 12, 'o1'), categoryId: 'cw' }
+    renderCal({
+      eventsByDate: new Map([['2026-06-20', [appt, other]]]),
+      categories: [
+        { id: 'cap', name: 'Appointment', color: '#f59e0b' },
+        { id: 'cw', name: 'Work', color: '#6366f1' },
+      ],
+    })
+    const cell = screen.getByTestId('vcal-day-2026-06-20')
+    const chips = cell.querySelectorAll('[data-testid="vcal-chip"]')
+    const apptChip = [...chips].find(c => c.textContent?.includes('Dentist'))!
+    const otherChip = [...chips].find(c => c.textContent?.includes('Lunch'))!
+    expect(apptChip.getAttribute('data-appointment')).toBe('true')
+    expect(otherChip.getAttribute('data-appointment')).toBeNull()
+  })
+
   it('calls onSelectDay with the date key when a day is clicked', () => {
     const onSelectDay = vi.fn()
     renderCal({ onSelectDay })

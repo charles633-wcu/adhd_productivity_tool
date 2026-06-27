@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 import { getCurrentUser } from '@/lib/auth'
 import { getDb } from '@/lib/db/client'
 import {
-  listEventCategories, listEventOverridesForIds, listEventsInRange,
+  ensureAppointmentCategory, listEventCategories, listEventOverridesForIds, listEventsInRange,
   getIcsSubscription, upsertIcsSubscription,
 } from '@/lib/db/calendar'
 import { fetchAndParseIcs } from '@/lib/services/icsParser'
@@ -22,6 +22,10 @@ export default async function CalendarPage() {
   rangeFrom.setMonth(rangeFrom.getMonth() - 3)
   const rangeTo = new Date()
   rangeTo.setMonth(rangeTo.getMonth() + 6)
+
+  // Guarantee the built-in "Appointment" category exists before listing, so it
+  // is always selectable even for users who never created any categories.
+  await ensureAppointmentCategory(db, user.id)
 
   const [eventRows, categoryRows, [icsSub]] = await Promise.all([
     listEventsInRange(db, user.id, rangeFrom, rangeTo),

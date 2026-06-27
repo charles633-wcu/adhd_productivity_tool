@@ -3,7 +3,22 @@ import {
   truncateTitle, buildMonthRange, extendMonthRange,
   capDayEvents, accelerationMultiplier, monthAnchorKey,
   toLocalDateKey, buildMonthDays, monthLabel, dateFromKey, buildContiguousDays,
+  isAppointmentName,
 } from '@/lib/calendar/calendarView'
+
+describe('isAppointmentName', () => {
+  it('matches the built-in Appointment category case-insensitively', () => {
+    expect(isAppointmentName('Appointment')).toBe(true)
+    expect(isAppointmentName('appointment')).toBe(true)
+    expect(isAppointmentName('  APPOINTMENT  ')).toBe(true)
+  })
+  it('does not match other names or empty values', () => {
+    expect(isAppointmentName('Appointments')).toBe(false)
+    expect(isAppointmentName('Work')).toBe(false)
+    expect(isAppointmentName(null)).toBe(false)
+    expect(isAppointmentName(undefined)).toBe(false)
+  })
+})
 
 describe('truncateTitle', () => {
   it('leaves titles <= 13 chars untouched', () => {

@@ -1,8 +1,9 @@
 // CRUD helpers for calendar tables. No imports from triggers.ts or categories.ts.
-import { eq, and, lte, inArray } from 'drizzle-orm'
+import { eq, and, lte, inArray, sql } from 'drizzle-orm'
 import { eventCategories, calendarEvents, calendarEventOverrides, icsSubscriptions } from './schema'
 import type { DrizzleDb } from './client'
 import type { CalendarEventOverride, NewEventCategory, NewCalendarEvent } from './schema'
+import { APPOINTMENT_CATEGORY_NAME } from '@/lib/calendar/calendarView'
 
 // ── Event Categories ──────────────────────────────────────────────────────────
 
@@ -14,6 +15,28 @@ import type { CalendarEventOverride, NewEventCategory, NewCalendarEvent } from '
  */
 export function listEventCategories(db: DrizzleDb, userId: string) {
   return db.select().from(eventCategories).where(eq(eventCategories.userId, userId))
+}
+
+/**
+ * Guarantees the built-in "Appointment" category exists for a user so it is
+ * always selectable without the user creating it. Idempotent: it inserts the
+ * category only when no case-insensitive "Appointment" category already exists.
+ * @param db - Database client used for the lookup/insert.
+ * @param userId - Owner identifier.
+ * @returns A promise that resolves once the category is guaranteed to exist.
+ */
+export async function ensureAppointmentCategory(db: DrizzleDb, userId: string): Promise<void> {
+  const existing = await db
+    .select({ id: eventCategories.id })
+    .from(eventCategories)
+    .where(and(
+      eq(eventCategories.userId, userId),
+      eq(sql`lower(${eventCategories.name})`, APPOINTMENT_CATEGORY_NAME.toLowerCase()),
+    ))
+    .limit(1)
+  if (existing.length === 0) {
+    await db.insert(eventCategories).values({ userId, name: APPOINTMENT_CATEGORY_NAME, color: '#f59e0b' })
+  }
 }
 
 /**
