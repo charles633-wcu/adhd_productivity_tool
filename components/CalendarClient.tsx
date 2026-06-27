@@ -17,7 +17,7 @@ import type { EventOccurrence } from '@/lib/types/calendar'
 import {
   DOW, toLocalDateKey, startOfLocalToday, monthLabel, monthAnchorKey,
   formatAccessibleDate, dateLabel, timeLabel, compactTimeLabel,
-  dateFromKey, buildMonthDays, buildMonthRange, extendMonthRange,
+  dateFromKey, buildMonthDays, buildMonthRange, extendMonthRange, isAppointmentName,
 } from '@/lib/calendar/calendarView'
 
 // localStorage key persisting the user's calendar view preference.
@@ -152,6 +152,13 @@ export function CalendarClient({
     }
     return map
   }, [initialIcsEvents])
+
+  // Category ids of the built-in "Appointment" category — used to highlight
+  // appointment chips/dots in the carousel (matches the vertical scroll view).
+  const appointmentCategoryIds = useMemo(
+    () => new Set(categories.filter(c => isAppointmentName(c.name)).map(c => c.id)),
+    [categories],
+  )
 
   const modalDate = modalDay ? dateFromKey(modalDay) : null
   const modalEvents = modalDay ? (eventsByDate.get(modalDay) ?? []) : []
@@ -426,7 +433,9 @@ export function CalendarClient({
                       <div className="relative z-10 mt-1 flex flex-wrap justify-center gap-0.5 px-1">
                         {dayEvents.slice(0, 2).map((ev, i) => {
                           const cat = categories.find(c => c.id === ev.categoryId)
-                          return <span key={`e${i}`} className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: ev.color ?? cat?.color ?? '#6366f1' }} />
+                          const dotColor = ev.color ?? cat?.color ?? '#6366f1'
+                          const isAppt = appointmentCategoryIds.has(ev.categoryId ?? '')
+                          return <span key={`e${i}`} data-appointment={isAppt ? 'true' : undefined} className={`h-1.5 w-1.5 rounded-full ${isAppt ? 'ring-1 ring-white/50' : ''}`} style={{ backgroundColor: dotColor, boxShadow: isAppt ? `0 0 5px ${dotColor}` : undefined }} />
                         })}
                         {dayIcsEvents.slice(0, 1).map((_, i) => <span key={`i${i}`} className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />)}
                         {totalDots > 3 && <span className="text-[8px] text-muted-foreground">+{totalDots - 3}</span>}
@@ -437,15 +446,19 @@ export function CalendarClient({
                       <div className="relative z-10 mt-1 flex w-full min-w-0 flex-col gap-0.5 px-0.5">
                         {dayEvents.slice(0, 8).map((ev, i) => {
                           const cat = categories.find(c => c.id === ev.categoryId)
+                          const chipColor = ev.color ?? cat?.color ?? '#6366f1'
+                          const isAppt = appointmentCategoryIds.has(ev.categoryId ?? '')
                           return (
                             <div
                               key={`e${i}`}
-                              className="flex min-w-0 items-center gap-1 rounded bg-muted/55 px-1 py-0.5 text-[9px] leading-none text-foreground"
+                              data-appointment={isAppt ? 'true' : undefined}
+                              className={`flex min-w-0 items-center gap-1 rounded px-1 py-0.5 text-[9px] leading-none text-foreground ${isAppt ? 'bg-muted/80' : 'bg-muted/55'}`}
+                              style={isAppt ? { boxShadow: `inset 0 0 0 1px ${chipColor}, 0 0 6px ${chipColor}80` } : undefined}
                               title={`${compactTimeLabel(ev.startAt)} ${ev.title}`}
                             >
-                              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: ev.color ?? cat?.color ?? '#6366f1' }} />
+                              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: chipColor }} />
                               <span className="shrink-0 font-medium tabular-nums">{compactTimeLabel(ev.startAt)}</span>
-                              <span data-testid={`calendar-event-title-${ev.occurrenceId}`} className="min-w-0 truncate text-left text-muted-foreground">
+                              <span data-testid={`calendar-event-title-${ev.occurrenceId}`} className={`min-w-0 truncate text-left ${isAppt ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
                                 {ev.title}
                               </span>
                             </div>
