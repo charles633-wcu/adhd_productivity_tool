@@ -174,6 +174,7 @@ export function ReviewQueueClient({ grouped, nodeMap }: ReviewQueueClientProps) 
         open={editingTriggerId !== null}
         onOpenChange={open => { if (!open) setEditingTriggerId(null) }}
         onSuccess={() => { setEditingTriggerId(null); doRefresh() }}
+        onDelete={async id => { await handleDelete(id); setEditingTriggerId(null) }}
       />
 
       {/* Header — title, item count, and the Select all + filter toolbar.
@@ -251,6 +252,7 @@ export function ReviewQueueClient({ grouped, nodeMap }: ReviewQueueClientProps) 
                     doRefresh()
                   }}
                   onEdit={setEditingTriggerId}
+                  onDelete={handleDelete}
                   isProcessing={isRefreshing || processingId === trigger.id}
                   isAnimatingOut={animatingOut.has(trigger.id)}
                   linkedNodes={nodeMap[trigger.id] ?? []}

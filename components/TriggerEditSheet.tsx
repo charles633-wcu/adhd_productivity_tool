@@ -22,9 +22,11 @@ interface TriggerEditSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess: () => void
+  /** When provided, renders a Delete button (arm/confirm) that calls this with the trigger id. */
+  onDelete?: (triggerId: string) => void | Promise<void>
 }
 
-export function TriggerEditSheet({ trigger, open, onOpenChange, onSuccess }: TriggerEditSheetProps) {
+export function TriggerEditSheet({ trigger, open, onOpenChange, onSuccess, onDelete }: TriggerEditSheetProps) {
   const [title, setTitle] = useState('')
   const [fullContent, setFullContent] = useState('')
   const [priority, setPriority] = useState(2)
@@ -33,6 +35,9 @@ export function TriggerEditSheet({ trigger, open, onOpenChange, onSuccess }: Tri
   const [intervalInput, setIntervalInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Delete arm/confirm: first click arms ("Confirm?"), second click deletes.
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (trigger && open) {
@@ -43,6 +48,8 @@ export function TriggerEditSheet({ trigger, open, onOpenChange, onSuccess }: Tri
       setIntervalTyping(false)
       setIntervalInput('')
       setError(null)
+      // Always re-disarm delete when the sheet (re)opens for a trigger.
+      setConfirmingDelete(false)
     }
   }, [trigger, open])
 
@@ -72,6 +79,26 @@ export function TriggerEditSheet({ trigger, open, onOpenChange, onSuccess }: Tri
     }
   }
 
+  async function handleDelete() {
+    if (!trigger || !onDelete) return
+    // First click just arms the confirm state.
+    if (!confirmingDelete) {
+      setConfirmingDelete(true)
+      return
+    }
+    setDeleting(true)
+    setError(null)
+    try {
+      await onDelete(trigger.id)
+      // Parent closes the sheet on success; disarm defensively.
+      setConfirmingDelete(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete trigger')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <Sheet
       open={open}
@@ -79,6 +106,7 @@ export function TriggerEditSheet({ trigger, open, onOpenChange, onSuccess }: Tri
         onOpenChange(nextOpen)
         if (!nextOpen) {
           setError(null)
+          setConfirmingDelete(false)
         }
       }}
     >
@@ -229,6 +257,23 @@ export function TriggerEditSheet({ trigger, open, onOpenChange, onSuccess }: Tri
           </form>
 
           <div className="shrink-0 px-6 py-4 border-t border-border bg-background/60 backdrop-blur-sm flex gap-2">
+            {/* Delete — only rendered when a handler is wired. Arms on first click,
+                deletes on second; click Cancel or reopen to disarm. */}
+            {onDelete && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={loading || deleting}
+                className={[
+                  'rounded-xl px-3 py-3 text-sm font-semibold transition-colors disabled:opacity-50',
+                  confirmingDelete
+                    ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
+                    : 'border border-destructive/30 text-destructive hover:bg-destructive/10',
+                ].join(' ')}
+              >
+                {deleting ? 'Deleting…' : confirmingDelete ? 'Confirm?' : 'Delete'}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => onOpenChange(false)}

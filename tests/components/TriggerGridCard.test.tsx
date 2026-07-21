@@ -39,6 +39,7 @@ function defaultProps(overrides = {}) {
     onSelect: vi.fn(),
     onAcknowledge: vi.fn().mockResolvedValue(undefined),
     onEdit: vi.fn(),
+    onDelete: vi.fn(),
     isProcessing: false,
     isAnimatingOut: false,
     linkedNodes: [],
@@ -172,5 +173,32 @@ describe('TriggerGridCard', () => {
   it('renders no Mind badges when linkedNodes is empty', () => {
     render(<TriggerGridCard {...defaultProps()} />)
     expect(screen.queryByText(/Mind:/)).toBeNull()
+  })
+
+  it('arms a confirm on first delete click without calling onDelete', () => {
+    const onDelete = vi.fn()
+    render(<TriggerGridCard {...defaultProps({ onDelete })} />)
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }))
+    expect(onDelete).not.toHaveBeenCalled()
+    // Button now shows the armed confirm affordance
+    expect(screen.getByRole('button', { name: /confirm delete/i })).toBeTruthy()
+  })
+
+  it('calls onDelete with trigger id on the second (confirm) click', () => {
+    const onDelete = vi.fn()
+    render(<TriggerGridCard {...defaultProps({ onDelete })} />)
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /confirm delete/i }))
+    expect(onDelete).toHaveBeenCalledWith('trig-1')
+  })
+
+  it('disarms the delete confirm when the pointer leaves the card', () => {
+    const onDelete = vi.fn()
+    render(<TriggerGridCard {...defaultProps({ onDelete })} />)
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }))
+    fireEvent.mouseLeave(screen.getByTestId('trigger-grid-card'))
+    // Back to the unarmed label; a single subsequent click only re-arms
+    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }))
+    expect(onDelete).not.toHaveBeenCalled()
   })
 })

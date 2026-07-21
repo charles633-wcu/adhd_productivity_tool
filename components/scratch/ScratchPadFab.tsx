@@ -42,7 +42,9 @@ export function ScratchPadFab() {
   const posRef = useRef(pos)
   useEffect(() => { posRef.current = pos }, [pos])
 
-  // Hydrate position from localStorage on mount, clamp to current viewport
+  // Hydrate position from localStorage on mount, clamp to current viewport, and
+  // always open the pad on load. (Closing it only hides it for the current visit;
+  // navigating back to the page re-opens it.)
   useEffect(() => {
     let initial = defaultPosition()
     try {
@@ -50,6 +52,7 @@ export function ScratchPadFab() {
       if (saved) initial = JSON.parse(saved) as { x: number; y: number }
     } catch { /* ignore */ }
     setPos(clampToViewport(initial.x, initial.y))
+    setOpen(true)
   }, [])
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {

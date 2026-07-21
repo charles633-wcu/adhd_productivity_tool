@@ -3,12 +3,11 @@
 /**
  * Compact card for the Review Queue 3-column grid.
  * Supports multi-select (onSelect on card body), animate-out, and Mind node badges.
- * Actions: Acknowledge, Memory (internal sheet), Edit.
- * Delete is intentionally absent — use the drawer TriggerCard for that.
+ * Actions: Acknowledge, Memory (internal sheet), Edit, and Delete (X, arm/confirm).
  */
 
 import { useState } from 'react'
-import { Check, CheckCircle, Pencil } from 'lucide-react'
+import { Check, CheckCircle, Pencil, X } from 'lucide-react'
 import { TriggerMemorySheet } from '@/components/TriggerMemorySheet'
 import type { Trigger } from '@/lib/db/schema'
 
@@ -34,6 +33,8 @@ interface TriggerGridCardProps {
   onSelect: () => void
   onAcknowledge: () => Promise<void>
   onEdit: (triggerId: string) => void
+  /** Deletes this trigger. Arms an inline confirm first; only fires on the second click. */
+  onDelete: (triggerId: string) => void | Promise<void>
   /** Disables all action buttons while a parent-managed async operation is in flight */
   isProcessing: boolean
   /** When true, fades/scales the card out and disables onSelect */
@@ -49,6 +50,7 @@ export function TriggerGridCard({
   onSelect,
   onAcknowledge,
   onEdit,
+  onDelete,
   isProcessing,
   isAnimatingOut,
   linkedNodes,
@@ -57,6 +59,8 @@ export function TriggerGridCard({
   const [acknowledging, setAcknowledging] = useState(false)
   // Internal memory sheet open state — not exposed as a prop
   const [memoryOpen, setMemoryOpen] = useState(false)
+  // Delete arm/confirm — first click arms ("Sure?"), second click deletes.
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const config = PRIORITY_CONFIG[trigger.priority] ?? PRIORITY_CONFIG[3]
 
@@ -74,9 +78,21 @@ export function TriggerGridCard({
     }
   }
 
+  function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation()
+    // First click arms the confirm; second click actually deletes.
+    if (!confirmingDelete) {
+      setConfirmingDelete(true)
+      return
+    }
+    setConfirmingDelete(false)
+    onDelete(trigger.id)
+  }
+
   return (
     <div
       data-testid="trigger-grid-card"
+      onMouseLeave={() => setConfirmingDelete(false)}
       className={[
         'relative group rounded-lg border-l-2 border transition-all overflow-hidden',
         config.borderClass,
@@ -203,6 +219,24 @@ export function TriggerGridCard({
           className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium bg-indigo-500/10 text-indigo-400 ring-1 ring-indigo-500/20 hover:bg-indigo-500/20 disabled:opacity-40 transition-colors"
         >
           Memory
+        </button>
+
+        {/* Delete — X icon that arms an inline "Sure?" confirm on first click,
+            deletes on the second. Auto-disarms when the pointer leaves the card. */}
+        <button
+          type="button"
+          aria-label={confirmingDelete ? 'Confirm delete' : 'Delete'}
+          disabled={isProcessing}
+          onClick={handleDelete}
+          className={[
+            'ml-auto flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors disabled:opacity-40',
+            confirmingDelete
+              ? 'bg-red-500 text-white hover:bg-red-600'
+              : 'text-muted-foreground hover:text-red-400 hover:bg-red-500/10',
+          ].join(' ')}
+        >
+          <X className="h-3 w-3" />
+          {confirmingDelete ? 'Sure?' : ''}
         </button>
       </div>
 
