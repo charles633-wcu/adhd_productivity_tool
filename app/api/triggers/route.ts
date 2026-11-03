@@ -11,11 +11,12 @@ import { deriveNextReviewAt } from '@/lib/services/reviewClock'
 import { logTriggerAction } from '@/lib/dev/triggerActionLogger'
 import { syncTriggerToNotion } from '@/lib/services/notionSync'
 import { regenerateCsv } from '@/lib/services/csvExport'
+import { TRIGGER_TITLE_MAX, describeValidationError } from '@/lib/validation/apiErrors'
 
 // Zod schema for creating a trigger
 const CreateTriggerSchema = z.object({
   categoryId: z.string().min(1),
-  title: z.string().min(1).max(200),
+  title: z.string().trim().min(1).max(TRIGGER_TITLE_MAX),
   fullContent: z.string().default(''),
   priority: z.number().int().min(0).max(3).default(2),
   // 0 = always due (review immediately after each acknowledge); 365 = annual
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
     const body = await request.json()
     const parsed = CreateTriggerSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.message, code: 'VALIDATION_ERROR' }, { status: 400 })
+      return NextResponse.json({ error: describeValidationError(parsed.error, body), code: 'VALIDATION_ERROR' }, { status: 400 })
     }
     const db = getDb()
 

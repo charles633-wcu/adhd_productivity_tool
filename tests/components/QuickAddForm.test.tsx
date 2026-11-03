@@ -92,4 +92,44 @@ describe('QuickAddForm', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(onSuccess).toHaveBeenCalled()
   })
+
+  it('blocks submit and explains when the title is over the character limit', async () => {
+    render(
+      <QuickAddForm
+        categories={[{ id: 'cat-1', name: 'Work' }]}
+        open
+        onOpenChange={onOpenChange}
+        onSuccess={onSuccess}
+      />
+    )
+
+    fireEvent.change(screen.getByLabelText(/title/i), { target: { value: 'x'.repeat(501) } })
+    // Live counter shows the overflow before the user even submits
+    expect(screen.getByText('501/500')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /save trigger/i }))
+
+    expect((await screen.findByRole('alert')).textContent).toBe('Too many characters in Title: 501/500')
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+  })
+
+  it('shows the server error message instead of a generic failure', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ error: 'SqliteError: database is locked', code: 'DB_ERROR' }), { status: 500 })
+    )
+
+    render(
+      <QuickAddForm
+        categories={[{ id: 'cat-1', name: 'Work' }]}
+        open
+        onOpenChange={onOpenChange}
+        onSuccess={onSuccess}
+      />
+    )
+
+    fireEvent.change(screen.getByLabelText(/title/i), { target: { value: 'Follow up' } })
+    fireEvent.click(screen.getByRole('button', { name: /save trigger/i }))
+
+    expect((await screen.findByRole('alert')).textContent).toBe('SqliteError: database is locked')
+    expect(onSuccess).not.toHaveBeenCalled()
+  })
 })

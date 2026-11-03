@@ -7,6 +7,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { TRIGGER_TITLE_MAX, titleLengthError, readApiError } from '@/lib/validation/apiErrors'
+
+// Show the title character counter once the user is within 100 chars of the limit
+const TITLE_COUNTER_THRESHOLD = TRIGGER_TITLE_MAX - 100
 
 // QuickAddForm — slide-over panel for adding a new trigger.
 // Apple-like design: clean label hierarchy, segmented priority control, sticky footer.
@@ -86,6 +90,12 @@ export function QuickAddForm({ categories, open, onOpenChange, onSuccess }: Quic
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
+    // Catch empty/over-long titles locally with the same message the server would return
+    const titleError = titleLengthError(title)
+    if (titleError) {
+      setError(titleError)
+      return
+    }
     const trimmedCategoryName = categoryName.trim()
     const existingCategory = findExistingCategory(trimmedCategoryName)
 
@@ -106,7 +116,7 @@ export function QuickAddForm({ categories, open, onOpenChange, onSuccess }: Quic
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: trimmedCategoryName }),
         })
-        if (!categoryRes.ok) throw new Error('Failed to create category')
+        if (!categoryRes.ok) throw new Error(await readApiError(categoryRes, 'Failed to create category'))
         const createdCategory = await categoryRes.json()
         resolvedCategoryId = createdCategory.id
       }
@@ -122,7 +132,7 @@ export function QuickAddForm({ categories, open, onOpenChange, onSuccess }: Quic
           reviewIntervalDays: intervalDays,
         }),
       })
-      if (!res.ok) throw new Error('Failed to save trigger')
+      if (!res.ok) throw new Error(await readApiError(res, 'Failed to save trigger'))
       const trigger = await res.json()
 
       // Await summarization if content is long enough — so the summary is in the DB
@@ -192,6 +202,12 @@ export function QuickAddForm({ categories, open, onOpenChange, onSuccess }: Quic
               placeholder="What do you need to review?"
               className="w-full rounded-xl border border-input bg-muted/40 px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-2 focus:ring-ring/50 transition-shadow"
             />
+            {/* Character counter — appears near the limit, turns red when over */}
+            {title.length >= TITLE_COUNTER_THRESHOLD && (
+              <p className={`text-right text-[11px] tabular-nums ${title.length > TRIGGER_TITLE_MAX ? 'text-destructive' : 'text-muted-foreground'}`}>
+                {title.length}/{TRIGGER_TITLE_MAX}
+              </p>
+            )}
           </fieldset>
 
           {/* Category */}

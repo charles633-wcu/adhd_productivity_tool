@@ -18,10 +18,11 @@ import { eq, and } from 'drizzle-orm'
 import { logTriggerAction } from '@/lib/dev/triggerActionLogger'
 import { syncTriggerToNotion, archiveTriggerInNotion } from '@/lib/services/notionSync'
 import { regenerateCsv } from '@/lib/services/csvExport'
+import { TRIGGER_TITLE_MAX, describeValidationError } from '@/lib/validation/apiErrors'
 
 // Zod schema for partial trigger updates
 const UpdateTriggerSchema = z.object({
-  title: z.string().min(1).optional(),
+  title: z.string().trim().min(1).max(TRIGGER_TITLE_MAX).optional(),
   fullContent: z.string().optional(),
   summary: z.string().optional(),
   summaryStatus: z.enum(['pending', 'generated', 'manual']).optional(),
@@ -56,7 +57,7 @@ export async function PATCH(
     const body = await request.json()
     const parsed = UpdateTriggerSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.message, code: 'VALIDATION_ERROR' }, { status: 400 })
+      return NextResponse.json({ error: describeValidationError(parsed.error, body), code: 'VALIDATION_ERROR' }, { status: 400 })
     }
     const db = getDb()
 
